@@ -130,10 +130,19 @@ This section must always reflect the actual current state of the work.
       `LiveSpec`, the cache test `Main.hs`, and `TraceReplay.hs`. `newMemoryCache`/
       `newRateLimiter` stay raw `IO` (called outside `Eff` to build the store). Build
       clean, all 16 suites green. (2026-06-09)
-- [ ] M4: Sweep transitive consumers (`evaluate`, `evaluatePure`, `evaluateWith`,
-      `goldenReport`, `optimize`, `scoreOn`, `runOptimizer`) to drop now-redundant `IOE`;
-      enable `-Wredundant-constraints` as a guard; final build + full test suite green;
-      grep confirms `IOE :>` survives only at the legitimate sites.
+- [x] M4: Final audit. The transitive-consumer `IOE` drop happened in M2 (forced by the
+      already-on `-Wredundant-constraints`), so M4 was verification only. Confirmed:
+      `cabal build all` clean with **zero** compiler warnings, `cabal test all` green
+      (16/16 suites), and the `IOE :>` grep shows the effect surviving ONLY at the
+      legitimate sites — the baikai LLM interpreters `runLLM`/`runLLMWith`/
+      `runLLMResilient`/`withBudget` (`shikumi/src/Shikumi/LLM.hs`), the three DB backends
+      `runCacheSQLite`/`runCachePostgres`/`runCacheRedis`, the `runTime` discharge edge,
+      and IORef-based test/example fixtures (incl. `runScriptLLM` and the
+      `Trace/Internal/Spike` prototype). No `IOE` remains on `cachedLLM`, `evalOne`, the
+      `evaluate` family, `withUsageTotals`, `runTrace`, `runCacheMemory`, `withRateLimit`,
+      `retrying`, `goldenReport`, `optimize`, `scoreOn`, or `runOptimizer`. The
+      `Trace/Replay.hs` mention of `IOE` is prose (and already noted `runLLMReplay` needs
+      no `IOE`) — left as-is. (2026-06-09)
 
 
 ## Surprises & Discoveries
@@ -233,10 +242,59 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+**Outcome.** Delivered in full. shikumi now carries a custom `Shikumi.Effect.Time`
+effect (`getCurrentTime` + `getMonotonicTimeNSec`, discharged by `runTime`), modeled
+on `time-effectful`'s `Clock` but owning the monotonic op shikumi's evaluation
+timing needs. Every clock read, `IORef` touch, and STM/`threadDelay` call in
+shikumi's *production* code now carries the narrowest-correct constraint —
+`Time`, `Prim`, or `Concurrent` — instead of the blanket `IOE`. The original
+purpose ("a reader can tell from the signature what a function may do") is met:
+`cachedLLM :: (Cache, LLM, Time)`, `evalOne :: (LLM, Error, Time)`,
+`withUsageTotals :: (LLM, Prim)`, `runTrace :: (Prim, Time)`,
+`runCacheMemory :: Concurrent`, and the `evaluate`/`optimize` families now read
+`(LLM, Concurrent, Error, Time, Prim)` with **no** `IOE`. The whole tree builds
+warning-free under the already-enabled `-Wredundant-constraints`, and all 16 test
+suites pass — the behavioral proof that the narrower constraints are sufficient
+(cache timestamps, per-example `latencyMs`, usage totals, and span trees are all
+still produced correctly, since the effect operations run the same underlying `IO`
+as the old `liftIO` wrappers).
 
-(To be filled during and after implementation.)
+`IOE` now marks exactly the honest open-IO frontier: the baikai LLM transport
+interpreters (`runLLM`/`runLLMWith`/`runLLMResilient`) and `withBudget`; the three
+persistent cache backends (SQLite/Postgres/Redis); and the `runTime`/`runPrim`/
+`runConcurrent` discharge edges at `main`/tests.
+
+**What remains (intentional).** The test-only and example IORef LLM fixtures
+(`runCountingLLM`, `runScriptLLM`, `runMockLLM`, `ProgramFixtures`, `Mock.hs`, the
+`Trace/Internal/Spike` prototype, etc.) still use `IOE` for their `Data.IORef`
+queues. This is deliberate (see Decision Log): their `IOE` is genuinely used (so
+the guard does not flag it), they always run under `runEff`, and migrating
+scaffolding buys no constraint-honesty. A future pass could move them to `Prim` if
+desired, but it is not required by the goal.
+
+**Lessons learned.**
+
+1. *The guard collapses milestone boundaries.* Because `-Wredundant-constraints`
+   was already on project-wide, the moment a callee's constraint narrowed, every
+   caller's now-unused `IOE` became a warning — so M4's "harvest" could not be
+   deferred past M2; it happened automatically as part of M2. Plan milestones that
+   "thread a constraint now, drop the old one later" only work without a redundancy
+   guard.
+2. *Closed effect rows don't infer.* The biggest source of breakage was not the
+   library code but the *discharge sites* with explicit `Eff '[...]` rows — two
+   `runStubEval` copies (jitsurei + CLI) and six optimize `runStub` helpers. Each
+   new effect had to be hand-inserted into those rows in the exact peel order, and
+   a matching `run*` added to the chain. Grep for `Eff '[` (closed rows), not just
+   `:> es` (open constraints), before threading a new effect.
+3. *Split the imports precisely.* When moving STM to `Concurrent`, the lifted
+   `atomically`/`readTVarIO` come from `Effectful.Concurrent.STM`, but the
+   STM-monad ops used *inside* `atomically` (`readTVar`, `modifyTVar'`, `retry`)
+   stay from `Control.Concurrent.STM`. Likewise `Effectful.Prim.IORef` re-exports
+   the `IORef` type and `Prim`, so a single import covers both the field types and
+   the operations. Getting these splits right avoids `-Wunused-imports`/ambiguity.
+4. *A house formatter will rewrite your import order.* The repo's `treefmt`
+   pre-commit hook re-sorts imports and aborts the first commit; re-staging and
+   committing again succeeds. Don't fight the ordering by hand.
 
 
 ## Context and Orientation
