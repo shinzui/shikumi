@@ -11,6 +11,7 @@ import Control.Concurrent.STM (newTVarIO, readTVarIO)
 import Data.IORef (newIORef, readIORef)
 import Data.Ratio ((%))
 import Effectful (runEff)
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM
@@ -96,6 +97,6 @@ tests =
     ]
   where
     runText cfg =
-      runEff . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $ do
+      runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $ do
         r <- complete stubModel stubContext stubOptions
         pure (flattenAssistantText (flattenAssistantBlocks r))

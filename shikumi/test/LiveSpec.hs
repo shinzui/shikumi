@@ -13,6 +13,7 @@ import Baikai.Provider.OpenAI.Api qualified as OpenAI
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful (runEff)
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (complete, defaultLLMConfig, runLLMResilient)
@@ -34,7 +35,7 @@ tests =
                 opts = _Options & #maxTokens .~ Just 16
                 cfg = defaultLLMConfig globalProviderRegistry
             out <-
-              runEff . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $ do
+              runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $ do
                 r <- complete openai_gpt_4o_mini ctx opts
                 pure (flattenAssistantText (flattenAssistantBlocks r))
             case out of

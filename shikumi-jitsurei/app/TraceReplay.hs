@@ -16,6 +16,7 @@ import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text.IO qualified as TIO
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Effectful.Prim (runPrim)
@@ -68,7 +69,7 @@ main = withSystemTempDirectory "shikumi-jitsurei" $ \dir -> do
           pure (responder c)
         Stream {} -> pure []
   cached <-
-    runEff . runTime . runCacheMemory cache . counting . cachedLLM . runErrorNoCallStack @ShikumiError $ do
+    runEff . runConcurrent . runTime . runCacheMemory cache . counting . cachedLLM . runErrorNoCallStack @ShikumiError $ do
       a <- runProgram qa input
       b <- runProgram qa input
       pure (a, b)

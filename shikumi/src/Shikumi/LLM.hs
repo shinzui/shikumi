@@ -58,10 +58,8 @@ import Baikai.Effectful (Baikai, runBaikai, runBaikaiWith)
 import Baikai.Effectful qualified as BE
 import Baikai.Error (BaikaiError)
 import Baikai.Provider.Registry (ProviderRegistry)
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
   ( TVar,
-    atomically,
     modifyTVar',
     newTVarIO,
     readTVar,
@@ -72,6 +70,8 @@ import Control.Lens ((^.))
 import Data.Generics.Labels ()
 import Data.Maybe (mapMaybe)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
+import Effectful.Concurrent (Concurrent, threadDelay)
+import Effectful.Concurrent.STM (atomically)
 import Effectful.Dispatch.Dynamic (reinterpret_, send)
 import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Exception (bracket_, try)
@@ -186,7 +186,7 @@ defaultLLMConfig reg =
 -- transport call. The budget is reserved once before the attempts and charged
 -- once after success; retries re-run only the transport call.
 runLLMResilient ::
-  (IOE :> es, Error ShikumiError :> es) =>
+  (IOE :> es, Concurrent :> es, Error ShikumiError :> es) =>
   LLMConfig ->
   Eff (LLM : es) a ->
   Eff es a
@@ -223,13 +223,13 @@ withBudget (Just b) act = do
 
 -- | Bound concurrency to the limiter's permits, releasing on every exit path.
 withRateLimit ::
-  (IOE :> es) =>
+  (Concurrent :> es) =>
   Maybe RateLimiter ->
   Eff es a ->
   Eff es a
 withRateLimit Nothing act = act
 withRateLimit (Just (RateLimiter tv)) act =
-  bracket_ (liftIO acquire) (liftIO release) act
+  bracket_ acquire release act
   where
     acquire = atomically $ do
       n <- readTVar tv
@@ -239,7 +239,7 @@ withRateLimit (Just (RateLimiter tv)) act =
 -- | Retry a transient-failing action with exponential backoff. Non-transient
 -- errors (per 'isTransient') propagate immediately without consuming a retry.
 retrying ::
-  (IOE :> es, Error ShikumiError :> es) =>
+  (Concurrent :> es, Error ShikumiError :> es) =>
   RetryPolicy ->
   Eff es a ->
   Eff es a
@@ -249,7 +249,7 @@ retrying pol act = go 1
       act `catchError` \_cs e ->
         if isTransient e && attempt < maxAttempts pol
           then do
-            liftIO (threadDelay (backoffMicros pol attempt))
+            threadDelay (backoffMicros pol attempt)
             go (attempt + 1)
           else throwError e
 

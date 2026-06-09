@@ -10,11 +10,13 @@ module Shikumi.Cache.Backend.Memory
   )
 where
 
-import Control.Concurrent.STM (TVar, atomically, modifyTVar', newTVarIO, readTVarIO)
+import Control.Concurrent.STM (TVar, modifyTVar', newTVarIO)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import Effectful (Eff, IOE, liftIO, (:>))
+import Effectful (Eff, (:>))
+import Effectful.Concurrent (Concurrent)
+import Effectful.Concurrent.STM (atomically, readTVarIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.Cache (Cache (..), CacheKey (unCacheKey), CachedResponse)
 
@@ -26,7 +28,7 @@ newMemoryCache :: IO MemoryCache
 newMemoryCache = newTVarIO Map.empty
 
 -- | Discharge the 'Cache' effect against an in-memory store.
-runCacheMemory :: (IOE :> es) => MemoryCache -> Eff (Cache : es) a -> Eff es a
+runCacheMemory :: (Concurrent :> es) => MemoryCache -> Eff (Cache : es) a -> Eff es a
 runCacheMemory tv = interpret $ \_ -> \case
-  LookupCache k -> liftIO (Map.lookup (unCacheKey k) <$> readTVarIO tv)
-  StoreCache k v -> liftIO (atomically (modifyTVar' tv (Map.insert (unCacheKey k) v)))
+  LookupCache k -> Map.lookup (unCacheKey k) <$> readTVarIO tv
+  StoreCache k v -> atomically (modifyTVar' tv (Map.insert (unCacheKey k) v))

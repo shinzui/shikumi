@@ -118,9 +118,18 @@ This section must always reflect the actual current state of the work.
       `-Wredundant-constraints` does not flag them, and they run under `runEff` which
       supplies `IOE`. Migrating them to `Prim` is pure churn with no constraint-honesty
       gain for scaffolding — see Decision Log. Left as-is.
-- [ ] M3: Migrate STM/MVar/threadDelay helpers to `Concurrent`: `runCacheMemory`
-      (`shikumi-cache/src/Shikumi/Cache/Backend/Memory.hs`), and the resilience helpers
-      `withRateLimit`/`retrying` in `shikumi/src/Shikumi/LLM.hs`. Build + test green.
+- [x] M3: Migrated STM/threadDelay helpers to `Concurrent`: `runCacheMemory`
+      (`shikumi-cache/.../Backend/Memory.hs`, now `(Concurrent :> es)` via
+      `Effectful.Concurrent.STM`'s `atomically`/`readTVarIO`), and the resilience helpers
+      `withRateLimit` and `retrying` in `shikumi/src/Shikumi/LLM.hs` (now `Concurrent` —
+      `atomically` from `Effectful.Concurrent.STM`, `threadDelay` from
+      `Effectful.Concurrent`; the STM-monad ops `readTVar`/`writeTVar`/`modifyTVar'`/
+      `retry` stay from `Control.Concurrent.STM` since they run *inside* `atomically`).
+      `runLLMResilient` gained `Concurrent` while keeping `IOE` (baikai transport +
+      budget). Added `runConcurrent` to the discharge chains in `ResilienceSpec`,
+      `LiveSpec`, the cache test `Main.hs`, and `TraceReplay.hs`. `newMemoryCache`/
+      `newRateLimiter` stay raw `IO` (called outside `Eff` to build the store). Build
+      clean, all 16 suites green. (2026-06-09)
 - [ ] M4: Sweep transitive consumers (`evaluate`, `evaluatePure`, `evaluateWith`,
       `goldenReport`, `optimize`, `scoreOn`, `runOptimizer`) to drop now-redundant `IOE`;
       enable `-Wredundant-constraints` as a guard; final build + full test suite green;

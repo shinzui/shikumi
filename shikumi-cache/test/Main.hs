@@ -20,6 +20,7 @@ import Data.Text qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.Cache
   ( CacheKey (..),
@@ -158,11 +159,11 @@ memoryTests =
         tv <- newMemoryCache
         let key = cacheKey fixModel fixCtx fixOpts
             entry = CachedResponse stubResponse someTime currentKeyVersion
-        got <- runEff . runCacheMemory tv $ (storeCache key entry >> lookupCache key)
+        got <- runEff . runConcurrent . runCacheMemory tv $ (storeCache key entry >> lookupCache key)
         got @?= Just entry,
       testCase "an absent key returns Nothing" $ do
         tv <- newMemoryCache
-        got <- runEff . runCacheMemory tv $ lookupCache (CacheKey "deadbeef")
+        got <- runEff . runConcurrent . runCacheMemory tv $ lookupCache (CacheKey "deadbeef")
         got @?= Nothing
     ]
 
@@ -205,7 +206,7 @@ memoizeTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         (r1, r2) <-
-          runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             a <- complete fixModel fixCtx fixOpts
             b <- complete fixModel fixCtx fixOpts
             pure (a, b)
@@ -216,7 +217,7 @@ memoizeTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         _ <-
-          runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             _ <- complete fixModel fixCtx fixOpts
             complete fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)
         n <- readIORef ref
@@ -231,16 +232,16 @@ versioningTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
-        runEff . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
-        _ <- runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        runEff . runConcurrent . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
+        _ <- runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 0,
       testCase "an entry with a foreign keyVersion is ignored (MISS, provider called)" $ do
         tv <- newMemoryCache
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
-        runEff . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime "shikumi-cache/v0")
-        _ <- runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        runEff . runConcurrent . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime "shikumi-cache/v0")
+        _ <- runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 1,
       testCase "bumping the namespace version changes the hashed bytes" $
