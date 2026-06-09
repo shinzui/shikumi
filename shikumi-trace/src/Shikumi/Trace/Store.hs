@@ -46,9 +46,10 @@ data TraceFile = TraceFile
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | The trace-file schema version this build reads and writes.
+-- | The trace-file schema version this build reads and writes. Bumped 1→2 in
+-- EP-16 for the additive optional @SpanAttrs.nodePath@ field.
 currentFormatVersion :: Int
-currentFormatVersion = 1
+currentFormatVersion = 2
 
 -- | Write a tree to @path@ atomically: encode to a sibling @.tmp@ file, then
 -- 'renameFile' it into place (an atomic rename on the same filesystem).

@@ -9,17 +9,34 @@ import Data.Aeson (Value (Object), decode, encode, object, (.=))
 import Data.ByteString.Lazy qualified as BL
 import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.List (sortOn)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime, addUTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, runEff, type (:>))
+import Effectful.Error.Static (runErrorNoCallStack)
 import Effectful.Prim (runPrim)
+import GHC.Generics (Generic)
+import Shikumi.Adapter (ToPrompt)
 import Shikumi.Cache.Key (CacheKey (..))
 import Shikumi.Cache.Key qualified as Key
+import Shikumi.Combinator (majorityVote, majorityVoteBy, parallel2, (>>>))
 import Shikumi.Effect.Time (runTime)
+import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM, complete)
+import Shikumi.Module (predict)
+import Shikumi.Program
+  ( NodeFields (..),
+    Params (..),
+    Program,
+    TempSchedule (TempFixed),
+    foldParams,
+    mapParamsAt,
+  )
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Trace
   ( Span (..),
     SpanAttrs (..),
@@ -34,7 +51,24 @@ import Shikumi.Trace
     withSpan,
   )
 import Shikumi.Trace.Demo (demoArticle, demoPipeline, demoResponder)
+import Shikumi.Trace.Feedback
+  ( FeedbackLog,
+    attachFeedback,
+    feedbackFor,
+    runFeedback,
+  )
 import Shikumi.Trace.Internal.Spike qualified as Spike
+import Shikumi.Trace.Node
+  ( NodePath (..),
+    NodeStep (..),
+    nodeFields,
+    programNodePaths,
+  )
+import Shikumi.Trace.Program
+  ( runCurrentNode,
+    runProgramTraced,
+    tracedNodeLLM,
+  )
 import Shikumi.Trace.Replay (ReplayDivergence (..), runLLMReplay)
 import Shikumi.Trace.Store
   ( TraceFile (..),
@@ -61,7 +95,9 @@ import TraceFixtures
 main :: IO ()
 main =
   defaultMain $
-    testGroup "shikumi-trace" [spikeTests, treeTests, storeTests, replayTests, e2eTests]
+    testGroup
+      "shikumi-trace"
+      [spikeTests, treeTests, storeTests, replayTests, e2eTests, nodeTests, correlateTests, feedbackTests]
 
 -- ---------------------------------------------------------------------------
 -- M0
@@ -361,3 +397,137 @@ attrsFor LlmCallSpan n =
       costUsd = Just (read "0.001")
     }
 attrsFor _ _ = emptyAttrs
+
+-- ---------------------------------------------------------------------------
+-- EP-16: node identity, correlation, and the feedback channel
+-- ---------------------------------------------------------------------------
+
+-- | A self-looping record so @predict cellSig :: Program Cell Cell@ composes with
+-- itself to make a multi-node program.
+newtype Cell = Cell {cell :: Text}
+  deriving stock (Generic, Show, Eq)
+
+instance ToSchema Cell
+
+instance FromModel Cell
+
+instance ToPrompt Cell
+
+instance Validatable Cell
+
+cellSig :: Signature Cell Cell
+cellSig = mkSignature "Echo the cell"
+
+-- | A two-@Predict@ chain: @Compose (Predict) (Predict)@.
+chain2 :: Program Cell Cell
+chain2 = predict cellSig >>> predict cellSig
+
+-- | A fixed response in fallback @[[ ## field ## ]]@ form, decoded by the lenient
+-- parser into @Cell "echoed"@.
+cellResp :: Response
+cellResp = mkResponse "[[ ## cell ## ]]\nechoed\n[[ ## completed ## ]]\n"
+
+chkLen :: Program a b -> IO ()
+chkLen p = length (programNodePaths p) @?= length (foldParams p)
+
+-- | A total ensemble reducer (the program is only shape-inspected, never run).
+firstOr :: [Cell] -> Cell
+firstOr (c : _) = c
+firstOr [] = Cell ""
+
+-- | The @LlmCallSpan@s of a tree, in start order.
+llmSpansInOrder :: TraceTree -> [Span]
+llmSpansInOrder t = sortOn startedAt [s | s <- Map.elems (spans t), kind s == LlmCallSpan]
+
+-- | Run a program under 'runProgramTraced' with the node-aware stack, returning the
+-- decoded result and the captured tree (or a typed error).
+runTraced :: Program Cell Cell -> Cell -> IO (Either ShikumiError (Cell, TraceTree))
+runTraced prog input =
+  runEff
+    . runErrorNoCallStack @ShikumiError
+    . runPrim
+    . runTime
+    . runTrace
+    . runCurrentNode
+    . runFixedLLM cellResp
+    . tracedNodeLLM
+    $ runProgramTraced prog input
+
+-- | M1: 'NodePath' identity, its agreement with @foldParams@, field metadata, and
+-- JSON round-trips.
+nodeTests :: TestTree
+nodeTests =
+  testGroup
+    "node"
+    [ testCase "programNodePaths length agrees with foldParams across shapes" $ do
+        chkLen chain2
+        chkLen (majorityVote 3 (TempFixed []) (predict cellSig))
+        chkLen (majorityVoteBy 2 (TempFixed []) firstOr (predict cellSig))
+        chkLen (parallel2 (predict cellSig) (predict cellSig)),
+      testCase "programNodePaths yields the expected structural paths for a chain" $
+        programNodePaths chain2 @?= [NodePath [StepComposeL], NodePath [StepComposeR]],
+      testCase "nodeFields returns each node's input/output field names" $ do
+        let nf = map snd (nodeFields chain2)
+        map inputFieldNames nf @?= [["cell"], ["cell"]]
+        map outputFieldNames nf @?= [["cell"], ["cell"]],
+      testCase "mapParamsAt k edits the node at programNodePaths !! k (index law)" $ do
+        let edited = mapParamsAt 1 (\ps -> ps {instructionOverride = Just "x"}) chain2
+        map instructionOverride (foldParams edited) @?= [Nothing, Just "x"],
+      testCase "NodePath and a nodePath-bearing SpanAttrs round-trip as JSON" $ do
+        let np = NodePath [StepComposeL, StepEnsemble 2]
+        decode (encode np) @?= Just np
+        let a = emptyAttrs {nodePath = Just np}
+        decode (encode a) @?= Just a
+    ]
+
+-- | M2: each model-call span is tagged with its issuing node's 'NodePath', and the
+-- nodePath-bearing tree round-trips through the store at formatVersion 2.
+correlateTests :: TestTree
+correlateTests =
+  testGroup
+    "correlate"
+    [ testCase "each llm-call span carries its node's path, in programNodePaths order" $ do
+        res <- runTraced chain2 (Cell "x")
+        case res of
+          Left e -> assertFailure ("traced run failed: " <> show e)
+          Right (out, tree) -> do
+            out @?= Cell "echoed"
+            let llms = llmSpansInOrder tree
+            length llms @?= 2
+            let paths = programNodePaths chain2
+            map (nodePath . attrs) llms @?= [Just (paths !! 0), Just (paths !! 1)],
+      testCase "a nodePath-bearing tree round-trips through the store (formatVersion 2)" $
+        withSystemTempDirectory "shikumi-trace-node" $ \dir -> do
+          res <- runTraced chain2 (Cell "x")
+          case res of
+            Left e -> assertFailure ("traced run failed: " <> show e)
+            Right (_, tree) -> do
+              let p = dir <> "/trace.json"
+              writeTraceFile p tree
+              loaded <- readTraceFile p
+              loaded @?= Right tree
+    ]
+
+-- | M3: the per-node feedback channel round-trips writes and reads.
+feedbackTests :: TestTree
+feedbackTests =
+  testGroup
+    "feedback"
+    [ testCase "feedbackFor returns critiques in attach order; untargeted node is empty" $ do
+        let p1 = NodePath [StepComposeL]
+            p2 = NodePath [StepComposeR]
+            p3 = NodePath [StepFMap]
+        (_, fb) <-
+          runEff . runPrim . runFeedback $ do
+            attachFeedback p1 "first"
+            attachFeedback p1 "second"
+            attachFeedback p2 "only"
+        feedbackFor p1 fb @?= ["first", "second"]
+        feedbackFor p2 fb @?= ["only"]
+        feedbackFor p3 fb @?= [],
+      testCase "FeedbackLog round-trips as JSON" $ do
+        (_, fb) <-
+          runEff . runPrim . runFeedback $
+            attachFeedback (NodePath [StepComposeL]) "c"
+        decode (encode (fb :: FeedbackLog)) @?= Just fb
+    ]

@@ -30,6 +30,9 @@ module Shikumi.Trace
     TraceTree (..),
     childrenOf,
 
+    -- * Node identity (re-exported from "Shikumi.Trace.Node")
+    NodePath (..),
+
     -- * The effect
     Trace,
     withSpan,
@@ -41,6 +44,8 @@ module Shikumi.Trace
     -- * Interpreters and capture
     runTrace,
     tracedLLM,
+    llmLabel,
+    llmAttrs,
 
     -- * Rendering
     renderTree,
@@ -84,6 +89,7 @@ import Shikumi.Cache.Key (CacheKey (..), requestToCanonicalValue)
 import Shikumi.Cache.Key qualified as Key
 import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete, stream)
+import Shikumi.Trace.Node (NodePath (..))
 import Shikumi.Trace.ResponseJSON ()
 
 -- ---------------------------------------------------------------------------
@@ -128,7 +134,11 @@ data SpanAttrs = SpanAttrs
     -- | tool calls observed on the response
     toolCalls :: ![ToolCallRecord],
     -- | the EP-6 content-addressed key, present on LM-call spans
-    cacheKey :: !(Maybe Text)
+    cacheKey :: !(Maybe Text),
+    -- | the structural path of the @Program@ node that issued this span's LM call
+    -- (EP-16). Present only on model-call spans produced by @runProgramTraced@;
+    -- 'Nothing' for spans opened by bare 'withSpan' or a non-node-correlated run.
+    nodePath :: !(Maybe NodePath)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -147,7 +157,8 @@ emptyAttrs =
       costUsd = Nothing,
       retries = 0,
       toolCalls = [],
-      cacheKey = Nothing
+      cacheKey = Nothing,
+      nodePath = Nothing
     }
 
 -- | One node of the trace tree.

@@ -115,7 +115,7 @@ the ambient effect, but the ambient effect is the contract.
 |---|-------|------|-----------|-----------|--------|
 | 14 | Ambient model routing and live native structured output | docs/plans/14-ambient-model-routing-and-live-native-structured-output.md | None | None | Complete |
 | 15 | Embedding backend over baikai | docs/plans/15-embedding-backend-over-baikai.md | None | None | Not Started |
-| 16 | Node-correlated tracing and feedback channel | docs/plans/16-node-correlated-tracing-and-feedback-channel.md | None | EP-14 | Not Started |
+| 16 | Node-correlated tracing and feedback channel | docs/plans/16-node-correlated-tracing-and-feedback-channel.md | None | EP-14 | Complete |
 | 17 | Live OpenTelemetry export sink | docs/plans/17-live-opentelemetry-export-sink.md | None | EP-16 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -211,8 +211,8 @@ plan embeds the relevant excerpt.
 - [x] EP-14: Live `attachSchema` (native `responseFormat`) + per-sample temperature applied on the wire
 - [ ] EP-15: Upstream baikai embeddings client (new transport)
 - [ ] EP-15: Shikumi `Embedding`-effect interpreter; `semanticSimilarity` runs end-to-end
-- [ ] EP-16: `NodePath` identity + `runProgramTraced` correlating spans to nodes
-- [ ] EP-16: Per-node feedback channel readable/writable by metrics and optimizers
+- [x] EP-16: `NodePath` identity + `runProgramTraced` correlating spans to nodes
+- [x] EP-16: Per-node feedback channel readable/writable by metrics and optimizers
 - [ ] EP-17: Live OpenTelemetry exporter wired behind `shikumi trace --otel`
 
 

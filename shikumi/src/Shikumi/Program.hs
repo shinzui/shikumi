@@ -53,6 +53,17 @@ module Shikumi.Program
     runProgram,
     runProgramConc,
 
+    -- * Per-node field metadata (EP-16)
+    NodeFields (..),
+    nodeFieldsIndexed,
+
+    -- * Execution internals (reused by alternative executors, e.g. @runProgramTraced@)
+    retryWith,
+    acceptOrReject,
+    modal,
+    sampleTemps,
+    withSampleTemp,
+
     -- * Parameter interface (the optimizer/compiler contract)
     paramsTraversal,
     foldParams,
@@ -94,7 +105,7 @@ import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), Response, complete)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
 import Shikumi.Schema.Types (fieldName)
-import Shikumi.Signature (Signature, getInstruction, outputFields, setDemos, setInstruction)
+import Shikumi.Signature (Signature, getInstruction, inputFields, outputFields, setDemos, setInstruction)
 import Shikumi.Signature qualified as Sig
 
 -- ---------------------------------------------------------------------------
@@ -437,6 +448,38 @@ paramsTraversal _ (Embed f) = pure (Embed f)
 -- | Read every node's 'Params', in traversal order.
 foldParams :: Program i o -> [Params]
 foldParams = getConst . paramsTraversal (\ps -> Const [ps])
+
+-- | The input- and output-field names of a single 'Predict' node, recovered
+-- structurally. A 'Predict' hides its @i@\/@o@ types existentially, so a typed
+-- @Signature@ cannot escape the GADT — but the field /names/ are plain 'Text' and
+-- can. This is what the EP-16 node-correlated trace and the grounded instruction
+-- proposer (@docs/plans/19-grounded-instruction-proposer.md@) consume.
+data NodeFields = NodeFields
+  { inputFieldNames :: ![Text],
+    outputFieldNames :: ![Text]
+  }
+  deriving stock (Eq, Show, Generic)
+
+-- | For every 'Predict' node, in 'foldParams' order, its index-aligned field
+-- metadata. So @nodeFieldsIndexed p !! n@ describes the same node @mapParamsAt n@
+-- edits and @foldParams p !! n@ parameterizes — the integration-point-#3 ordering
+-- law, shared with @Shikumi.Trace.Node.programNodePaths@.
+nodeFieldsIndexed :: Program i o -> [NodeFields]
+nodeFieldsIndexed = go
+  where
+    go :: forall x y. Program x y -> [NodeFields]
+    go (Predict sig _) =
+      [NodeFields (map fieldName (inputFields sig)) (map fieldName (outputFields sig))]
+    go (Compose a b) = go a ++ go b
+    go (FMap _ p) = go p
+    go (Map _ p) = go p
+    go (Parallel a b) = go a ++ go b
+    go (Retry _ p) = go p
+    go (RetryWhen _ _ p) = go p
+    go (Validate _ p) = go p
+    go (MajorityVote _ _ p) = go p
+    go (Ensemble ps _) = concatMap go ps
+    go (Embed _) = []
 
 -- | Apply a function to every node's 'Params', preserving structure and types.
 mapParams :: (Params -> Params) -> Program i o -> Program i o

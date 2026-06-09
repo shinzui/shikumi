@@ -77,17 +77,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `NodePath` type + `programNodePaths` enumeration + `nodePath` field added to
-      `SpanAttrs`; unit test proving `programNodePaths` agrees with `foldParams` order and
-      bumps the trace-file `formatVersion`.
-- [ ] M1: per-node field-metadata accessor `nodeFields :: Program i o -> [(NodePath, NodeFields)]`.
-- [ ] M2: `runProgramTraced` (additive entry point) opening a node span per node and a
-      `Reader`-style current-`NodePath` thread that `tracedLLM`'s replacement reads to tag
-      each model-call span; hermetic test asserting span `nodePath` equals expected path and
-      matches `foldParams` index.
-- [ ] M3: `Feedback` channel (`FeedbackLog` sibling structure + write/read API); hermetic
-      round-trip test (attach critique to node N, read it back).
-- [ ] Final: `cabal test shikumi-trace` green inside `nix develop .#ghc9124`; plan's
+- [x] M1: `NodePath`/`NodeStep` + `programNodePaths` enumeration (`Shikumi.Trace.Node`) + the
+      optional `nodePath` field on `SpanAttrs`; `currentFormatVersion` bumped 1→2. Tests prove
+      `programNodePaths` length agrees with `foldParams` across four shapes, the expected
+      structural paths for a chain, the `mapParamsAt`/index law, and JSON round-trips of
+      `NodePath` and a `nodePath`-bearing `SpanAttrs`.
+- [x] M1: per-node field-metadata accessor `nodeFields :: Program i o -> [(NodePath, NodeFields)]`
+      (in `Shikumi.Trace.Node`), backed by `nodeFieldsIndexed`/`NodeFields` added to
+      `Shikumi.Program`. Test asserts the input/output field names of a two-node chain.
+- [x] M2: `runProgramTraced` (additive entry point in `Shikumi.Trace.Program`) opens a span per
+      node and threads the active `NodePath` via the `CurrentNode` effect; `tracedNodeLLM` tags
+      each model-call span. Test asserts the two LM spans carry `programNodePaths !! 0` / `!! 1`
+      in start order, and the nodePath-bearing tree round-trips through the store at
+      formatVersion 2.
+- [x] M3: `Feedback` channel (`Shikumi.Trace.Feedback`: `FeedbackLog`, `Feedback` effect,
+      `attachFeedback`, `feedbackFor`, `runFeedback`, `emptyFeedback`); hermetic round-trip test
+      (two critiques to one node in order, one to another, empty for an untargeted node) plus a
+      `FeedbackLog` JSON round-trip.
+- [x] Final: `cabal test shikumi-trace` green (20 cases) inside `nix develop .#ghc9124`; plan's
       living sections updated; commit with MasterPlan/ExecPlan/Intention trailers.
 
 
@@ -96,7 +103,36 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Adopted the combined-capture path over the layered interpose.** The plan's preferred sketch
+  layered a separate `tracedNodeLLM` *above* `tracedLLM`, annotating `nodePath` after `tracedLLM`
+  returned. That cannot work: `tracedLLM` closes its `LlmCallSpan` (via `withSpan`'s bracket)
+  before control returns, so the subsequent `annotateSpan` would land on the parent span. We took
+  the documented robust path instead: `tracedNodeLLM` is a single interpose that opens the
+  `LlmCallSpan`, fills the LM attributes (reusing `llmLabel`/`llmAttrs`, now exported from
+  `Shikumi.Trace`), *and* stamps `nodePath` — all inside one `withSpan`. A traced-program run uses
+  `tracedNodeLLM` instead of `tracedLLM`. No ordering subtlety; the `correlate` test confirms the
+  tag lands on the right span.
+- **`runProgramTraced` reuses `runProgram`'s helpers rather than re-deriving execution.** Because
+  per-node correlation requires descending to every `Predict` (a subtree delegated wholesale to
+  `runProgram` would leave its inner `Predict`s untagged), `runProgramTraced` mirrors the full
+  combinator recursion. To avoid duplicating fragile semantics it reuses `runProgram`'s now-exported
+  internals — `retryWith`, `acceptOrReject`, `modal`, `sampleTemps`, `withSampleTemp` — delegating
+  only the `Predict` leaf to `runProgram` itself. `retryWith` is parameterized over the executor, so
+  `retryWith (go (StepRetry : prefix)) …` threads the path through retries for free. This also means
+  a traced run inherits EP-14's per-sample temperature behaviour automatically.
+- **`CurrentNode` is exposed in `runProgramTraced`'s row, discharged at the edge by
+  `runCurrentNode`.** The cell must be shared between the `localNode` writes (inside the body) and
+  the `askNode` read (inside the lower `tracedNodeLLM` interpose), so `runCurrentNode` is installed
+  *outer* of `tracedNodeLLM`. Hence the public signature is
+  `(LLM, Trace, CurrentNode, Error ShikumiError) => …`, exactly as the plan's "end of M2" surface
+  lists; the master plan's integration-point-#3 three-constraint name is the same entry point with
+  `CurrentNode` discharged like `Prim`/`Time`.
+- **`FeedbackLog` serializes via an association list.** `Map NodePath [Text]` cannot derive aeson
+  `ToJSON` directly (a `NodePath` has no text `ToJSONKey`), so `FeedbackLog`'s instances go through
+  `Map.toList`/`fromList`, needing only `ToJSON`/`FromJSON NodePath`.
+- **Adding `nodePath` to `SpanAttrs` broke nothing.** Every construction site uses record syntax
+  (`emptyAttrs { … }`), so only `emptyAttrs` needed the new `nodePath = Nothing`; all 11 prior
+  trace tests stayed green and the format bump to 2 round-trips cleanly.
 
 
 ## Decision Log
@@ -157,12 +193,43 @@ Record every decision made while working on the plan.
   Date: 2026-06-09.
 
 
+- Decision: Implement node tagging as a **single combined `tracedNodeLLM`** (capture + tag in one
+  `withSpan`) used in place of `tracedLLM` for traced-program runs, rather than the layered
+  interpose the plan sketched. Recorded under Surprises with the reason (the layered approach tags
+  the parent span because `tracedLLM` closes the LM span before returning). The plan explicitly
+  permitted this fallback; the observable result is identical.
+  Date: 2026-06-09.
+- Decision: Expose `CurrentNode` in `runProgramTraced`'s constraint row (discharged at the edge by
+  `runCurrentNode`), matching the plan's "end of M2" surface, because the node cell must be shared
+  between `localNode` (body) and `askNode` (the lower `tracedNodeLLM` interpose).
+  Date: 2026-06-09.
+- Decision: Reuse `runProgram`'s execution internals (`retryWith`, `acceptOrReject`, `modal`,
+  `sampleTemps`, `withSampleTemp`, now exported from `Shikumi.Program`) inside `runProgramTraced`'s
+  combinator arms, delegating only the `Predict` leaf to `runProgram`. Avoids duplicating fragile
+  semantics and inherits EP-14's per-sample temperature behaviour for free.
+  Date: 2026-06-09.
+- Decision: Bump the example CLI fixture `shikumi-cli/example/fixture/sentiment.json` to
+  `formatVersion: 2` (a one-field edit; the absent `nodePath` decodes to `Nothing`), so the
+  shipped example stays loadable under the new "reject loudly" version gate.
+  Date: 2026-06-09.
+
+
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-16 delivered. `NodePath`/`programNodePaths` (`Shikumi.Trace.Node`) give every `Predict` node a
+stable structural identity that agrees with `foldParams`/`mapParamsAt` indexing by construction
+(shared depth-first walk). `runProgramTraced` (`Shikumi.Trace.Program`) is an additive entry point
+that tags each model-call span with its issuing node's path via the `CurrentNode` effect and the
+combined `tracedNodeLLM` capture, leaving `runProgram`/`runProgramConc` (integration point #4)
+untouched. `nodeFields`/`nodeFieldsIndexed` expose per-node input/output field names for the
+grounded proposer. The `Feedback` channel (`Shikumi.Trace.Feedback`) is a trace-format-independent
+sibling for per-node critiques. Validated by 9 new hermetic tests (`node`/`correlate`/`feedback`
+groups, 20 total in `shikumi-trace`); the whole fleet stays green and the trace `formatVersion` is
+bumped 1→2 for the additive optional `nodePath` span attribute. No gaps; EP-17 M3 can now export
+the `nodePath` attribute (its renderer `renderNodePath` is provided).
 
 
 ## Context and Orientation

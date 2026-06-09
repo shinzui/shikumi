@@ -39,7 +39,10 @@ library
   exposed-modules:
     Shikumi.Trace
     Shikumi.Trace.Demo
+    Shikumi.Trace.Feedback
     Shikumi.Trace.Internal.Spike
+    Shikumi.Trace.Node
+    Shikumi.Trace.Program
     Shikumi.Trace.Replay
     Shikumi.Trace.ResponseJSON
     Shikumi.Trace.Store
