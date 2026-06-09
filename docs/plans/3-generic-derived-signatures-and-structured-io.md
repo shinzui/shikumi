@@ -76,24 +76,29 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (prototyping): standalone spike validates `GHC.Generics` schema derivation and
-  round-trip decode on one record `Person { name :: Text, age :: Int }` before any
-  framework module exists.
-- [ ] M1: `Shikumi.Schema.Types` — `JsonSchema` helpers, `SchemaError`, the `Field` wrapper
-  newtype, and the `GFieldDoc` plumbing for type-level descriptions.
-- [ ] M2: `Shikumi.Schema` — `ToSchema`/`deriveSchema` (record → aeson `Value`) covering
-  `Text`/`Int`/`Double`/`Bool`, `Maybe`, lists, `Vector`, nested records, and enum-like
-  sum types; golden tests pass.
-- [ ] M3: `Shikumi.Schema` — `FromModel`/`parseOutput` (aeson `Value` → record, total) with
-  the full `ShikumiError` failure taxonomy; round-trip and failing-case tests pass.
-- [ ] M4: `Shikumi.Signature` — the `Signature i o` record (instruction + demos + field
-  metadata), `mkSignature`, and lens-style accessors `instruction`/`demos` that read AND
-  replace those parameters.
-- [ ] M5: `Shikumi.Adapter` — the `Adapter` record seam, `render`/`parse`, the
-  native-schema adapter (consumes the EP-2 `Options` schema field), the prompt-based
-  fallback adapter (`[[ ## field ## ]]` markers), and per-model capability selection.
-- [ ] M6: end-to-end acceptance test driving an in-memory fake `LLM` interpreter through a
-  `Signature` + both adapters, asserting a decoded record and a typed error.
+- [x] M0 (prototyping): **folded into M2/M3's real tests** rather than a throwaway
+  `prototype/` package — the `GHC.Generics` schema + total-decode traversal is exercised
+  directly by `SchemaSpec` (de-risk without a build-then-delete cycle; see Decision Log).
+- [x] M1: `Shikumi.Schema.Types` — the `Field "desc" a` wrapper + `field`/`unField`,
+  `FieldMeta`, `FieldPath` breadcrumbs (`pushField`/`pushIndex`/`renderPath`), and the
+  JSON-Schema smart constructors (`objectSchema`/`stringSchema`/…/`nullableSchema`,
+  `withDescription`).
+- [x] M2: `Shikumi.Schema` — `ToSchema`/`deriveSchema` (record → aeson `Value`) over
+  `Text`/`Int`/`Integer`/`Double`/`Bool`, `Maybe`, lists, `Vector`, nested records, and
+  enum-like sums; `SchemaSpec` asserts `deriveSchema @Summary` equals the expected `Value`
+  (descriptions, nested object, enum, optional `note`).
+- [x] M3: `Shikumi.Schema` — total `FromModel`/`parseOutput` (`Value` → record) with the
+  `InvalidJSON`/`MissingField`/`SchemaMismatch`/`ValidationFailure` taxonomy, each error
+  carrying a rendered `FieldPath`; `Validatable` hook; all failing-case tests pass.
+- [x] M4: `Shikumi.Signature` — `Signature i o` (instruction + demos + derived field
+  metadata), `mkSignature`, and `getInstruction`/`setInstruction`/`getDemos`/`setDemos`
+  (plus the free `#instruction`/`#demos` `generic-lens` optics via `Generic`).
+- [x] M5: `Shikumi.Adapter` — the `Adapter` record seam, `render`/`parse`, `ToPrompt`, the
+  prompt-based `[[ ## field ## ]]` fallback adapter, the native adapter (schema attach is a
+  no-op `attachSchema` pending EP-2; native `parse` reads JSON from assistant text), and
+  `capabilityFor`/`adapterFor`.
+- [x] M6: `EndToEndSpec` drives a fake `LLM` interpreter through `Signature` + the fallback
+  adapter, asserting a decoded `Summary` and a `MissingField` error.
 
 
 ## Surprises & Discoveries
@@ -101,7 +106,30 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Error type reconciled to EP-1's actual shape.** This plan's draft assumed a richer
+  `ShikumiError` with a structured `FieldPath` type (`MissingField FieldPath`,
+  `SchemaMismatch FieldPath Text`, …). EP-1 (authoritative, already committed) ships
+  `ShikumiError` with **flat `Text` payloads** (`MissingField !Text`, `SchemaMismatch !Text`,
+  `InvalidJSON`, `ValidationFailure`, …) and **no `FieldPath` type**. Per the cross-plan rule
+  (EP-1 is authoritative; adjust this plan's call sites), the decode walk threads a
+  `FieldPath = [Text]` breadcrumb internally and renders it into the `Text` payload
+  (`renderPath`, e.g. `"bullets"`, `"bullets.[2]"`). Precise location is preserved in the
+  message without changing the committed shared type. Evidence: `Shikumi.Error.ShikumiError`
+  in `shikumi/src/Shikumi/Error.hs`.
+- **Project was already scaffolded by EP-1**, so all the placeholder `Shikumi.Error` / `LLM`
+  shims and the `cabal.project`/package-creation steps in this plan's Context/Concrete Steps
+  were skipped — the real modules exist.
+- **baikai exports `flattenAssistantBlocks` but not a text flattener.** The plan referenced
+  `Baikai.flattenAssistantText`; it does not exist (baikai's own tests define it locally).
+  The adapter defines a small local `responseText` helper instead.
+- **EP-2 has not landed**, so baikai's `Options` has no `responseFormat` field. `attachSchema`
+  is a documented no-op and the native adapter's `parse` reads JSON from the assistant text;
+  `capabilityFor` still reports the *true* capability (Anthropic/OpenAI non-CLI →
+  `NativeSchema`) so its test is real. The fallback path is fully exercised.
+- **`Validatable a` + `ToPrompt o` are required by the adapters** beyond the plan's sketched
+  constraints: `Validatable o` so `parse` runs the post-decode rule, and `ToPrompt o` so demo
+  outputs can be rendered as `[[ ## field ## ]]` sections (no JSON encoder exists for `o`).
+  Documented in the Decision Log.
 
 
 ## Decision Log
@@ -170,13 +198,59 @@ Record every decision made while working on the plan.
   inventing a second one would fork the taxonomy.
   Date: 2026-06-08.
 
+- Decision (implementation, 2026-06-08): reconcile to EP-1's **flat-`Text`-payload**
+  `ShikumiError` rather than the `FieldPath`-carrying shape this plan originally sketched.
+  EP-1 is authoritative and already committed/consumed; changing its type would cascade. The
+  decode walk threads a `FieldPath = [Text]` breadcrumb internally and renders it into the
+  `Text` payload via `renderPath` (so `MissingField "bullets"`, `SchemaMismatch
+  "bullets: expected array, got string"`). No change to the shared type. Date: 2026-06-08.
+
+- Decision (implementation, 2026-06-08): **fold the M0 spike into the real `SchemaSpec`**
+  instead of a throwaway `prototype/` package. The spike's purpose — de-risk the
+  `GHC.Generics` schema + total-decode traversal — is met by `SchemaSpec`'s exact assertions,
+  and EP-1 already proved the toolchain. This avoids a build-then-delete cycle. Date: 2026-06-08.
+
+- Decision (implementation, 2026-06-08): **consolidate EP-3's specs into the existing
+  `shikumi-test` suite** (`SchemaSpec`/`SignatureSpec`/`AdapterSpec`/`EndToEndSpec` as
+  `other-modules`) rather than five separate `cabal` test-suite stanzas. One suite, one
+  `cabal test shikumi-test`, less cabal churn; the named test groups still pinpoint each
+  behavior. Date: 2026-06-08.
+
+- Decision (implementation, 2026-06-08): the adapter constructors require `Validatable o`
+  (so `parse` runs the post-decode rule) and `ToPrompt o` (so demo outputs render as
+  `[[ ## field ## ]]` sections, since no JSON encoder for `o` exists), beyond the plan's
+  sketched `(ToSchema o, FromModel o, ToPrompt i)`. `attachSchema` is a no-op until EP-2 adds
+  `Options.responseFormat`; `capabilityFor` still reports the true native capability so its
+  test is meaningful, while the fallback path is the one exercised end-to-end. Date: 2026-06-08.
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-08): EP-3 complete.** The record↔JSON bridge is real: a developer declares
+`Article`/`Summary` records (with `Field "desc"`-typed fields), and the framework derives the
+provider JSON Schema (`deriveSchema @Summary` equals the expected `Value`), totally decodes a
+reply (`parseOutput`/`fromModel` → `Right Summary` or a precise located `ShikumiError`), bundles
+the task as a `Signature Article Summary` with replaceable `instruction`/`demos`, and renders/
+parses through an `Adapter` (the `[[ ## field ## ]]` fallback round-trips end-to-end through a
+fake `LLM`). Integration point #3 (`Field`/`FieldMeta`, `ToSchema`/`FromModel`,
+`Signature`/`Demo`/`mkSignature` + parameter accessors, `Adapter`/`capabilityFor`/`ToPrompt`)
+exists with the documented signatures for EP-4/EP-9/EP-10/EP-11 to consume. `cabal test
+shikumi-test` reports **All 35 tests passed** with no warnings, no network.
+
+**Deviations from the written plan** (all in the Decision Log): error type reconciled to EP-1's
+flat-`Text` `ShikumiError` (path rendered into the message); M0 spike folded into `SchemaSpec`;
+specs consolidated into the one `shikumi-test` suite; adapters require `Validatable o` +
+`ToPrompt o`; native schema attachment is a no-op pending EP-2 (fallback fully exercised).
+
+**Gaps / future work:** the native structured-output path is implemented but inert until EP-2
+lands `Options.responseFormat` (then flip `attachSchema` to set it and switch native `parse` to
+read the structured payload — both are single, marked sites). Mixed sums (multiple constructors
+*with* fields) are unsupported by `ToSchema` (only records → objects and nullary sums → enums);
+they currently produce an ordinary "no instance" error rather than the plan's custom `TypeError`
+— acceptable, noted for a later polish pass.
 
 
 ## Context and Orientation

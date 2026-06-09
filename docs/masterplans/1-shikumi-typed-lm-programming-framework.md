@@ -173,7 +173,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 |----|-------|------|-----------|-----------|------------|--------|
 | 1  | Shikumi runtime substrate and LLM effect over baikai | docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md | None | None | 5 | Complete |
 | 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Not Started |
-| 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Not Started |
+| 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Not Started |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Not Started |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | Not Started |
@@ -335,8 +335,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-1: Retries, backoff, rate limiting, and budget controls
 - [ ] EP-2: `response_format` / JSON schema field on baikai `Options`
 - [ ] EP-2: Anthropic and OpenAI provider mappings emit/parse native structured output
-- [ ] EP-3: Generic-derived JSON schema + decode from record types
-- [ ] EP-3: `Signature` + field metadata + the `Adapter` seam (native + fallback)
+- [x] EP-3: Generic-derived JSON schema + decode from record types
+- [x] EP-3: `Signature` + field metadata + the `Adapter` seam (native + fallback)
 - [ ] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
 - [ ] EP-4: `predict` and `chainOfThought`
 - [ ] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
@@ -389,6 +389,21 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   `IORef` registry and the `Stream IO`/`Fold IO` layer for no capability gain. The
   `baikai-effectful` plan lives in the baikai repo with its own intention; EP-1 gains it as a
   hard, cross-repo dependency. See Decision Log (2026-06-08).
+- **EP-3 delivered (2026-06-08).** The record↔JSON bridge landed: `Shikumi.Schema(.Types)`
+  (`ToSchema`/`deriveSchema`, total `FromModel`/`parseOutput`, the `Field "desc"` wrapper,
+  `Validatable`), `Shikumi.Signature` (replaceable `instruction`/`demos` + derived field
+  metadata), and `Shikumi.Adapter` (`ToPrompt`, the `[[ ## field ## ]]` fallback adapter, the
+  native adapter, `capabilityFor`). `shikumi-test` is green (35 tests). Cross-plan facts:
+  (a) **integration point #3 is fixed** with the documented signatures for EP-4 (programs wrap
+  a `Signature`), EP-9/EP-10 (rewrite the `instruction`/`demos` parameters — exposed as
+  first-class values + `#instruction`/`#demos` optics), and EP-11 (`deriveSchema` fills a
+  tool's `parameters`). (b) **Integration point #1 reconciled**: EP-3 emits decode-side
+  `ShikumiError` values using EP-1's *flat-`Text`* constructors, threading a `FieldPath`
+  breadcrumb and rendering it into the message (EP-3's draft assumed a `FieldPath`-typed error;
+  EP-1 is authoritative). (c) **Integration point #2 is still pending EP-2**: the native
+  adapter's `attachSchema` is a no-op and native `parse` reads JSON from assistant text until
+  baikai gains `Options.responseFormat`; the prompt fallback is the exercised path. EP-2 remains
+  the next valuable unblock for EP-3's native path. See EP-3's Decision Log.
 - **EP-1 delivered (2026-06-08).** The runtime substrate landed: `shikumi` is now a buildable
   multi-package cabal project whose library exposes the `LLM` effect, `ShikumiError`, and the
   resilient interpreter, all over baikai via `effectful`; hermetic `cabal test` is green (13
