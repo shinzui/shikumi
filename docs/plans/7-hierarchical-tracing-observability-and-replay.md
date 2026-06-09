@@ -66,9 +66,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (spike): stand up the `shikumi-trace` package skeleton and prove the baikai
-      `TraceSink` can be intercepted from inside an `effectful` action and correlated to an
-      enclosing call-stack frame.
+- [x] M0 (spike): `shikumi-trace` package skeleton stood up and added to `cabal.project`;
+      the **interpose-plus-span-stack** mechanism is proven by `Shikumi.Trace.Internal.Spike.runSpike`
+      — two LM calls nested under two distinct span ids come back tagged with the id that was on
+      top of the stack when each ran. **Done (2026-06-08).** Mechanism changed from the planned
+      baikai-`TraceSink` capture to an `interpose` over EP-1's `LLM` effect (EP-1 exposes no sink
+      seam; `LLM.complete` returns the full `Response`) — see Decision Log. `cabal test
+      shikumi-trace --test-options='-p spike'` green (1 test).
 - [ ] M1: the `Shikumi.Trace` effect and in-memory hierarchical `TraceTree`, with
       `withSpan`, automatic baikai-event capture, and a terminal pretty-printer.
 - [ ] M2: serialize/deserialize the `TraceTree` to a stable on-disk JSON format keyed by the
@@ -87,7 +91,37 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-1's `LLM` interpreters expose no `TraceSink` seam (2026-06-08).** `Shikumi.LLM`
+  ships `runLLM` / `runLLMWith` / `runLLMResilient`, all of which `reinterpret_` straight
+  over `baikai-effectful`'s `runBaikai*` with no sink parameter. So the plan's preferred
+  "shape 1" (`runLLMWithSink`) does not exist. *But* `LLM.complete :: Model -> Context ->
+  Options -> Eff es Response` returns the full baikai `Response`, which already carries
+  `latencyMs`, `message.usage` (tokens + `cost.usd`), and the assistant content blocks
+  (tool calls included) — strictly **more** than baikai's flat `TraceEvent`
+  (`CallFinished` only has latency/tokens/usd). So I capture LM-call spans by
+  **interposing on `LLM`** (the exact seam EP-6's `cachedLLM` uses) and reading the
+  returned `Response`. This drops the `streamly-core` / baikai-`Trace` dependency from the
+  core trace package and removes the M0 async-timing risk entirely (interpose wraps the
+  call synchronously). See Decision Log.
+- **EP-6 has landed, so the cache key is *imported*, not copied (2026-06-08).** The plan
+  said to ship a verbatim copy of `Shikumi.Cache.Key` until EP-6 lands. EP-6's hermetic
+  core (including `Shikumi.Cache.Key.cacheKey`) is delivered, so `shikumi-trace` depends on
+  `shikumi-cache` and imports `cacheKey` directly — integration point #7 is satisfied by
+  reuse, not duplication. The M2 golden test reproduces EP-6's pinned digest
+  `30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113`.
+- **The `Response` JSON round-trip is EP-7's to build — it is the same gap EP-6 deferred
+  (2026-06-08).** Replay serializes each `Response` into the trace file and decodes it
+  back. baikai's `Response` graph round-trips only partially: `Model` / `Api` /
+  `AssistantContent` / `StopReason` have both `ToJSON` and `FromJSON`, but `Usage` / `Cost`
+  / `CostBreakdown` are `ToJSON`-only (and `Cost` maps `Rational → Scientific` lossily via
+  `fromRationalRepetendUnlimited`), and `AssistantPayload` / `Response` have no `FromJSON`
+  (Evidence: `grep ToJSON\|FromJSON baikai/src/Baikai/{Usage,Cost,Message,Response}.hs`).
+  EP-7 owns the faithful round-trip in `Shikumi.Trace.ResponseJSON` (orphan `FromJSON` for
+  `Usage`/`Cost`/`CostBreakdown`/`AssistantPayload` + `ToJSON`/`FromJSON Response`). The
+  decisive point for the **replay typed-output guarantee**: the typed output is decoded
+  from the assistant *text* (`AssistantContent`, which round-trips), so usage/cost
+  imprecision never affects replayed outputs. EP-6's future persistent backends can reuse
+  these instances.
 
 
 ## Decision Log
@@ -141,6 +175,38 @@ Record every decision made while working on the plan.
   Rationale: matches baikai's established package split and keeps the core `shikumi-trace`
   dependency-light.
   Date: 2026-06-07.
+
+- Decision (impl, 2026-06-08): **Capture LM-call spans by `interpose` over EP-1's `LLM`
+  effect, not by installing a baikai `TraceSink`.** The plan offered two shapes;
+  investigation showed EP-1 exposes no sink seam (shape 1 is impossible) and, more
+  importantly, that interposing on `LLM` is strictly *better* than the sink: the returned
+  `Response` carries everything a span needs (model, provider, latency, input/output
+  tokens, `cost.usd`, and the assistant content blocks for tool calls) — a superset of
+  baikai's flat `TraceEvent`. The shikumi `Trace` effect still owns the parent/child
+  hierarchy via a span-id stack; the interpose (`tracedLLM`) opens an `LlmCallSpan` under
+  the active span and fills its attributes from the `Response`. Consequence: `shikumi-trace`
+  does **not** depend on `streamly-core` or `Baikai.Trace.*`, and the M0 spike's
+  async-event-timing concern is moot (interpose is synchronous around the call). The
+  promotion/discard criterion in the plan's M0 is met by the interpose path; the
+  sink-correlation fallback is not needed.
+
+- Decision (impl, 2026-06-08): **Import `Shikumi.Cache.Key` from `shikumi-cache`; do not
+  copy it.** EP-6's hermetic core (which owns `cacheKey`, integration point #7) is
+  delivered, so `shikumi-trace` build-depends on `shikumi-cache` and reuses `cacheKey`
+  verbatim. This is stronger than the plan's "ship a local reference copy until EP-6 lands"
+  — there is exactly one implementation, so the two plans cannot drift. The M2 golden test
+  still pins EP-6's digest as a regression guard.
+
+- Decision (impl, 2026-06-08): **EP-7 owns the faithful `Response` JSON round-trip** in
+  `Shikumi.Trace.ResponseJSON` (orphan instances). baikai ships no `FromJSON` for the
+  `Response`/`AssistantPayload`/`Usage`/`Cost` graph. Rather than store a lossy projection,
+  EP-7 adds orphan `FromJSON` for `Usage`/`Cost`/`CostBreakdown`/`AssistantPayload` and
+  `ToJSON`/`FromJSON Response`, reusing baikai's existing instances for `Model`/`Api`/
+  `AssistantContent`/`StopReason`. Rationale: the trace file is shikumi's own format, so we
+  are free to encode `Cost`'s `Rational` faithfully; and replay must rebuild a real
+  `Response`. The typed-output guarantee rests only on `AssistantContent` (already
+  round-tripping), so cost imprecision is harmless. These instances are the bounded work
+  EP-6 deferred for its persistent backends and can move to a shared home later.
 
 
 ## Outcomes & Retrospective

@@ -22,6 +22,7 @@
 packages:
   shikumi
   shikumi-cache
+  shikumi-trace
   /Users/shinzui/Keikaku/bokuno/baikai/baikai
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai

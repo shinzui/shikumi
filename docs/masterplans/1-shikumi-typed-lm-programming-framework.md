@@ -177,7 +177,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
-| 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Not Started |
+| 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | In Progress |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Not Started |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Not Started |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Not Started |
