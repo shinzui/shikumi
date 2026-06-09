@@ -76,23 +76,34 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (spike): `shikumi-tools` package skeleton compiles and links against `shikumi`,
-      `baikai`, `aeson`, `effectful`; a trivial `Tool` value can be constructed and its
-      derived schema printed.
-- [ ] M1: `Tool i o` type, `mkTool`/`mkToolIO`, schema derivation, and lowering to
-      `Baikai.Tool` implemented and unit-tested (schema snapshot test).
-- [ ] M1: `SomeTool` existential + `ToolRegistry` + typed decode/dispatch/encode round-trip
-      (`runToolCall`) implemented; malformed-arguments test yields a typed `ToolError`.
-- [ ] M2: `Trajectory`/`Step`/`Action` data model and the ReAct signature extension
-      (`ReActState`, `Thought`, `ToolPick`) implemented.
-- [ ] M2: `react` builds a `Program i o` whose loop runs propose → dispatch → observe until
-      finish/budget, then extracts the typed output; mock-LM end-to-end test passes.
-- [ ] M3: Native-vs-prompt tool-protocol seam wired: `ToolProtocol` selector, native path
-      using baikai `Context.tools`/`Options.toolChoice` (+ EP-2 `response_format` for
-      extract), prompt fallback path; both paths covered by tests.
-- [ ] M4: Acceptance test green: typed tool + ReAct + mock LM → typed answer + recorded
-      trajectory + schema assertion + bad-args typed error. `cabal test all` passes.
-- [ ] Decision Log, Surprises, Outcomes updated; masterplan Progress checkboxes for EP-11
+- [x] M0 (spike): `shikumi-tools` package skeleton compiles and links against `shikumi`,
+      `baikai`, `aeson`, `effectful` (2026-06-09). The `Embed` program constructor was
+      added to core `Shikumi.Program` first (see Decision Log) so `react` can be a real
+      `Program i o`. `cabal build shikumi-tools` is green.
+- [x] M1: `Tool i o` type, `mkTool`, schema derivation, and lowering to `Baikai.Tool`
+      implemented and unit-tested (schema snapshot test in `SchemaSpec`). `mkToolIO` is
+      intentionally not shipped — see Decision Log (tool bodies are `(LLM, Error
+      ShikumiError)`-effectful, not raw `IO`).
+- [x] M1: `SomeTool` existential + `ToolRegistry` + typed decode/dispatch/encode round-trip
+      (`runToolCall`) implemented; malformed-arguments and unknown-name tests each yield a
+      typed `ToolError` (`ToolSpec`).
+- [x] M2: `Action`/`Step`/`Termination`/`Trajectory` data model implemented; the ReAct
+      signature use renders the task instruction + serialized trajectory + tool menu into
+      each propose/extract call (the loop rebuilds context from the trajectory each turn
+      rather than threading a growing baikai `Context` — see Surprises).
+- [x] M2: `react`/`reactWithTrajectory` build a `Program i o` whose embedded loop runs
+      propose → dispatch → observe until finish/`maxIters`, then extracts the typed output;
+      mock-LM end-to-end tests pass (`ReActSpec`).
+- [x] M3: Native-vs-prompt tool-protocol seam wired: `ToolProtocol` selector,
+      `resolveProtocolKind`/`resolveProtocol`, native path (baikai `Context.tools`/
+      `Options.toolChoice`, parsing `AssistantToolCall` blocks; EP-2 `attachSchema` on the
+      extract, a no-op until the local baikai gains `responseFormat`), and prompt fallback;
+      both paths reach the same typed answer (`ProtocolSpec`).
+- [x] M4: Acceptance test green: typed tool + ReAct + mock LM → typed answer + recorded
+      trajectory + schema assertion + bad-args typed error, under both protocols
+      (`AcceptanceSpec`). `cabal test all` passes (13 `shikumi-tools` tests; all sibling
+      suites still green).
+- [x] Decision Log, Surprises, Outcomes updated; masterplan Progress checkbox for EP-11
       ticked.
 
 
@@ -101,7 +112,33 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-4 shipped no embed/lift constructor.** The plan's Context section assumed EP-4
+  would expose an `Embed`/`liftEff` constructor ("bind to EP-4's actual name in one
+  import"); the delivered `Shikumi.Program` GADT has only `Predict`/`Compose`/`FMap` plus
+  EP-5's combinators. Evidence: `grep -n 'Embed\|liftEff' shikumi/src/Shikumi/Program.hs`
+  returned nothing before this work. Resolution: EP-11 added `Embed` to core itself (see
+  Decision Log), wired through all six functions EP-4's rule requires, and the CoT/RAG
+  structural compilers gained an `Embed` pass-through case.
+- **Approach A (no `IOE`) means baikai's `appendToolResult` is unusable** — it is
+  `ToolCall -> IO ToolResult` and the loop has no `IOE`. So both protocols rebuild the
+  request context from the trajectory each turn (the trajectory *is* the conversation
+  state, serialized into the prompt) instead of threading a growing baikai `Context` via
+  `appendToolResult`. This is simpler and protocol-uniform: the native path only differs by
+  setting `Context.tools`/`Options.toolChoice` and parsing `AssistantToolCall` blocks; the
+  history is rendered as text for both. Tool dispatch still uses the typed
+  decode/run/encode round-trip (`runToolCall`).
+- **The derived `WeatherReq` schema matches the plan's idealized schema plus
+  `"additionalProperties": false`.** EP-3's `objectSchema` emits that extra key (and a
+  `"required"` list), so the frozen snapshot in `Fixtures.expectedReqSchema` includes it.
+  Captured from the real generator, not hand-idealized. The `SchemaSpec` assertion is on
+  the exact `aeson` `Value` (object-key order independent).
+- **`_Model` resolves to the prompt protocol under `ProtocolAuto`.** `runProgram` dispatches
+  every node against the neutral `_Model` (EP-4's unwired-routing limitation), and
+  `capabilityFor _Model = PromptFallback`, so `defaultReActConfig` (`ProtocolAuto`) runs the
+  prompt seam — the MasterPlan's "exercised path". The native seam is verified by forcing
+  `ProtocolNative` with a tool-call-bearing mock script. Real per-model routing (and thus an
+  auto-selected native path against a live provider) awaits EP-4/EP-8/EP-12 wiring an ambient
+  model, exactly as EP-4/EP-5 recorded.
 
 
 ## Decision Log
@@ -187,7 +224,34 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** The new `shikumi-tools` package ships typed tools and ReAct
+agents exactly as Purpose described, demonstrated offline against a mock LM. A developer
+writes a `Tool i o` as an ordinary function over records; shikumi derives its JSON Schema,
+lowers it to `Baikai.Tool`, decodes the model's arguments into a typed `i` (or a typed
+`ToolError`, never a crash), runs the body, and encodes the result back. `react`/
+`reactWithTrajectory` build a first-class `Program i o` whose embedded loop alternates
+propose → dispatch → observe until finish or `maxIters`, then extracts the typed answer,
+recording a structured `Trajectory`. `cabal test shikumi-tools-test` is green (13 tests);
+`cabal test all` is green across every package. All four acceptance facts hold: typed
+`WeatherResp`, recorded trajectory with `TerminatedFinish`, frozen `WeatherReq` schema, and
+malformed-args recovery with no exception escaping.
+
+**What changed from the plan.** (1) An `Embed` constructor was added to core
+`Shikumi.Program` because EP-4 hadn't shipped one — this is integration point #4 territory,
+so it was done minimally and constrained to `runProgram`'s exact row, keeping #4 intact.
+(2) `mkToolIO`/raw-`IO` tools were dropped in favour of effect-honest `(LLM, Error
+ShikumiError)` tool bodies (Decision Log); the acceptance scenario needs no `IOE`.
+(3) The loop rebuilds context from the trajectory each turn rather than using baikai's
+`IO`-based `appendToolResult` (Surprises).
+
+**Gaps / future work (none block EP-12).** Raw-`IO` tools (`mkToolIO`) + an `IOE`-carrying
+`Embed`/runner; native extract via EP-2's `responseFormat` (`attachSchema` is wired but a
+no-op until the local baikai gains the field); a budget guard inside the loop producing
+`TerminatedBudget` (budget is currently enforced one layer down by `runLLMResilient`,
+surfacing as a `ShikumiError`); and a ReAct signature that natively *extends* a user
+`Signature` with trajectory fields (the loop renders the trajectory as prompt text rather
+than as a derived signature, which the prompt fallback makes sufficient). EP-12 consumes
+`Tool`/`SomeTool`/`ToolRegistry`/`react`/`reactWithTrajectory` as-is for agent demos.
 
 
 ## Context and Orientation

@@ -181,7 +181,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Complete |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Complete |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Complete |
-| 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | In Progress |
+| 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | Complete |
 | 12 | CLI and developer experience | docs/plans/12-cli-and-developer-experience.md | EP-7, EP-8, EP-10 | EP-11 | 9 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -351,7 +351,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
   (new `shikumi-compile` package; `CompiledProgram` owned; 13 hermetic tests)
 - [x] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
   (new `shikumi-optimize` package; 9 hermetic tests; held-out score 0.0→1.0 for 3 strategies)
-- [ ] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
+- [x] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
+  (new `shikumi-tools` package; 13 hermetic tests; added the `Embed` program constructor to core)
 - [ ] EP-12: `shikumi` CLI: `eval`, `trace`, `optimize`, `replay`
 
 
@@ -633,6 +634,35 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   proposer's field summary is static (EP-4 exposes no per-node signature accessor). Per-node
   bootstrap recovery and a richer proposer are future work, gated on EP-4/EP-7 exposing a
   node-correlated trace and a per-node signature accessor. Neither blocks EP-12.
+- **EP-11 delivered (2026-06-09).** Typed tools + ReAct agents landed in the new
+  `shikumi-tools` package (`Shikumi.Tool`, `Shikumi.Agent.ReAct`); `cabal test
+  shikumi-tools-test` is green (13 hermetic tests) and `cabal test all` is green across every
+  package. Cross-plan facts for **EP-12** (CLI, which soft-depends on EP-11):
+  (a) **Integration point #4 was extended in core, not bypassed.** EP-4 shipped no embed/lift
+  constructor, so EP-11 added `Embed :: (forall es. (LLM :> es, Error ShikumiError :> es) => i
+  -> Eff es o) -> Program i o` to `Shikumi.Program`, wired through `runProgram`/
+  `runProgramConc`/`paramsTraversal`/`mapParamsAt`/`programShape` (new `ShapeEmbed`)/
+  `setProgramParams`, plus an `embed` smart constructor. It is constrained to **exactly
+  `runProgram`'s row**, so `runProgram :: (LLM, Error ShikumiError) :> es => …` is unchanged
+  and agents run under the ordinary runner — a `react`/`reactWithTrajectory` value is a real,
+  composable, inspectable `Program`. An `Embed` node carries no `Params` (opaque closure, like
+  `FMap`), so the "parameter count = `Predict`-node count" invariant holds and the CoT/RAG
+  compilers pass it through unchanged. Every existing sibling suite still passes.
+  (b) **Integration point #8 is owned and concrete.** `Shikumi.Tool` defines `Tool i o`,
+  `mkTool`, `toolSchemaOf`, `lowerTool` (the sole typed→`Baikai.Tool` lowering, putting EP-3's
+  derived schema into `parameters`), the `SomeTool` existential + `ToolRegistry`
+  (`mkRegistry`/`registryLookup`/`registryBaikai`/`registryNames`/`registryTools`), the typed
+  `ToolError` (`ToolNotFound`/`ToolArgsInvalid`/`ToolRunFailed`) + `renderToolError`, and the
+  total `runToolCall`/`runErased`. EP-12 builds agent demos from these + `react`/
+  `reactWithTrajectory` and must not redefine them.
+  (c) **Two deviations (Decision Log of EP-11; neither changes the public agent surface):**
+  tool bodies are effect-honest `(LLM, Error ShikumiError)` rather than raw `IO` (so
+  `mkToolIO` is not shipped — keeping integration point #4's narrow row), and the loop rebuilds
+  request context from the serialized `Trajectory` each turn rather than using baikai's
+  `IO`-based `appendToolResult`. The native-vs-prompt seam (`ToolProtocol`/`resolveProtocol`)
+  works; `ProtocolAuto` resolves via `capabilityFor`, and the neutral `_Model` exercises the
+  prompt path (EP-4's unwired-routing limitation). Native extract calls `attachSchema` (a no-op
+  until the local baikai gains EP-2's `responseFormat`).
 
 
 ## Decision Log
