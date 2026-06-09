@@ -83,8 +83,15 @@ This section must always reflect the actual current state of the work.
       since `tracedLLM` needs `toJSON resp`. **Done (2026-06-08).** `cabal test shikumi-trace
       --test-options='-p tree'` green: one root, two module children, one LM-call leaf each, and
       `renderTree` shows the model lines indented under their modules.
-- [ ] M2: serialize/deserialize the `TraceTree` to a stable on-disk JSON format keyed by the
-      EP-6 content-addressed cache key; round-trip property test.
+- [x] M2: `Shikumi.Trace.Store` delivered — `TraceFile { formatVersion, tree }` (versioned,
+      single JSON document), atomic `writeTraceFile` (write `.tmp` + rename), `readTraceFile`
+      (`Left` on parse error / foreign `formatVersion`), and `replayIndex :: TraceTree -> Map
+      CacheKey Value` (each LM-call span's `cacheKey` → recorded `response`). **Done
+      (2026-06-08).** `cabal test shikumi-trace --test-options='-p store'` green (5 tests): a
+      100-case JSON round-trip property over random trees, an on-disk round-trip, a
+      foreign-version `Left`, the `replayIndex` projection, and **the cache-key golden — which
+      reproduces EP-6's pinned digest `30b2…8113` byte-for-byte, fixing integration point #7 by
+      reuse** (the key is imported from `shikumi-cache`, not copied).
 - [ ] M3: deterministic replay interpreter for the `LLM` effect that resolves calls from a
       stored trace and reports divergences; offline end-to-end acceptance.
 - [ ] M4: `shikumi-trace-otel` package emitting one nested OTel span per tree node with

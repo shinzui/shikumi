@@ -2,28 +2,49 @@
 -- @spike@ (M0), @tree@ (M1), @store@ (M2), @replay@ (M3), @e2e@ (M5).
 module Main (main) where
 
+import Baikai (Context, Model, Options, user, _Context, _Model, _Options)
+import Control.Lens ((&), (.~))
+import Data.Aeson (Value (Object), decode, encode, object, (.=))
+import Data.ByteString.Lazy qualified as BL
+import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Time.Clock (UTCTime, addUTCTime)
+import Data.Vector qualified as V
 import Effectful (runEff)
+import Shikumi.Cache.Key (CacheKey (..))
+import Shikumi.Cache.Key qualified as Key
 import Shikumi.LLM (complete)
 import Shikumi.Trace
   ( Span (..),
-    SpanId,
+    SpanAttrs (..),
+    SpanId (..),
     SpanKind (..),
     TraceTree (..),
     childrenOf,
+    emptyAttrs,
     renderTree,
     runTrace,
     tracedLLM,
     withSpan,
   )
 import Shikumi.Trace.Internal.Spike qualified as Spike
+import Shikumi.Trace.Store
+  ( TraceFile (..),
+    currentFormatVersion,
+    readTraceFile,
+    replayIndex,
+    writeTraceFile,
+  )
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
+import Test.Tasty.QuickCheck (Gen, choose, elements, forAll, testProperty, vectorOf, (===))
 import TraceFixtures (ctxFor, mkResponse, optsFor, runFixedLLM, stubModel)
 
 main :: IO ()
-main = defaultMain $ testGroup "shikumi-trace" [spikeTests, treeTests]
+main = defaultMain $ testGroup "shikumi-trace" [spikeTests, treeTests, storeTests]
 
 -- ---------------------------------------------------------------------------
 -- M0
@@ -54,15 +75,12 @@ treeTests =
     "tree"
     [ testCase "nested withSpans build a program -> module -> llm-call tree" $ do
         tree <- buildTree
-        -- (a) exactly one root
         let roots = [s | s <- Map.elems (spans tree), parent s == Nothing]
         length roots @?= 1
         kind (spanAt tree (root tree)) @?= ProgramSpan
-        -- (b) the root has two module children
         let kids = childrenOf tree (root tree)
         length kids @?= 2
         map (kind . spanAt tree) kids @?= [ModuleSpan, ModuleSpan]
-        -- (c) each module child has exactly one llm-call child
         let grandkids = concatMap (childrenOf tree) kids
         length grandkids @?= 2
         map (kind . spanAt tree) grandkids @?= [LlmCallSpan, LlmCallSpan],
@@ -73,6 +91,68 @@ treeTests =
         assertBool "llm-call lines are indented under modules" (T.isInfixOf "    llm-call  stub/stub-model" out)
         assertBool "module lines present" (T.count "module" out == 2)
     ]
+
+-- ---------------------------------------------------------------------------
+-- M2
+-- ---------------------------------------------------------------------------
+
+-- | M2: the trace tree serializes to a stable, versioned JSON document and reads
+-- back; the replay index projects LM-call cacheKeys to responses; and the cache
+-- key reproduces EP-6's pinned digest (integration point #7).
+storeTests :: TestTree
+storeTests =
+  testGroup
+    "store"
+    [ testProperty "trace tree survives a JSON round-trip" $
+        forAll genTree $ \t ->
+          decode (encode (TraceFile currentFormatVersion t)) === Just (TraceFile currentFormatVersion t),
+      testCase "writeTraceFile/readTraceFile round-trips on disk" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          tree <- buildTree
+          let p = dir <> "/trace.json"
+          writeTraceFile p tree
+          res <- readTraceFile p
+          res @?= Right tree,
+      testCase "reading a file with a foreign formatVersion is Left" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          tree <- buildTree
+          let p = dir <> "/bad.json"
+          BL.writeFile p (encode (TraceFile 999 tree))
+          res <- readTraceFile p
+          case res of
+            Left msg -> assertBool "the error names the offending version" (T.isInfixOf "999" msg)
+            Right _ -> assertFailure "expected Left on a foreign formatVersion",
+      testCase "replayIndex maps each llm-call cacheKey to its response" $ do
+        tree <- buildTree
+        let idx = replayIndex tree
+        -- two LM-call leaves with distinct requests => two distinct keys.
+        Map.size idx @?= 2
+        assertBool "every indexed value is a JSON object (a recorded response)" (all isObject (Map.elems idx)),
+      testCase "cacheKey reproduces EP-6's pinned digest (integration point #7)" $ do
+        let CacheKey hex = Key.cacheKey fixModel fixCtx fixOpts
+        hex @?= pinnedKey
+    ]
+
+-- | The EP-6 golden fixture and its pinned digest, copied here so the two plans
+-- are proven byte-for-byte identical.
+fixModel :: Model
+fixModel = _Model & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
+
+fixCtx :: Context
+fixCtx =
+  _Context
+    & #systemPrompt .~ Just "You are helpful."
+    & #messages .~ V.singleton (user "ping")
+
+fixOpts :: Options
+fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
+
+pinnedKey :: Text
+pinnedKey = "30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113"
+
+-- ---------------------------------------------------------------------------
+-- Shared helpers
+-- ---------------------------------------------------------------------------
 
 -- | Run a two-stage traced computation: a program span containing two module
 -- spans, each issuing one stubbed LM call (captured automatically by 'tracedLLM').
@@ -89,3 +169,77 @@ buildTree = do
 
 spanAt :: TraceTree -> SpanId -> Span
 spanAt tree sid = spans tree Map.! sid
+
+isObject :: Value -> Bool
+isObject v = case v of
+  Object {} -> True
+  _ -> False
+
+-- ---------------------------------------------------------------------------
+-- A small generator of random trees for the round-trip property
+-- ---------------------------------------------------------------------------
+
+baseTime :: UTCTime
+baseTime = read "2026-06-08 00:00:00 UTC"
+
+-- | A bare shape: a node kind and its children shapes.
+data Shape = Shape SpanKind [Shape]
+
+genShape :: Int -> Gen Shape
+genShape d = do
+  k <- elements [ProgramSpan, ModuleSpan, CombinatorSpan, LlmCallSpan]
+  kids <-
+    if d <= 0
+      then pure []
+      else do
+        n <- choose (0, 3)
+        vectorOf n (genShape (d - 1))
+  pure (Shape k kids)
+
+-- | Generate a random (single-rooted) tree of up to depth 3, with sequential span
+-- ids, integer-second timestamps (exact JSON round-trip), and LM-call leaves
+-- carrying a cacheKey + response so the serialized form exercises every field.
+genTree :: Gen TraceTree
+genTree = do
+  shape <- genShape 3
+  let (ss, _) = flattenShape Nothing 0 shape
+      m = Map.fromList [(spanId s, s) | s <- ss]
+      rootId = spanId (firstSpan ss)
+  pure (TraceTree rootId m)
+  where
+    firstSpan (s : _) = s
+    firstSpan [] = error "genTree: empty"
+
+-- | Flatten a shape into spans, assigning ids/parents/times from a running
+-- counter. Returns the produced spans (root first) and the next free counter.
+flattenShape :: Maybe SpanId -> Int -> Shape -> ([Span], Int)
+flattenShape par n (Shape k kids) =
+  let sid = SpanId ("span-" <> T.pack (show n))
+      s =
+        Span
+          { spanId = sid,
+            parent = par,
+            kind = k,
+            label = "lbl-" <> T.pack (show n),
+            startedAt = addUTCTime (fromIntegral (2 * n)) baseTime,
+            endedAt = Just (addUTCTime (fromIntegral (2 * n + 1)) baseTime),
+            attrs = attrsFor k n
+          }
+      (kidSpans, n') = foldl step ([], n + 1) kids
+      step (acc, cnt) kidShape =
+        let (ks, cnt') = flattenShape (Just sid) cnt kidShape
+         in (acc ++ ks, cnt')
+   in (s : kidSpans, n')
+
+-- | LM-call leaves carry a key + response (exercising replayIndex and the Value
+-- fields); structural nodes are empty.
+attrsFor :: SpanKind -> Int -> SpanAttrs
+attrsFor LlmCallSpan n =
+  emptyAttrs
+    { model = Just "m",
+      cacheKey = Just ("key-" <> T.pack (show n)),
+      response = Just (object ["text" .= ("resp-" <> T.pack (show n))]),
+      inputTokens = Just (fromIntegral n),
+      costUsd = Just (read "0.001")
+    }
+attrsFor _ _ = emptyAttrs

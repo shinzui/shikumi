@@ -40,12 +40,15 @@ library
     Shikumi.Trace
     Shikumi.Trace.Internal.Spike
     Shikumi.Trace.ResponseJSON
+    Shikumi.Trace.Store
 
   build-depends:
     , aeson
     , baikai
     , base           >=4.20 && <5
+    , bytestring
     , containers
+    , directory
     , effectful
     , generic-lens
     , lens           ^>=5.3
@@ -64,15 +67,22 @@ test-suite shikumi-trace-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:  TraceFixtures
   build-depends:
+    , aeson
     , baikai
     , base
+    , bytestring
     , containers
     , effectful
     , generic-lens
-    , lens           ^>=5.3
+    , lens              ^>=5.3
+    , QuickCheck
     , shikumi
+    , shikumi-cache
     , shikumi-trace
     , tasty
     , tasty-hunit
-    , text           ^>=2.1
+    , tasty-quickcheck
+    , temporary
+    , text              ^>=2.1
+    , time
     , vector
