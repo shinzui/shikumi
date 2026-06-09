@@ -174,7 +174,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 1  | Shikumi runtime substrate and LLM effect over baikai | docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md | None | None | 5 | Complete |
 | 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Not Started |
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
-| 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | In Progress |
+| 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Not Started |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | Not Started |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Not Started |
@@ -337,8 +337,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [ ] EP-2: Anthropic and OpenAI provider mappings emit/parse native structured output
 - [x] EP-3: Generic-derived JSON schema + decode from record types
 - [x] EP-3: `Signature` + field metadata + the `Adapter` seam (native + fallback)
-- [ ] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
-- [ ] EP-4: `predict` and `chainOfThought`
+- [x] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
+- [x] EP-4: `predict` and `chainOfThought`
 - [ ] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
 - [ ] EP-6: Cache effect with memory + SQLite backends
 - [ ] EP-6: Postgres + Redis backends
@@ -426,6 +426,34 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   a `MonadIO m` baikai at `m = Eff es` would force exactly that `IOE :> es` onto consumers —
   which is why the dynamic `Baikai` effect (with `IOE` confined to the bottom interpreter), not
   monad parameterization, is the design that keeps consumer signatures honest.
+- **EP-4 delivered (2026-06-08).** The keystone landed: `Shikumi.Program` (the `Program i o`
+  GADT — `Predict`/`Compose`/`FMap` — `Params`/`Demo`, `pipeline`, `runProgram`, the
+  `paramsTraversal`/`foldParams`/`mapParams`/`mapParamsAt` parameter interface, and
+  `ProgramShape`/`programParams`/`setProgramParams` serialization) and `Shikumi.Module`
+  (`predict`, `chainOfThought`/`chainOfThoughtRaw`, `WithReasoning`). The three-constructor
+  GADT from the M0 spike promoted **without change**; `cabal test shikumi` is green (54 tests),
+  including the ordering law as a 100-case QuickCheck property and the two headline behaviors
+  (typed pipeline runs end-to-end; an instruction rewrite reaches the captured wire prompt).
+  Cross-plan facts that fix **integration point #4** for EP-5/8/9/10/11/12:
+  (a) `runProgram :: (LLM :> es, Error ShikumiError :> es) => Program i o -> i -> Eff es o` —
+  one capability beyond the originally-pinned `(LLM :> es)`, because decode failures throw
+  typed `ShikumiError`s and EP-1 already threads `Error ShikumiError` wherever `LLM` runs;
+  every consumer that calls `runProgram` inherits it.
+  (b) The parameter/serialization contract the optimizer (EP-10) and compiler (EP-9) depend on
+  is exactly `foldParams` (enumerate, left-to-right depth-first) + `mapParamsAt`/`mapParams`
+  (edit) + `programParams`/`setProgramParams` (save/load); a program's parameter count equals
+  its `Predict`-node count; `Params` is the uniform JSON overlay (`instructionOverride` +
+  `demos`), and demos reach the wire by being decoded into the signature's typed demo channel,
+  so a saved demo must be JSON that decodes to the node's `i`/`o`.
+  (c) `Program i o` has **no `Eq`/`Show`** (it carries the `FMap` closure) — compare programs
+  via `foldParams`/`programShape`/run result.
+  (d) New GADT constructors are a compile error until `paramsTraversal`, `programShape`, and
+  `setProgramParams` all pattern-match them — EP-5 should prefer *derived functions* over new
+  constructors (the `chainOfThought`-via-`FMap` pattern).
+  (e) **Real provider/model routing is unwired**: `runProgram` dispatches every node against
+  the neutral `_Model` (→ prompt-fallback adapter, the MasterPlan's "exercised path" until
+  EP-2). EP-8 (eval) and EP-12 (CLI) — or a future `Reader Model` effect — must supply real
+  model selection before running against a live provider. See EP-4's Decision Log / Outcomes.
 
 
 ## Decision Log

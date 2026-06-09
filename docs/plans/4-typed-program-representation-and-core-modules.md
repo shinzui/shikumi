@@ -266,11 +266,53 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation. At completion, state: did the GADT support
-run + rewrite + serialize as designed; did any constructor need to change after M0; how the
-parameter ordering law held up under tests; what `docs/plans/5-module-combinators-and-control-flow.md`,
-`docs/plans/9-compiler-layer.md`, and `docs/plans/10-optimizer-framework.md` should know
-before they build on this.)
+**Delivered 2026-06-08.** The keystone is in place and matches the original purpose: a
+`Program i o` value can be **run** (`runProgram` over the `LLM` + `Error ShikumiError`
+effects, returning a typed `o`), **rewritten as data** (`paramsTraversal`/`foldParams`/
+`mapParams`/`mapParamsAt`, with the ordering law proved as a property), and **serialized**
+(`programShape` + `programParams`/`setProgramParams`, JSON round-trip). The three-constructor
+GADT promoted from M0 **without change** — no constructor needed revising. The full suite is
+54 tests green via `cabal test shikumi`.
+
+**Did it support run + rewrite + serialize as designed?** Yes. The existential `Compose`
+traversal type-checked exactly as the M0 spike predicted; `foldParams`/`mapParams` fall out of
+the traversal via `Const`/`Identity` (no `lens` needed in the implementation, though
+`paramsTraversal` is a lawful `Traversal'` for `lens` users). The ordering law held under 100
+QuickCheck cases.
+
+**What changed from the pinned plan (consumers must know):**
+
+- `runProgram :: (LLM :> es, Error ShikumiError :> es) => Program i o -> i -> Eff es o` — one
+  capability beyond the pinned `(LLM :> es)`, because decode failures throw typed errors and
+  EP-1 already threads `Error ShikumiError` wherever `LLM` runs. `docs/plans/5/8/9/10/11/12`
+  inherit this constraint when they call `runProgram`.
+- There is **no** EP-3 `runSignature`/`signatureName`/`withReasoningField`. A `Predict` node
+  runs as `render → LLM.complete → parse` (EP-3's `Adapter`); `programShape` labels a
+  `Predict` by its joined output-field names; `withReasoningField` is local to
+  `Shikumi.Module`.
+- The `Predict` constructor **captures `(FromModel i, FromModel o, ToSchema o, Validatable o,
+  ToPrompt i, ToPrompt o)` existentially**. `docs/plans/5` combinators that build `Predict`
+  nodes (or pattern-match them) get these dictionaries back on a match; combinators that only
+  wrap `Program` values need none of them.
+- The per-node model is the neutral `_Model` → prompt-fallback adapter. **Real provider/model
+  selection is unwired** (deferred to `docs/plans/8` eval and `docs/plans/12` CLI, or a future
+  `Reader Model` effect). Anyone running a program against a real provider must add that
+  routing; today only the stub path is exercised.
+- `Program i o` has **no `Eq`/`Show`** (it holds the `FMap` closure). Tests compare via
+  `foldParams`/`programShape`/the run result, not the program value. Downstream test authors
+  should do the same.
+
+**For `docs/plans/5` (combinators):** add your constructors as *derived functions* over
+`Program` (the `chainOfThought`-via-`FMap` pattern), not as new GADT constructors, unless a
+combinator genuinely needs to be inspected as data by the optimizer — in which case extend the
+GADT *and* extend `paramsTraversal`/`programShape`/`setProgramParams`'s `go` to recurse through
+it (they pattern-match every constructor by name, so a new constructor is a compile error until
+all three are updated — a useful forcing function). **For `docs/plans/9`/`docs/plans/10`:** the
+optimizer/compiler contract is `foldParams` (enumerate) + `mapParamsAt`/`mapParams` (edit) +
+`programParams`/`setProgramParams` (save/load); a node's count equals its `Predict` count;
+`Params` is the uniform JSON overlay (instruction override + demos), and the effective demos
+reach the wire by being decoded into the signature's typed demo channel — so a saved demo must
+be JSON that decodes to the node's `i`/`o`.
 
 
 ## Context and Orientation
