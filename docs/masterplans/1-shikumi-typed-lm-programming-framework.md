@@ -177,7 +177,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
-| 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | In Progress |
+| 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Complete |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Not Started |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Not Started |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Not Started |
@@ -342,8 +342,9 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
 - [ ] EP-6: Cache effect with memory + SQLite backends
 - [ ] EP-6: Postgres + Redis backends
-- [ ] EP-7: Hierarchical trace tree over baikai `TraceSink` + OTel spans
-- [ ] EP-7: Deterministic replay from stored traces
+- [x] EP-7: Hierarchical trace tree (over the `LLM` effect via `interpose`, not baikai's
+  `TraceSink`) + nested OTel spans (`shikumi-trace-otel`)
+- [x] EP-7: Deterministic replay from stored traces
 - [ ] EP-8: `Dataset`/`Metric`/`evaluate`/`Report` + built-in metrics + golden tests
 - [ ] EP-9: Zero-shot, few-shot, chain-of-thought, and retrieval-augmented compilers
 - [ ] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
@@ -466,6 +467,31 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   `Rational`→`Scientific`) plus heavy deps/live servers. None blocks EP-7. EP-6 remains **In
   Progress** until they land. The second EP-6 progress line ("Postgres + Redis backends") and the
   SQLite half of the first remain open.
+- **EP-7 delivered (2026-06-08).** The hierarchical-tracing + replay layer landed across two
+  new packages, `shikumi-trace` (hermetic, 11 tests) and `shikumi-trace-otel` (1 test), both
+  green with no network. Cross-plan facts:
+  (a) **Capture is by `interpose` on the `LLM` effect, not a baikai `TraceSink`.** EP-1's
+  interpreters expose no sink seam, and `LLM.complete` returns the full `Response` (latency,
+  usage, cost, tool blocks — a superset of baikai's flat `TraceEvent`). So `Shikumi.Trace`
+  owns the parent/child hierarchy via a span-id stack and `tracedLLM` (the same seam EP-6's
+  `cachedLLM` uses) fills each LM-call leaf from the `Response`. Consequence: the core trace
+  package depends on **neither `streamly-core` nor `Baikai.Trace.*`**. Integration point #7 is
+  honoured by **importing `Shikumi.Cache.Key` from `shikumi-cache`** (EP-6 landed), not the
+  planned verbatim copy — the golden test reproduces EP-6's pinned digest `30b2…8113`, so the
+  two plans cannot drift.
+  (b) **EP-7 built the faithful `Response` JSON round-trip that EP-6 deferred.** Replay must
+  serialize/deserialize a `Response`, but baikai ships no `FromJSON` for the
+  `Response`/`AssistantPayload`/`Usage`/`Cost` graph (and `Cost` is lossy `Rational→Scientific`).
+  `Shikumi.Trace.ResponseJSON` supplies orphan `FromJSON` for `Usage`/`Cost`/`CostBreakdown`/
+  `AssistantPayload` + `ToJSON`/`FromJSON Response`, reusing baikai's existing
+  `Model`/`Api`/`AssistantContent`/`StopReason` instances. **EP-6's deferred SQLite/Redis/Postgres
+  backends can reuse these instances** — the `Response`-round-trip blocker that drove their
+  deferral is now solved. The replay typed-output guarantee rests only on `AssistantContent`
+  (which round-trips exactly), so `Cost`'s imprecision is harmless.
+  (c) **`runLLMReplay` is fail-closed and registry-free**: an unrecorded request raises
+  `ReplayDivergence` (it never falls through to a provider), so "zero provider calls" is
+  structural, not policy. It needs no `IOE`. The OTel adapter (`exportTree`) produces *nested*
+  spans (unlike baikai's flat one-span-per-call) via `Context.insertSpan`.
 - **EP-5 delivered (2026-06-08).** The combinator/control-flow layer landed:
   `Shikumi.Program` gained seven GADT constructors (`Map Int`, `Parallel`, `Retry`,
   `RetryWhen`, `Validate`, `MajorityVote`, `Ensemble`) wired through `runProgram`,
