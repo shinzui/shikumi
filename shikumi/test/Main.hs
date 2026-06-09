@@ -6,6 +6,7 @@ import ErrorSpec qualified
 import LLMSpec qualified
 import LiveSpec qualified
 import ResilienceSpec qualified
+import SchemaSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -14,6 +15,7 @@ main =
     testGroup
       "shikumi"
       [ ErrorSpec.tests,
+        SchemaSpec.tests,
         LLMSpec.tests,
         ResilienceSpec.tests,
         LiveSpec.tests

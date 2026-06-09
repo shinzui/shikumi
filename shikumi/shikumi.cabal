@@ -34,6 +34,8 @@ library
     Shikumi.LLM
     Shikumi.LLM.Budget
     Shikumi.Prelude
+    Shikumi.Schema
+    Shikumi.Schema.Types
 
   build-depends:
     , aeson
@@ -42,10 +44,12 @@ library
     , baikai-effectful
     , baikai-openai
     , base              >=4.20 && <5
+    , bytestring
     , containers
     , effectful
     , generic-lens
     , lens              ^>=5.3
+    , scientific
     , stm
     , text              ^>=2.1
     , vector
@@ -58,9 +62,11 @@ test-suite shikumi-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     ErrorSpec
+    Fixtures
     LiveSpec
     LLMSpec
     ResilienceSpec
+    SchemaSpec
     StubProvider
 
   build-depends:
