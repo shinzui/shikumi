@@ -92,8 +92,15 @@ This section must always reflect the actual current state of the work.
       foreign-version `Left`, the `replayIndex` projection, and **the cache-key golden — which
       reproduces EP-6's pinned digest `30b2…8113` byte-for-byte, fixing integration point #7 by
       reuse** (the key is imported from `shikumi-cache`, not copied).
-- [ ] M3: deterministic replay interpreter for the `LLM` effect that resolves calls from a
-      stored trace and reports divergences; offline end-to-end acceptance.
+- [x] M3: `Shikumi.Trace.Replay` delivered — `ReplayDivergence` (typed, `Exception`) and
+      `runLLMReplay :: Map CacheKey Value -> Eff (LLM : es) a -> Eff es a`, an alternative
+      interpreter of EP-1's `LLM` effect that answers each `complete` from the replay index by
+      EP-6 cache key, decoding the recorded `Response` via `ResponseJSON`; a miss raises
+      `ReplayDivergence` (fail-closed, names the key + model + redacted summary). **Done
+      (2026-06-08).** `cabal test shikumi-trace --test-options='-p replay'` green: a two-stage
+      *dependent* pipeline captured live, persisted, reloaded, and replayed offline yields
+      byte-identical outputs with the provider counter at **0**; a mutated request raises
+      `ReplayDivergence`.
 - [ ] M4: `shikumi-trace-otel` package emitting one nested OTel span per tree node with
       GenAI semantic-convention attributes; in-memory-exporter test asserting parent/child
       nesting.
@@ -211,6 +218,14 @@ Record every decision made while working on the plan.
   verbatim. This is stronger than the plan's "ship a local reference copy until EP-6 lands"
   — there is exactly one implementation, so the two plans cannot drift. The M2 golden test
   still pins EP-6's digest as a regression guard.
+
+- Decision (impl, 2026-06-08): **`runLLMReplay` needs no `IOE`** — the plan sketched
+  `(IOE :> es) =>`, but the lookup and `fromJSON` decode are pure and `ReplayDivergence` is
+  raised with @effectful@'s pure-in-`Eff` `throwIO`, so the delivered signature is the
+  strictly weaker `Map CacheKey Value -> Eff (LLM : es) a -> Eff es a`. The "zero provider
+  calls" guarantee is therefore *structural* (there is no registry in this interpreter at
+  all), not merely policy — the M3 test still asserts a provider counter stays at 0 as a
+  regression guard.
 
 - Decision (impl, 2026-06-08): **EP-7 owns the faithful `Response` JSON round-trip** in
   `Shikumi.Trace.ResponseJSON` (orphan instances). baikai ships no `FromJSON` for the

@@ -9,8 +9,10 @@ module TraceFixtures
     optsFor,
     mkResponse,
     responseText,
+    lastUserText,
     runFixedLLM,
     runKeyedLLM,
+    runKeyedCountingLLM,
   )
 where
 
@@ -18,10 +20,12 @@ import Baikai
   ( Api (Custom),
     AssistantContent (..),
     Context,
+    Message (UserMessage),
     Model,
     Options,
     Response,
     TextContent (..),
+    UserContent (UserText),
     user,
     _Context,
     _Model,
@@ -31,9 +35,10 @@ import Baikai
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
+import Data.IORef (IORef, atomicModifyIORef')
 import Data.Text (Text)
 import Data.Vector qualified as V
-import Effectful (Eff)
+import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.LLM (LLM (..))
 
@@ -69,6 +74,15 @@ responseText :: Response -> Text
 responseText resp =
   mconcat [t | AssistantText (TextContent t) <- V.toList (resp ^. #message . #content)]
 
+-- | Concatenate the text of every user message in a request context.
+lastUserText :: Context -> Text
+lastUserText c =
+  mconcat
+    [ t
+    | UserMessage up <- V.toList (c ^. #messages),
+      UserText (TextContent t) <- V.toList (up ^. #content)
+    ]
+
 -- | A base @LLM@ interpreter that returns the same response for every completion.
 runFixedLLM :: Response -> Eff (LLM : es) a -> Eff es a
 runFixedLLM resp = interpret $ \_ -> \case
@@ -79,4 +93,11 @@ runFixedLLM resp = interpret $ \_ -> \case
 runKeyedLLM :: (Context -> Response) -> Eff (LLM : es) a -> Eff es a
 runKeyedLLM f = interpret $ \_ -> \case
   Complete _ c _ -> pure (f c)
+  Stream {} -> pure []
+
+-- | Like 'runKeyedLLM' but bumps a counter on every completion (used to assert how
+-- many provider calls a live run made — and that a replay run makes zero).
+runKeyedCountingLLM :: (IOE :> es) => IORef Int -> (Context -> Response) -> Eff (LLM : es) a -> Eff es a
+runKeyedCountingLLM ref f = interpret $ \_ -> \case
+  Complete _ c _ -> liftIO (atomicModifyIORef' ref (\n -> (n + 1, ()))) >> pure (f c)
   Stream {} -> pure []

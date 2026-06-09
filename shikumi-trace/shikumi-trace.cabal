@@ -39,6 +39,7 @@ library
   exposed-modules:
     Shikumi.Trace
     Shikumi.Trace.Internal.Spike
+    Shikumi.Trace.Replay
     Shikumi.Trace.ResponseJSON
     Shikumi.Trace.Store
 

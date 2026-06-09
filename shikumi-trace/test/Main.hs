@@ -2,20 +2,22 @@
 -- @spike@ (M0), @tree@ (M1), @store@ (M2), @replay@ (M3), @e2e@ (M5).
 module Main (main) where
 
-import Baikai (Context, Model, Options, user, _Context, _Model, _Options)
+import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options)
+import Control.Exception (try)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Object), decode, encode, object, (.=))
 import Data.ByteString.Lazy qualified as BL
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime, addUTCTime)
 import Data.Vector qualified as V
-import Effectful (runEff)
+import Effectful (Eff, runEff, type (:>))
 import Shikumi.Cache.Key (CacheKey (..))
 import Shikumi.Cache.Key qualified as Key
-import Shikumi.LLM (complete)
+import Shikumi.LLM (LLM, complete)
 import Shikumi.Trace
   ( Span (..),
     SpanAttrs (..),
@@ -30,6 +32,7 @@ import Shikumi.Trace
     withSpan,
   )
 import Shikumi.Trace.Internal.Spike qualified as Spike
+import Shikumi.Trace.Replay (ReplayDivergence (..), runLLMReplay)
 import Shikumi.Trace.Store
   ( TraceFile (..),
     currentFormatVersion,
@@ -41,10 +44,19 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 import Test.Tasty.QuickCheck (Gen, choose, elements, forAll, testProperty, vectorOf, (===))
-import TraceFixtures (ctxFor, mkResponse, optsFor, runFixedLLM, stubModel)
+import TraceFixtures
+  ( ctxFor,
+    lastUserText,
+    mkResponse,
+    optsFor,
+    responseText,
+    runFixedLLM,
+    runKeyedCountingLLM,
+    stubModel,
+  )
 
 main :: IO ()
-main = defaultMain $ testGroup "shikumi-trace" [spikeTests, treeTests, storeTests]
+main = defaultMain $ testGroup "shikumi-trace" [spikeTests, treeTests, storeTests, replayTests]
 
 -- ---------------------------------------------------------------------------
 -- M0
@@ -132,6 +144,75 @@ storeTests =
         let CacheKey hex = Key.cacheKey fixModel fixCtx fixOpts
         hex @?= pinnedKey
     ]
+
+-- ---------------------------------------------------------------------------
+-- M3
+-- ---------------------------------------------------------------------------
+
+-- | M3: a two-stage pipeline captured live, persisted, and replayed offline
+-- produces byte-identical outputs while making zero provider calls; a mutated
+-- request raises a 'ReplayDivergence' naming the missing key.
+replayTests :: TestTree
+replayTests =
+  testGroup
+    "replay"
+    [ testCase "replay reproduces the live outputs with zero provider calls" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          calls <- newIORef (0 :: Int)
+          -- (1) live: run the pipeline, count provider calls, capture the tree.
+          (live, tree) <-
+            runEff . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
+              twoStage "the article"
+          liveCalls <- readIORef calls
+          liveCalls @?= 2
+          -- (2)+(3) persist and reload, build the replay index.
+          let p = dir <> "/trace.json"
+          writeTraceFile p tree
+          Right tree' <- readTraceFile p
+          let idx = replayIndex tree'
+          -- (4) replay the SAME pipeline; the counting provider must not be hit.
+          writeIORef calls 0
+          replayed <- runEff . runLLMReplay idx $ twoStage "the article"
+          replayCalls <- readIORef calls
+          -- (5)+(6)+(7) identical outputs, zero provider calls.
+          replayed @?= live
+          replayCalls @?= 0,
+      testCase "a request absent from the trace raises ReplayDivergence" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          calls <- newIORef (0 :: Int)
+          (_, tree) <-
+            runEff . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
+              twoStage "the article"
+          let p = dir <> "/trace.json"
+          writeTraceFile p tree
+          Right tree' <- readTraceFile p
+          let idx = replayIndex tree'
+          -- A different article => a first-stage key that was never recorded.
+          res <- try (runEff . runLLMReplay idx $ twoStage "a different article")
+          case res of
+            Left (ReplayDivergence {divergedKey = CacheKey k}) ->
+              assertBool "the divergence names a non-empty key" (not (T.null k))
+            Right _ -> assertFailure "expected a ReplayDivergence on an unrecorded request"
+    ]
+
+-- | A dependent two-stage pipeline: draft a summary of the article, then critique
+-- the draft. The second stage's request depends on the first stage's output, so
+-- replay must reproduce stage one exactly to reach the same stage-two request.
+twoStage :: (LLM :> es) => Text -> Eff es (Text, Text)
+twoStage article = do
+  draft <- responseText <$> complete stubModel (ctxFor ("draft: " <> article)) optsFor
+  crit <- responseText <$> complete stubModel (ctxFor ("critique: " <> draft)) optsFor
+  pure (draft, crit)
+
+-- | The deterministic stub: a draft request yields a fixed summary; a critique
+-- request echoes the draft it was given. Deterministic per request, so replay is
+-- well-defined.
+responder :: Context -> Response
+responder c =
+  let t = lastUserText c
+   in if "draft:" `T.isPrefixOf` t
+        then mkResponse "a tight one-line summary"
+        else mkResponse ("looks good: " <> T.drop (T.length "critique: ") t)
 
 -- | The EP-6 golden fixture and its pinned digest, copied here so the two plans
 -- are proven byte-for-byte identical.
