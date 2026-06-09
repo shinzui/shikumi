@@ -21,10 +21,23 @@
 -- dev shell.
 packages:
   shikumi
+  shikumi-cache
   /Users/shinzui/Keikaku/bokuno/baikai/baikai
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-effectful
+
+-- blake3 (EP-6 cache key) vendors SIMD C/asm. Its non-x86 fallback for the SSE
+-- flags still compiles x86 intrinsics (mmintrin.h), which fails under clang on
+-- aarch64-darwin. Disable the SIMD flags so only the portable pure-C path
+-- (cbits/blake3_portable.c) is built. The portable hash is byte-identical to the
+-- SIMD path, so the content-addressed key (integration point #7) is unaffected.
+package blake3
+  flags: -avx512 -avx2 -sse41 -sse2
+  -- The package's cabal also never compiles blake3_neon.c nor disables NEON on
+  -- aarch64, so blake3_dispatch.c references an undefined blake3_hash_many_neon.
+  -- Define BLAKE3_USE_NEON=0 so dispatch uses the portable path on ARM.
+  ghc-options: -optc-DBLAKE3_USE_NEON=0
 
 test-show-details: direct
 tests: True
