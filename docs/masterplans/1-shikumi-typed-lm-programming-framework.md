@@ -180,7 +180,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Complete |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Complete |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Complete |
-| 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | In Progress |
+| 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Complete |
 | 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | Not Started |
 | 12 | CLI and developer experience | docs/plans/12-cli-and-developer-experience.md | EP-7, EP-8, EP-10 | EP-11 | 9 | Not Started |
 
@@ -349,7 +349,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
   (new `shikumi-eval` package; 36 hermetic tests)
 - [x] EP-9: Zero-shot, few-shot, chain-of-thought, and retrieval-augmented compilers
   (new `shikumi-compile` package; `CompiledProgram` owned; 13 hermetic tests)
-- [ ] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
+- [x] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
+  (new `shikumi-optimize` package; 9 hermetic tests; held-out score 0.0→1.0 for 3 strategies)
 - [ ] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
 - [ ] EP-12: `shikumi` CLI: `eval`, `trace`, `optimize`, `replay`
 
@@ -604,6 +605,34 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   `instructionOverride` (which wins at run time), so the intended order is CoT/RAG *before*
   `zeroShot`/`fewShot`. EP-10, when it composes strategies, should respect that order. See
   EP-9's Decision Log / Surprises.
+- **EP-10 delivered (2026-06-09).** The optimizer framework landed in the new
+  `shikumi-optimize` package; `cabal test shikumi-optimize` is green (9 hermetic tests) and
+  `cabal build all` is green. The four optimizers (`labeledFewShot`, `bootstrapFewShot`,
+  `instructionSearch`, `ensembleSearch`) + the `optimize` driver demonstrably improve a
+  deliberately-underspecified program's **held-out** score from 0.0 to 1.0 (three strategies),
+  fully offline. Cross-plan facts for **EP-12** (CLI, which hard-depends on EP-10):
+  (a) **Single public surface `Shikumi.Optimize`.** It re-exports `optimize :: (LLM,
+  Concurrent, Error ShikumiError, IOE) :> es => Optimizer i o -> Dataset i o -> Metric o ->
+  Program i o -> Eff es (CompiledProgram i o)`, the four optimizer smart constructors, the
+  `Optimizer`/`Budget`/`defaultBudget`/`Scored` types, and the shared plumbing
+  (`Shikumi.Optimize.Search`: `selectBest`/`scoreOn`/`freezeProgram`). EP-12's `optimize`
+  subcommand calls `optimize` and inherits exactly that effect row (same as EP-8's `evaluate`).
+  (b) **`Optimizer` is a record-of-functions** (`newtype Optimizer i o = Optimizer {
+  runOptimizer :: ... }`), so EP-12 can build one from CLI flags at runtime (e.g. choose
+  `bootstrapFewShot`/`labeledFewShot k`/`instructionSearch n budget`/`ensembleSearch n inner`).
+  Demo-building optimizers (`labeledFewShot`, `bootstrapFewShot`) require `(ToJSON i, ToJSON
+  o)`; `ensembleSearch` requires `Eq o`.
+  (c) **Output is EP-9's `CompiledProgram`** — EP-12 persists it with EP-9's
+  `encodeCompiled`/`decodeCompiledOnto` (parameter-state against a structural template) and runs
+  it with `runCompiled`. No new serialization surface.
+  (d) **Three adaptations to delivered siblings** (documented in EP-10's Decision Log; none
+  change the public surface): node addressing is by **integer index** (`foldParams` /
+  `mapParamsAt`), not the `NodePath` the plan sketched; `bootstrapFewShot` recovers demos at the
+  **program-I/O level** (the delivered EP-7 trace has no node↔program correlation and no
+  `runProgramTraced`), so EP-10 does **not** depend on `shikumi-trace`; and the instruction
+  proposer's field summary is static (EP-4 exposes no per-node signature accessor). Per-node
+  bootstrap recovery and a richer proposer are future work, gated on EP-4/EP-7 exposing a
+  node-correlated trace and a per-node signature accessor. Neither blocks EP-12.
 
 
 ## Decision Log

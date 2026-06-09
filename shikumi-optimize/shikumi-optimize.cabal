@@ -64,6 +64,7 @@ test-suite shikumi-optimize-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    AcceptanceSpec
     BootstrapSpec
     EnsembleSpec
     InstructionSpec

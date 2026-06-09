@@ -112,10 +112,13 @@ This section must always reflect the actual current state of the work.
       `majorityReducer` vote, fed deterministic bootstrap resamples; tests show the majority
       vote (1.0) strictly beats its best member (0.75) on a held-out set, and that
       `ensembleSearch n` produces an `n`-member `ShapeEnsemble`. **Done (2026-06-09).**
-- [ ] M5 (acceptance): end-to-end test optimizes a deliberately-underspecified program on a
-      tiny dataset and asserts the returned `CompiledProgram` scores **strictly higher** on a
-      held-out set than the input program; runs fully offline against the stub LM.
-- [ ] Living sections (Decision Log, Surprises, Outcomes) kept current at each milestone.
+- [x] M5 (acceptance): end-to-end test optimizes a deliberately-underspecified program on a
+      6-example dataset and asserts the returned `CompiledProgram` scores **strictly higher**
+      (1.0) on a disjoint 4-example held-out set than the input program (0.0), for **three**
+      strategies (bootstrap, labeled few-shot, instruction search); runs fully offline against
+      the stub LM. **Done (2026-06-09).** `cabal test shikumi-optimize` green (9 tests);
+      `cabal build all` green.
+- [x] Living sections (Decision Log, Surprises, Outcomes) kept current at each milestone.
 
 
 ## Surprises & Discoveries
@@ -242,7 +245,42 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** The `shikumi-optimize` package ships the four optimizers
+(`labeledFewShot`, `bootstrapFewShot`, `instructionSearch`, `ensembleSearch`), the `optimize`
+driver, the shared search plumbing (`Shikumi.Optimize.Search`: `selectBest`/`scoreOn`/
+`freezeProgram`), and the `Optimizer`/`Budget`/`Scored` types. `cabal test shikumi-optimize`
+is green (9 hermetic tests) and `cabal build all` is green. The headline promise holds: a
+deliberately-underspecified sentiment program scores **0.0** on a held-out set and **1.0**
+after optimization, demonstrated for three strategies — measurable, held-out, fully offline.
+
+**Met:** all six milestones. The `Optimizer` is a record-of-functions strategy object; search
+state is threaded as plain values through pure folds with scoring as the only effectful step
+(no `State`/`IORef`/global config); every LM-issuing optimizer enforces an explicit `Budget`;
+all results are `CompiledProgram`s reusing EP-9 verbatim.
+
+**Adaptations to the delivered substrate (none change the public optimizer surface):**
+- *Index addressing, not `NodePath`.* EP-4 ships an integer-index parameter interface
+  (`foldParams`/`mapParamsAt`/`mapParams`), not the `NodePath`/`nodeParams`/`nodeSignature`
+  surface the plan sketched. All node addressing is by `foldParams` index.
+- *Wider effect row.* `Optimizer`/`optimize`/`scoreOn` carry EP-8's
+  `(LLM, Concurrent, Error ShikumiError, IOE)` row (what `evaluate` requires), not `(LLM)`.
+- *Trace-free bootstrap.* The delivered EP-7 trace has no node↔program correlation and no
+  `runProgramTraced`, so `bootstrapFewShot` recovers demos at the program-I/O level
+  (teacher-run output) and attaches them to every node (DSPy's multi-module default). This
+  drops `shikumi-trace`/`runProgramTraced` from the plan's dependency list — the only
+  interface deviation. Per-internal-node recovery awaits a node-correlated trace.
+- *Static proposer `fieldSummary`* (EP-4 exposes no per-node signature accessor).
+
+**Gaps / future work:** per-internal-node bootstrap demo recovery (needs EP-4/EP-7 to expose a
+node-correlated trace); a CLI surface to build optimizers from flags (EP-12); richer
+instruction proposers once a per-node signature accessor exists. None blocks EP-12.
+
+**Lessons:** (1) the `Shikumi.Optimize` ⇄ optimizer-module import cycle is avoided by putting
+the shared plumbing in a leaf module (`Search`) both sides import. (2) Helpers that call
+effect-row operations must live in a `let`/lambda that shares the rank-2 `es` (a `where`-bound
+helper gets generalized and loses the constraints — bit M2/M3 once). (3) The deterministic
+nearest-demo stub makes scores a clean function of parameters, which is what lets every
+milestone assert a *meaningful* selection (best-of-tried, not merely "something changed").
 
 
 ## Context and Orientation

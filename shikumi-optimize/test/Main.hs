@@ -5,6 +5,7 @@
 -- API key.
 module Main (main) where
 
+import AcceptanceSpec qualified
 import BootstrapSpec qualified
 import EnsembleSpec qualified
 import InstructionSpec qualified
@@ -21,5 +22,6 @@ main =
         LabeledFewShotSpec.tests,
         BootstrapSpec.tests,
         InstructionSpec.tests,
-        EnsembleSpec.tests
+        EnsembleSpec.tests,
+        AcceptanceSpec.tests
       ]
