@@ -54,6 +54,7 @@ import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
@@ -112,13 +113,16 @@ runStub responder prog input =
 
 -- | Run an evaluation/optimization action offline against the stub LM. Provides
 -- exactly the effect row @evaluate@ / @optimize@ require
--- (@LLM@, @Concurrent@, @Error ShikumiError@, @IOE@).
+-- (@LLM@, @Concurrent@, @Error ShikumiError@, @Time@, @IOE@). @Time@ is shikumi's
+-- own clock effect ('Shikumi.Effect.Time'), discharged here by 'runTime' against
+-- the real system clock — fine for an offline stub run because only latency
+-- timing reads it.
 runStubEval ::
   (Context -> Response) ->
-  Eff '[LLM, Concurrent, Error ShikumiError, IOE] a ->
+  Eff '[LLM, Concurrent, Error ShikumiError, Time, IOE] a ->
   IO (Either ShikumiError a)
 runStubEval responder =
-  runEff . runErrorNoCallStack . runConcurrent . runStubLLM responder
+  runEff . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
 
 -- ---------------------------------------------------------------------------
 -- Running an agent against a scripted LM

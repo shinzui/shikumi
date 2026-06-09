@@ -22,6 +22,7 @@ import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Cache (cachedLLM)
 import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Jitsurei.Stub (markerResponse, runStubLLM)
 import Shikumi.LLM (LLM (..))
@@ -66,7 +67,7 @@ main = withSystemTempDirectory "shikumi-jitsurei" $ \dir -> do
           pure (responder c)
         Stream {} -> pure []
   cached <-
-    runEff . runCacheMemory cache . counting . cachedLLM . runErrorNoCallStack @ShikumiError $ do
+    runEff . runTime . runCacheMemory cache . counting . cachedLLM . runErrorNoCallStack @ShikumiError $ do
       a <- runProgram qa input
       b <- runProgram qa input
       pure (a, b)

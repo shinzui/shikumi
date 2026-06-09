@@ -34,6 +34,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
@@ -50,13 +51,14 @@ runStubLLM responder = interpret $ \_ -> \case
 
 -- | Run an evaluation/optimization action offline against the stub LM. Provides
 -- exactly the row @evaluate@/@optimize@ require (@LLM@, @Concurrent@,
--- @Error ShikumiError@, @IOE@).
+-- @Error ShikumiError@, @Time@, @IOE@). @Time@ is shikumi's own clock effect
+-- ('Shikumi.Effect.Time'), discharged by 'runTime' against the real system clock.
 runStubEval ::
   (Context -> Response) ->
-  Eff '[LLM, Concurrent, Error ShikumiError, IOE] a ->
+  Eff '[LLM, Concurrent, Error ShikumiError, Time, IOE] a ->
   IO (Either ShikumiError a)
 runStubEval responder =
-  runEff . runErrorNoCallStack . runConcurrent . runStubLLM responder
+  runEff . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
 
 -- | Run a single program against the stub LM (the reference "recorded run" used by
 -- @replay@'s identity check).

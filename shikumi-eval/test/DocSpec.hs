@@ -7,6 +7,7 @@ import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
 import EvalFixtures (Answer (..), Question (..), answerResponse, qaProg, runConstLLM)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (aggregateScore, dataset, evaluatePure, exactMatch, example)
 import Test.Tasty (TestTree, testGroup)
@@ -25,7 +26,7 @@ tests =
                   example (Question "Capital of France?") (Answer "Paris")
                 ]
         result <-
-          runEff . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runConstLLM (answerResponse "4") $
               evaluatePure qaData exactMatch qaProg
         case result of

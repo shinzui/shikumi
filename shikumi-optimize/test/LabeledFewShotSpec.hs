@@ -13,6 +13,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Shikumi.Compile.Types (CompiledProgram, compiledProgram)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
@@ -22,8 +23,8 @@ import StubLM (Label (..), Sentence (..), runStubLM, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-runStub :: Eff '[LLM, Error ShikumiError, Concurrent, IOE] a -> IO (Either ShikumiError a)
-runStub act = runEff . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
+runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, IOE] a -> IO (Either ShikumiError a)
+runStub act = runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 -- | A balanced training set: two positives (containing @good@) and two negatives
 -- (containing @bad@). A single demo cannot classify all four, so a winning set

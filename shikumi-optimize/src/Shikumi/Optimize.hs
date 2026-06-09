@@ -28,6 +28,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
 import Shikumi.Compile.Types (CompiledProgram)
+import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
@@ -43,7 +44,7 @@ import Shikumi.Program (Program)
 -- so the public API is one stable name (and so EP-12's CLI dispatches on one
 -- function regardless of which optimizer the user picked).
 optimize ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
   Optimizer i o ->
   Dataset i o ->
   Metric o ->

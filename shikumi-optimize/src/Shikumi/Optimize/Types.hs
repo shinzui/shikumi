@@ -22,11 +22,12 @@
 --
 -- __The effect row.__ The rank-2 'runOptimizer' field quantifies over the exact
 -- effect row that EP-8's @evaluate@ requires —
--- @(LLM, Concurrent, Error ShikumiError, IOE)@ — because scoring a candidate
+-- @(LLM, Concurrent, Error ShikumiError, Time, IOE)@ — because scoring a candidate
 -- /is/ a call to @evaluate@ (via 'Shikumi.Optimize.scoreOn'). This is wider than
 -- the plan's original @(LLM :> es)@ sketch: the delivered EP-8 runner threads
--- 'Concurrent' (bounded parallelism) and 'IOE' (monotonic per-example latency).
--- See the plan's Decision Log.
+-- 'Concurrent' (bounded parallelism), 'Time' (monotonic per-example latency via
+-- the 'Shikumi.Effect.Time' effect), and 'IOE' (usage accounting). See the plan's
+-- Decision Log.
 module Shikumi.Optimize.Types
   ( Optimizer (..),
     Budget (..),
@@ -39,6 +40,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
 import Shikumi.Compile.Types (CompiledProgram)
+import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
@@ -51,7 +53,7 @@ import Shikumi.Program (Program)
 newtype Optimizer i o = Optimizer
   { runOptimizer ::
       forall es.
-      (LLM :> es, Concurrent :> es, Error ShikumiError :> es, IOE :> es) =>
+      (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
       -- \| training set the search may fit to
       Dataset i o ->
       -- \| how candidates are scored

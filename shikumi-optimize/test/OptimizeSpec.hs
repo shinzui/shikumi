@@ -12,6 +12,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Shikumi.Compile.Types (compiledProgram)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
@@ -24,10 +25,10 @@ import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 -- | Run an optimizer/scoring action under the deterministic stub and the
 -- @evaluate@ effect row, returning either a 'ShikumiError' or the result.
 runStub ::
-  Eff '[LLM, Error ShikumiError, Concurrent, IOE] a ->
+  Eff '[LLM, Error ShikumiError, Concurrent, Time, IOE] a ->
   IO (Either ShikumiError a)
 runStub act =
-  runEff . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
+  runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 -- | The no-op optimizer: ignore the dataset and metric, return the program
 -- compiled unchanged.

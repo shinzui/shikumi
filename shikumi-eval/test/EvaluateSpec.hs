@@ -16,6 +16,7 @@ import EvalFixtures
     runConstLLM,
     runScriptedLLM,
   )
+import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Eval.Evaluate (evaluatePure, evaluateWith)
 import Shikumi.Eval.Metric (exactMatch, liftMetric)
@@ -51,7 +52,7 @@ tests =
     [ testCase "four-of-five exact match -> aggregateScore 0.8" $ do
         let ds = dataset [example q a | (q, a) <- aggregateData]
         report <-
-          runEff . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runConstLLM (answerResponse "yes") $
               evaluatePure ds exactMatch qaProg
         case report of
@@ -72,7 +73,7 @@ tests =
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
             cfg = defaultEvalConfig {concurrency = 1}
         report <-
-          runEff . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $
               evaluateWith cfg ds (liftMetric exactMatch) qaProg
         case report of
@@ -93,7 +94,7 @@ tests =
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
             cfg = defaultEvalConfig {concurrency = 1, failurePolicy = FailAbort}
         report <-
-          runEff . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $
               evaluateWith cfg ds (liftMetric exactMatch) qaProg
         case report of

@@ -17,6 +17,7 @@ import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Shikumi.Compile.Types (Compiler (runCompiler), compiledProgram)
 import Shikumi.Compile.ZeroShot (zeroShot)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
@@ -26,8 +27,8 @@ import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, sentimentP
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
 
-runStub :: Eff '[LLM, Error ShikumiError, Concurrent, IOE] a -> IO (Either ShikumiError a)
-runStub act = runEff . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
+runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, IOE] a -> IO (Either ShikumiError a)
+runStub act = runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 -- | Six labelled training examples spanning both classes (the @good@/@bad@
 -- lexicon), across three topics.

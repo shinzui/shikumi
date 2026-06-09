@@ -24,6 +24,7 @@ import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.Cache (CacheKey (unCacheKey), cacheKey, cachedLLM)
 import Shikumi.Cache.Backend.Redis (RedisCache, closeRedisCache, openRedisCache, runCacheRedis)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (lookupEnv)
 import System.Exit (exitSuccess)
@@ -88,7 +89,7 @@ tests cache =
         -- Two identical requests in one run: provider hit exactly once.
         refA <- newIORef 0
         (r1, r2) <-
-          runEff . runCacheRedis cache . runCountingLLM refA stubResponse . cachedLLM $ do
+          runEff . runTime . runCacheRedis cache . runCountingLLM refA stubResponse . cachedLLM $ do
             a <- complete fixModel fixCtx fixOpts
             b <- complete fixModel fixCtx fixOpts
             pure (a, b)
@@ -98,7 +99,7 @@ tests cache =
         -- A fresh run (fresh counter) now finds the entry already in Redis → HIT.
         refB <- newIORef 0
         _ <-
-          runEff . runCacheRedis cache . runCountingLLM refB stubResponse . cachedLLM $
+          runEff . runTime . runCacheRedis cache . runCountingLLM refB stubResponse . cachedLLM $
             complete fixModel fixCtx fixOpts
         nB <- readIORef refB
         nB @?= 0

@@ -33,6 +33,7 @@ import Shikumi.Cache
 import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
 import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
@@ -204,7 +205,7 @@ memoizeTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         (r1, r2) <-
-          runEff . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+          runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             a <- complete fixModel fixCtx fixOpts
             b <- complete fixModel fixCtx fixOpts
             pure (a, b)
@@ -215,7 +216,7 @@ memoizeTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         _ <-
-          runEff . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+          runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             _ <- complete fixModel fixCtx fixOpts
             complete fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)
         n <- readIORef ref
@@ -231,7 +232,7 @@ versioningTests =
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
         runEff . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
-        _ <- runEff . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        _ <- runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 0,
       testCase "an entry with a foreign keyVersion is ignored (MISS, provider called)" $ do
@@ -239,7 +240,7 @@ versioningTests =
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
         runEff . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime "shikumi-cache/v0")
-        _ <- runEff . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        _ <- runEff . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 1,
       testCase "bumping the namespace version changes the hashed bytes" $

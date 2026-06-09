@@ -26,11 +26,11 @@ module Shikumi.Cache
   )
 where
 
-import Data.Time.Clock (getCurrentTime)
-import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
+import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, passthrough, send)
 import Shikumi.Cache.Key (CacheKey (..), cacheKey, currentKeyVersion)
 import Shikumi.Cache.Types (CachedResponse (..))
+import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete)
 
 -- | The cache storage effect: look an entry up by key, or store one.
@@ -55,7 +55,7 @@ storeCache k v = send (StoreCache k v)
 -- treated as a MISS (it is overwritten on re-fetch). The streaming op is passed
 -- through unchanged — streams are not cached.
 cachedLLM ::
-  (Cache :> es, LLM :> es, IOE :> es) =>
+  (Cache :> es, LLM :> es, Time :> es) =>
   Eff es a ->
   Eff es a
 cachedLLM = interpose $ \env -> \case
@@ -66,7 +66,7 @@ cachedLLM = interpose $ \env -> \case
       Just cr | keyVersion cr == currentKeyVersion -> pure (response cr)
       _ -> do
         resp <- complete model ctx opts
-        now <- liftIO getCurrentTime
+        now <- getCurrentTime
         storeCache key (CachedResponse resp now currentKeyVersion)
         pure resp
   other -> passthrough env other

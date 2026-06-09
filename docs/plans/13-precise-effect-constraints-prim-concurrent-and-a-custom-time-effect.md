@@ -85,10 +85,19 @@ This section must always reflect the actual current state of the work.
       returns a renderable `UTCTime` and that two successive `getMonotonicTimeNSec` reads
       are non-decreasing. Wired into `test/Main.hs` and `shikumi.cabal` `other-modules`.
       `cabal build shikumi` + `cabal test shikumi` green: "All 80 tests passed". (2026-06-09)
-- [ ] M1: Migrate the two pure-time IOE sites to `Time`: `cachedLLM`
+- [x] M1: Migrated the two pure-time IOE sites to `Time`: `cachedLLM`
       (`shikumi-cache/src/Shikumi/Cache.hs`) and `evalOne`
-      (`shikumi-eval/src/Shikumi/Eval/Evaluate.hs`). Thread `Time :> es` through the
-      `evaluate` family. Add `runTime` at the discharge sites. Build + test green.
+      (`shikumi-eval/src/Shikumi/Eval/Evaluate.hs`). Threaded `Time :> es` through the
+      `evaluate` family and the transitive callers `goldenReport`, `optimize`, `scoreOn`,
+      and the `runOptimizer` rank-2 row. Added `runTime` at every discharge site:
+      `runStubEval` in both `shikumi-jitsurei/.../Stub.hs` and
+      `shikumi-cli/.../Cli/Runtime.hs` (closed rows gained `Time`), the `runStub` helpers
+      in the six optimize specs (closed rows gained `Time`), the eval specs
+      `DocSpec`/`EvaluateSpec`, and the `cachedLLM` chains in the cache/redis/postgres
+      test `Main.hs` and `shikumi-jitsurei/app/TraceReplay.hs`. `cabal build all` clean
+      (no warnings); `cabal test all` green — all 16 suites pass. Acceptance grep
+      confirms no `liftIO getCurrentTime`/`liftIO getMonotonicTimeNSec` remain in the
+      migrated modules. (2026-06-09)
 - [ ] M2: Migrate IORef sites to `Prim`: `withUsageTotals`
       (`shikumi-eval/src/Shikumi/Eval/Usage.hs`), `runTrace`
       (`shikumi-trace/src/Shikumi/Trace.hs`), and the test/stub fixtures that hold
@@ -117,6 +126,20 @@ implementation. Provide concise evidence.
   the same tasty convention — keep this in mind for M1–M4 fixtures.
 - M0: The core `shikumi` library did **not** already depend on the `time` package; added
   `, time` to its `build-depends`. (`base` and `effectful` were present.)
+- M1: There are **two** separate `runStubEval` definitions, not one — the production
+  `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` *and* a private copy in
+  `shikumi-cli/src/Shikumi/Cli/Runtime.hs`. Both pin a **closed** effect row
+  (`Eff '[LLM, Concurrent, Error ShikumiError, IOE] a`), as do the `runStub` helpers in
+  the six `shikumi-optimize` specs. Closed rows do not infer the new `Time` effect — each
+  had to be edited by hand to insert `Time` before `IOE`, and a `runTime` added to the
+  discharge chain. The lesson for M2/M3: grep for `Eff '[` closed rows (not just
+  constraint-based `:> es` sites) when threading a new effect, or the build breaks at the
+  discharge points with "no handler for ...".
+- M1: `cachedLLM` is discharged in more places than the core: besides the cache unit
+  tests, the **redis and postgres** backend test `Main.hs` files and
+  `shikumi-jitsurei/app/TraceReplay.hs` all build a `runEff . runCache* . ... . cachedLLM`
+  chain that needed `runTime` inserted. The redis/postgres suites still pass (they run via
+  a local/embedded service in the dev shell).
 - M0: `-Wredundant-constraints` is **already enabled** project-wide via the
   `common-options` stanza in `shikumi.cabal` (and mirrored in the sibling packages). This
   means M4's "enable the guard" step is largely already in force — the compiler will flag

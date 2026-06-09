@@ -21,6 +21,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import EphemeralPg qualified as Pg
 import Shikumi.Cache (cacheKey, cachedLLM)
 import Shikumi.Cache.Backend.Postgres (PostgresCache, closePostgresCache, openPostgresCache, runCachePostgres)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Exit (exitSuccess)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -67,7 +68,7 @@ tests cache =
         [ testCase "memoize: first request MISS (provider once), repeat is a Postgres HIT" $ do
             refA <- newIORef 0
             (r1, r2) <-
-              runEff . runCachePostgres cache . runCountingLLM refA stubResponse . cachedLLM $ do
+              runEff . runTime . runCachePostgres cache . runCountingLLM refA stubResponse . cachedLLM $ do
                 a <- complete fixModel fixCtx fixOpts
                 b <- complete fixModel fixCtx fixOpts
                 pure (a, b)
@@ -77,7 +78,7 @@ tests cache =
             -- A fresh run (fresh counter) now finds the row already in Postgres → HIT.
             refB <- newIORef 0
             _ <-
-              runEff . runCachePostgres cache . runCountingLLM refB stubResponse . cachedLLM $
+              runEff . runTime . runCachePostgres cache . runCountingLLM refB stubResponse . cachedLLM $
                 complete fixModel fixCtx fixOpts
             nB <- readIORef refB
             nB @?= 0
