@@ -88,9 +88,12 @@ This section must always reflect the actual current state of the work.
       `FailurePolicy`, `EvalConfig`/`defaultEvalConfig`, `UsageTotals` (Monoid), `mkReport`,
       and the deterministic `renderReportText`; aggregation + render are unit-tested with
       synthetic results (26 tests total). (2026-06-08)
-- [ ] M4: `Shikumi.Eval.Evaluate.evaluate` runs a program over a dataset with bounded
-      parallelism and per-example error handling; an end-to-end test with a mock LM produces
-      a `Report` with the expected aggregate score and per-example breakdown.
+- [x] M4: `Shikumi.Eval.Evaluate.evaluate`/`evaluatePure`/`evaluateWith` run a program over a
+      dataset with bounded parallelism (`pooledForConcurrentlyN`) and per-example error
+      handling; `Shikumi.Eval.Usage.withUsageTotals` accumulates usage by `interpose` on the
+      `LLM` effect. `EvaluateSpec` (mock LM, no network): four-of-five exact match →
+      `aggregateScore 0.8`; a program error → `FailScore scoreZero` while the run completes;
+      `FailAbort` surfaces a `Left`. 29 tests total. (2026-06-08)
 - [ ] M5: LM-backed metrics `semanticSimilarity` (embedding-based) and `modelJudge`
       (LLM-as-grader) are implemented and tested against a mock LM.
 - [ ] M6: `Shikumi.Eval.Golden.goldenProgram` produces a `tasty` `TestTree`; the
@@ -174,6 +177,26 @@ Record every decision made while working on the plan.
   on disk vs. a produced `ByteString`); using a mock/replay interpreter removes network
   nondeterminism so the only thing that can change the golden output is a genuine change in
   program behaviour. Date: 2026-06-07.
+- Decision (M4): the usage accumulator is the **local `interpose`** form, not a substrate
+  hook. EP-1's `LLM` interpreters expose no usage-observing seam, but `LLM.complete` returns
+  the full baikai `Response`, which already carries `Usage`/`Cost`. So
+  `Shikumi.Eval.Usage.withUsageTotals` interposes on `LLM` (the same seam EP-6's `cachedLLM`
+  and EP-7's `tracedLLM` use), reads usage straight off each response, and accumulates into a
+  shared `IORef` with `atomicModifyIORef'` — which is safe under the bounded concurrency
+  `evaluate` uses, because `pooledForConcurrentlyN` clones the env per worker but the handler
+  closure still references the one ref. No local `UsageAccum` effect was needed; the public
+  type of `evaluate` is unaffected and will not change if a substrate hook lands later.
+  Date: 2026-06-08.
+- Decision (M4): per-example latency is measured with `GHC.Clock.getMonotonicTimeNSec`
+  (monotonic, `base`-only) around each example, rather than `Data.Time.Clock` wall time.
+  Rationale: monotonic time is the correct primitive for elapsed-duration measurement and adds
+  no dependency. Date: 2026-06-08.
+- Decision (M4): `EvaluateSpec`'s aggregate-score case uses an **order-independent** mock (a
+  constant LLM that always answers "yes", with a dataset of four "yes" + one "no" expecteds),
+  so the 0.8 result holds under any concurrency; the failure-policy cases use a positional
+  scripted mock under `concurrency = 1` so the injected `MockFail` lands on a known example.
+  Rationale: `pooledForConcurrentlyN` does not order LLM calls across workers, so a positional
+  script is only deterministic when single-threaded. Date: 2026-06-08.
 
 
 ## Outcomes & Retrospective

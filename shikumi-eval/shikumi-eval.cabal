@@ -33,16 +33,21 @@ library
   import:          common-options
   hs-source-dirs:  src
   exposed-modules:
+    Shikumi.Eval.Evaluate
     Shikumi.Eval.Metric
     Shikumi.Eval.Report
     Shikumi.Eval.Types
+    Shikumi.Eval.Usage
 
   build-depends:
     , aeson
-    , base        >=4.20 && <5
+    , base          >=4.20 && <5
     , containers
     , effectful
-    , text        ^>=2.1
+    , generic-lens
+    , lens          ^>=5.3
+    , shikumi
+    , text          ^>=2.1
 
 test-suite shikumi-eval-test
   import:         common-options
@@ -51,14 +56,22 @@ test-suite shikumi-eval-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    EvalFixtures
+    EvaluateSpec
     MetricSpec
     ReportSpec
     TypesSpec
 
   build-depends:
     , aeson
+    , baikai
     , base
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
     , shikumi-eval
     , tasty
     , tasty-hunit
     , text
+    , vector

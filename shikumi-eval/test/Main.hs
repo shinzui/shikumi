@@ -4,6 +4,7 @@
 -- documented-usage doctest. Every group is hermetic — no network, no API key.
 module Main (main) where
 
+import EvaluateSpec qualified
 import MetricSpec qualified
 import ReportSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -16,5 +17,6 @@ main =
       "shikumi-eval"
       [ TypesSpec.tests,
         MetricSpec.tests,
-        ReportSpec.tests
+        ReportSpec.tests,
+        EvaluateSpec.tests
       ]
