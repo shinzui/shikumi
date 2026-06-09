@@ -67,10 +67,13 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (prototyping spike): minimal `Program` GADT with `Predict` + `Compose`,
-  `runProgram` over a stub `LLM`, and a working parameter traversal; demonstrate it on
-  `predict`, `chainOfThought`, and a two-stage pipeline in a spike test. Decision: promote
-  or revise the design.
+- [x] M0 (prototyping spike) — done 2026-06-08: minimal `Program` GADT with `Predict` +
+  `Compose` + `FMap`, pure `runProgram` over a stub "model", and `paramsTraversal` +
+  `foldParams`/`mapParams`; demonstrated on `predict`, a chain-of-thought-style node, and a
+  two-stage pipeline in `shikumi/test/SpikeSpec.hs` (5 cases, all green; 40 total). The
+  existential-`Compose` traversal typechecks and the instruction rewrite is observable in
+  `runProgram` output. **Design promoted as-is** (see Decision Log). Spike is throwaway —
+  removed after M1.
 - [ ] M1: commit the promoted `Shikumi.Program` module — the full `Program i o` GADT
   (`Predict`, `Compose`, `FMap`), `Params`, and `runProgram`.
 - [ ] M2: commit the parameter interface — `paramsTraversal`, `foldParams`, `mapParams`,
@@ -89,10 +92,23 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. As you implement, record here things such as: whether the existential-witness
-approach to `Compose` typechecks as expected; whether GHC needs extra type annotations at
-`runProgram` call sites; whether the lens `Traversal'` law tests pass cleanly; any
-ergonomic friction in `mapParamsAt`.)
+- **M0 (2026-06-08):** the existential-witness `Compose` traversal compiles with no extra
+  annotations — `paramsTraversal h (Compose f g) = Compose <$> paramsTraversal h f <*>
+  paramsTraversal h g` typechecks because both recursive calls share the same hidden `b`.
+  `foldParams`/`mapParams` derive cleanly from the traversal via `Const`/`Identity` (both in
+  `base`, no `lens` needed for the impl). The rewrite is observable end-to-end: a stub
+  "model" that echoes its effective instruction shows `"NEW INSTRUCTION"` in `runProgram`
+  output after a traversal edit. No design change needed.
+- **EP-3 interface divergences found while reading the delivered EP-3 (recorded for M1):**
+  EP-3 does **not** expose the pinned `runSignature`, `signatureName`, or `withReasoningField`.
+  Instead `Shikumi.Adapter` exposes `Adapter { render :: Signature i o -> i -> (Context,
+  Options), parse :: Signature i o -> Response -> Either ShikumiError o }` selected by
+  `adapterFor :: Model -> Adapter i o`, and a node is run as `render → LLM.complete model ctx
+  opts → parse` (see `shikumi/test/EndToEndSpec.hs`). M1 therefore defines `runProgram`'s
+  Predict case as that composition rather than importing `runSignature`. `signatureName` has
+  no EP-3 equivalent → `programShape` labels a `Predict` by its joined output-field names
+  (stable across param changes). `withReasoningField` is provided locally in `Shikumi.Module`
+  (EP-4). See Decision Log.
 
 
 ## Decision Log
@@ -173,6 +189,45 @@ Record every decision made while working on the plan.
   constructors) and demonstrates that richer modules are *derived*, which is the pattern
   `docs/plans/5-module-combinators-and-control-flow.md` will follow for retry/validate/etc.
   Date: 2026-06-07.
+- Decision (M0, promote): **Promote the three-constructor GADT as-is.** The promote criterion
+  (existential `Compose` compiles; `paramsTraversal` typechecks and is left-to-right
+  depth-first; the rewrite is observable in `runProgram` output) was met by `SpikeSpec` with
+  no design change. Date: 2026-06-08.
+- Decision (M1): the `Predict` GADT constructor **captures the adapter/decode constraints
+  existentially**: `Predict :: (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt
+  i, ToPrompt o) => Signature i o -> Params -> Program i o`. Rationale: `runProgram` must call
+  EP-3's `adapterFor`/`render`/`parse` (which need `ToSchema o, FromModel o, Validatable o,
+  ToPrompt i, ToPrompt o`) and must decode `Params`' JSON demos into the signature's typed
+  `Demo i o` channel (which needs `FromModel i` + `FromModel o`). Capturing the dictionaries
+  in the constructor is what lets `runProgram` pattern-match `Predict` and recover them — the
+  GADT idiom. The user supplies these instances on their records (the `Generic`-derived
+  defaults), exactly as the EP-3 fixtures already do. Date: 2026-06-08.
+- Decision (M1): `runProgram`'s type is **`(LLM :> es, Error ShikumiError :> es) => Program i
+  o -> i -> Eff es o`** — one capability beyond the pinned `(LLM :> es)`. Rationale: a decode
+  failure must surface as a typed `ShikumiError`, and EP-1 already threads provider failures
+  through the `Error ShikumiError` effect (every interpreter — `runLLM`/`runLLMResilient` —
+  carries `Error ShikumiError :> es` in its residual, and tests run `runErrorNoCallStack
+  @ShikumiError`). So this effect is always present wherever `LLM` is run; making it explicit
+  is honest, not an added burden. `runProgram` `throwError`s on a `parse`/demo-decode `Left`.
+  The exported *name* is unchanged (the constraint, not the surface, adapts — permitted by the
+  plan's Idempotence section). Downstream (`docs/plans/5/8/9/10/11/12`) inherit this
+  capability. Date: 2026-06-08.
+- Decision (M1): the per-node model is a **neutral default (`_Model`) selecting the prompt
+  fallback adapter**, not a field of the program and not a parameter of `runProgram`.
+  Rationale: the program must stay provider-neutral (Vision: "run it against any provider"),
+  so the model cannot live in the program data; and the pinned `runProgram` takes no model.
+  `capabilityFor _Model` is `PromptFallback`, which the MasterPlan already records as "the
+  exercised path" until EP-2 lands the native schema. EP-4 is stub-driven (the fake `LLM`
+  interpreter ignores the model), so this fully satisfies EP-4's acceptance; wiring a real
+  ambient model/provider (e.g. a `Reader Model` effect or CLI/eval config) is deferred to the
+  plans that need real routing (`docs/plans/8`, `docs/plans/12`). Recorded as known future
+  work. Date: 2026-06-08.
+- Decision (M1): `Params` demos reach the wire by **decoding each JSON `Demo` into the
+  signature's typed `Demo i o` and `setDemos`-ing them onto the effective signature before
+  `render`**, reusing EP-3's demo rendering rather than duplicating prompt formatting in EP-4.
+  A demo whose JSON does not decode surfaces as the located `ShikumiError` from `fromModel`.
+  The effective instruction is `fromMaybe (getInstruction sig) (instructionOverride ps)`
+  applied via `setInstruction`. Date: 2026-06-08.
 
 
 ## Outcomes & Retrospective

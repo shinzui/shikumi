@@ -72,6 +72,7 @@ test-suite shikumi-test
     ResilienceSpec
     SchemaSpec
     SignatureSpec
+    SpikeSpec
     StubProvider
 
   build-depends:
