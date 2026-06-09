@@ -98,8 +98,10 @@ This section must always reflect the actual current state of the work.
       with a pure `runEmbedding` interpreter) and `modelJudge` (LLM-as-grader running a tiny
       `JudgeInput -> Grade` predict program) are implemented and tested against mock
       interpreters (34 tests total). (2026-06-08)
-- [ ] M6: `Shikumi.Eval.Golden.goldenProgram` produces a `tasty` `TestTree`; the
-      fail-before/pass-after golden demonstration is recorded in this plan with transcript.
+- [x] M6: `Shikumi.Eval.Golden.goldenProgram`/`goldenReport` produce a `tasty` `TestTree`
+      (built on `tasty-golden`'s `goldenVsString`, run under a caller-supplied rank-2 offline
+      runner); the committed `shikumi-eval/test/golden/qa-program.golden` pins the transcript;
+      the fail-before/pass-after demonstration is recorded below (35 tests total). (2026-06-08)
 - [ ] M7: README/usage doc-comment example compiles via a doctest-style test; master-plan
       Progress row for EP-8 ticked.
 
@@ -1073,6 +1075,24 @@ Expected failing-diff shape in step 2:
       - 2	correct-answer
       + 2	regressed-answer
 ```
+
+Actual M6 run (2026-06-08). The committed golden
+`shikumi-eval/test/golden/qa-program.golden` is `0\tyes` / `1\tyes` (the constant mock
+answers "yes" for both examples). Step 1 (`--accept`) created it and the clean run passed.
+Step 2 changed the mock to answer `"regressed"`; the same test then failed:
+
+```text
+  Golden
+    qa-program golden:                                   FAIL
+      Test output was different from 'test/golden/qa-program.golden'. It was:
+      0	regressed
+      1	regressed
+
+1 out of 35 tests failed (0.00s)
+```
+
+Step 3 reverted the mock to `"yes"`; the golden test passed again (`All 35 tests passed`).
+This is the fail-before/pass-after acceptance.
 
 Update the master plan Progress row (M7), then commit:
 

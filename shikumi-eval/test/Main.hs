@@ -5,6 +5,7 @@
 module Main (main) where
 
 import EvaluateSpec qualified
+import GoldenSpec qualified
 import MetricLMSpec qualified
 import MetricSpec qualified
 import ReportSpec qualified
@@ -20,5 +21,6 @@ main =
         MetricSpec.tests,
         ReportSpec.tests,
         EvaluateSpec.tests,
-        MetricLMSpec.tests
+        MetricLMSpec.tests,
+        GoldenSpec.tests
       ]

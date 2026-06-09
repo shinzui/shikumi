@@ -34,6 +34,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Eval.Evaluate
+    Shikumi.Eval.Golden
     Shikumi.Eval.Metric
     Shikumi.Eval.Report
     Shikumi.Eval.Types
@@ -42,11 +43,14 @@ library
   build-depends:
     , aeson
     , base          >=4.20 && <5
+    , bytestring
     , containers
     , effectful
     , generic-lens
     , lens          ^>=5.3
     , shikumi
+    , tasty
+    , tasty-golden
     , text          ^>=2.1
     , vector
 
@@ -59,6 +63,7 @@ test-suite shikumi-eval-test
   other-modules:
     EvalFixtures
     EvaluateSpec
+    GoldenSpec
     MetricLMSpec
     MetricSpec
     ReportSpec
@@ -74,6 +79,7 @@ test-suite shikumi-eval-test
     , shikumi
     , shikumi-eval
     , tasty
+    , tasty-golden
     , tasty-hunit
     , text
     , vector
