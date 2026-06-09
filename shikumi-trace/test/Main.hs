@@ -31,6 +31,7 @@ import Shikumi.Trace
     tracedLLM,
     withSpan,
   )
+import Shikumi.Trace.Demo (demoArticle, demoPipeline, demoResponder)
 import Shikumi.Trace.Internal.Spike qualified as Spike
 import Shikumi.Trace.Replay (ReplayDivergence (..), runLLMReplay)
 import Shikumi.Trace.Store
@@ -56,7 +57,9 @@ import TraceFixtures
   )
 
 main :: IO ()
-main = defaultMain $ testGroup "shikumi-trace" [spikeTests, treeTests, storeTests, replayTests]
+main =
+  defaultMain $
+    testGroup "shikumi-trace" [spikeTests, treeTests, storeTests, replayTests, e2eTests]
 
 -- ---------------------------------------------------------------------------
 -- M0
@@ -193,6 +196,38 @@ replayTests =
             Left (ReplayDivergence {divergedKey = CacheKey k}) ->
               assertBool "the divergence names a non-empty key" (not (T.null k))
             Right _ -> assertFailure "expected a ReplayDivergence on an unrecorded request"
+    ]
+
+-- ---------------------------------------------------------------------------
+-- M5 (e2e)
+-- ---------------------------------------------------------------------------
+
+-- | M5: the demo's two-stage pipeline, captured live then replayed offline, prints
+-- a byte-identical final critique while making zero provider calls — the headline
+-- end-to-end story, run in-process.
+e2eTests :: TestTree
+e2eTests =
+  testGroup
+    "e2e"
+    [ testCase "live capture then offline replay: identical FINAL, zero provider calls" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          calls <- newIORef (0 :: Int)
+          -- live run of the demo pipeline; capture the tree, count provider calls.
+          (liveFinal, tree) <-
+            runEff . runTrace . runKeyedCountingLLM calls demoResponder . tracedLLM $
+              demoPipeline demoArticle
+          liveCalls <- readIORef calls
+          liveCalls @?= 2
+          -- persist, reload, replay offline.
+          let p = dir <> "/trace.json"
+          writeTraceFile p tree
+          Right tree' <- readTraceFile p
+          let idx = replayIndex tree'
+          writeIORef calls 0
+          (replayFinal, _) <- runEff . runTrace . runLLMReplay idx $ demoPipeline demoArticle
+          replayCalls <- readIORef calls
+          replayFinal @?= liveFinal
+          replayCalls @?= 0
     ]
 
 -- | A dependent two-stage pipeline: draft a summary of the article, then critique

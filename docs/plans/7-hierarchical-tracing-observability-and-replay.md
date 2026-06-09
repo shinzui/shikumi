@@ -109,8 +109,12 @@ This section must always reflect the actual current state of the work.
       `cabal test shikumi-trace-otel` green: the in-memory exporter captures one span per node,
       both LM-call spans carry `gen_ai.request.model`, all spans share one trace id, and every
       non-root span's parent is an emitted span (exactly one root).
-- [ ] M5: the `shikumi-trace-demo` executable tying it together (live trace → persist →
-      offline replay) and the documented acceptance transcript.
+- [x] M5: the `shikumi-trace-demo` executable and its testable core (`Shikumi.Trace.Demo`:
+      `demoPipeline`/`demoResponder`/`demoMain`) tie it all together — a two-stage pipeline run
+      live (prints the nested tree, writes `trace.json`) and replayed offline. **Done
+      (2026-06-08).** Verified two ways: `cabal test shikumi-trace --test-options='-p e2e'`
+      green (live capture → persist → offline replay yields an identical `FINAL` with the
+      provider counter at 0), and the manual transcript below reproduces byte-for-byte.
 
 
 ## Surprises & Discoveries
@@ -249,7 +253,57 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered in full (2026-06-08).** All six milestones (M0–M5) are complete; the two
+user-visible capabilities from Purpose are demonstrated end-to-end:
+
+1. **Hierarchical tracing.** Running any computation inside `Shikumi.Trace.runTrace` yields a
+   `TraceTree` of nested spans; `tracedLLM` auto-captures each LM call as a leaf carrying
+   model, provider, latency, tokens, cost, tool calls, the recorded response, and the EP-6
+   cache key. `renderTree` prints the nested outline; `shikumi-trace-otel`'s `exportTree`
+   emits the same tree as properly-nested OTel spans with GenAI attributes.
+2. **Deterministic replay.** `writeTraceFile`/`readTraceFile` persist a stable versioned JSON
+   document; `runLLMReplay` re-runs the same program offline, serving every call from the
+   recording and raising a precise `ReplayDivergence` on any unrecorded call.
+
+The whole suite is hermetic: `cabal test shikumi-trace` (11) and `cabal test
+shikumi-trace-otel` (1) are green with no network and no API keys.
+
+Manual acceptance transcript (run from any directory; `trace.json` lands in the CWD):
+
+```text
+$ cabal run shikumi-trace-demo
+program  summarize-and-critique  1ms
+  module  predict:Draft  1ms
+    llm-call  stub/stub-model  1ms  in=24 out=9 $0.0
+  module  predict:Critique  0ms
+    llm-call  stub/stub-model  0ms  in=24 out=9 $0.0
+FINAL: Accurate and concise; ship it.
+
+$ SHIKUMI_OFFLINE=1 cabal run shikumi-trace-demo -- --replay trace.json
+FINAL: Accurate and concise; ship it.
+provider calls: 0
+```
+
+**Divergences from the plan, all simplifications (see Decision Log):** capture is by
+`interpose` on the `LLM` effect, not a baikai `TraceSink` (EP-1 exposes no sink; the
+`Response` carries more than the flat `TraceEvent`) — so the core package needs neither
+`streamly-core` nor `Baikai.Trace.*`; the cache key is *imported* from `shikumi-cache`, not
+copied (EP-6 landed); `runLLMReplay` needs no `IOE`; `exportTree` is `MonadIO` (not
+`MonadUnliftIO`); and the demo always uses a deterministic in-process stub (hermetic, always
+runnable) rather than an optional live provider.
+
+**Cross-plan contribution:** EP-7 built the faithful `Response` JSON round-trip
+(`Shikumi.Trace.ResponseJSON`) that EP-6 deferred for its persistent backends — the same
+orphan instances can be reused there.
+
+**Gaps / future work (all noted in scope or the plan):** `bumpRetry`/`recordToolCall` are
+exported and wired into the tree but no combinator calls them yet (EP-5's `Retry` is
+unaware of `Trace`); replay does not support streaming completions (raises a divergence);
+the lenient "record-or-replay" mode remains explicitly out of scope.
+
+Lesson: when the upstream interpreter already returns a rich value (`Response`), interposing
+on the high-level effect beats consuming a lower-level flat event stream — fewer deps, no
+async-timing concerns, and strictly more data per span.
 
 
 ## Context and Orientation

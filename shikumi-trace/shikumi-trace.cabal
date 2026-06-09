@@ -38,6 +38,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Trace
+    Shikumi.Trace.Demo
     Shikumi.Trace.Internal.Spike
     Shikumi.Trace.Replay
     Shikumi.Trace.ResponseJSON
@@ -59,6 +60,15 @@ library
     , text           ^>=2.1
     , time
     , vector
+
+executable shikumi-trace-demo
+  import:         common-options
+  hs-source-dirs: app
+  main-is:        Main.hs
+  ghc-options:    -threaded -with-rtsopts=-N
+  build-depends:
+    , base
+    , shikumi-trace
 
 test-suite shikumi-trace-test
   import:         common-options
