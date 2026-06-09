@@ -83,7 +83,8 @@ data Summary = Summary
   } deriving stock Generic
     deriving anyclass (ToSchema, FromModel, ToPrompt)
 
--- A domain rule, checked after decode:
+-- A domain rule. You enforce it at the program level with the `validate`
+-- combinator (see example 1 below); this instance documents the rule.
 instance Validatable Summary where
   validate s
     | n < 3 || n > 5 = Left "bullets: must have 3 to 5 items"
@@ -94,6 +95,13 @@ instance Validatable Summary where
 The `Field "description" a` wrapper attaches a compile-time description to a field; a single
 `Generics` walk recovers both the field name and its description, so they can never drift.
 A bare `Text` field simply has no description.
+
+> **A note on validation.** A `Validatable` rule is enforced where you ask for it — by wrapping
+> a program with the [`validate`](#3-control-flow-as-combinators) combinator, which surfaces a
+> rejection as a typed `ValidationFailure`. (`predict` on its own does *not* run a type's
+> `Validatable` instance; the combinator is the program-level seam.) The runnable
+> [`jitsurei-predict`](shikumi-jitsurei/app/Predict.hs) example shows all three outcomes:
+> a clean decode, a `MissingField`, and a `ValidationFailure`.
 
 Now declare and run the program:
 
@@ -146,6 +154,25 @@ is still legible. The resilience interpreter knows which of these are *transient
 > The snippets below reflect the **shipped** surface. The only items not yet built are the
 > *persistent* cache backends (the in-memory cache ships; SQLite/Postgres/Redis are planned)
 > and the CLI's *live* OpenTelemetry export — see **[Implementation status](#implementation-status)**.
+
+Every snippet below has a **runnable, offline counterpart** in the
+[`shikumi-jitsurei`](shikumi-jitsurei) package (実例, *worked examples*). Each one runs against
+a deterministic in-process stub LM — no API key, no network — so it is an executable
+demonstration of the real API, not a sketch:
+
+| Run | Shows | Source |
+|---|---|---|
+| `cabal run jitsurei-predict` | records in, records out; typed errors and `validate` | [`app/Predict.hs`](shikumi-jitsurei/app/Predict.hs) |
+| `cabal run jitsurei-compose` | compose typed programs with `>>>` | [`app/Compose.hs`](shikumi-jitsurei/app/Compose.hs) |
+| `cabal run jitsurei-combinators` | `retry` / `validate` / `mapP` / `majorityVote` / `ensemble` | [`app/Combinators.hs`](shikumi-jitsurei/app/Combinators.hs) |
+| `cabal run jitsurei-evaluate` | a typed `Metric` over a `Dataset` → a `Report` | [`app/Evaluate.hs`](shikumi-jitsurei/app/Evaluate.hs) |
+| `cabal run jitsurei-optimize` | optimize demos, then serialize & reload them | [`app/Optimize.hs`](shikumi-jitsurei/app/Optimize.hs) |
+| `cabal run jitsurei-react` | a typed tool and a ReAct agent loop | [`app/ReActAgent.hs`](shikumi-jitsurei/app/ReActAgent.hs) |
+| `cabal run jitsurei-trace-replay` | caching, hierarchical tracing, deterministic replay | [`app/TraceReplay.hs`](shikumi-jitsurei/app/TraceReplay.hs) |
+
+The shared offline harness (the stub LM and the response builders) lives in
+[`Shikumi.Jitsurei.Stub`](shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs); each `app/` module is a
+self-contained `main` you can lift straight into your own project.
 
 ### 1. Chain-of-thought is just a derived program
 
@@ -371,6 +398,7 @@ All twelve are delivered; `cabal test all` is green across every package, hermet
 | **Optimizer** — demo selection, bootstrap few-shot, instruction & ensemble search | `shikumi-optimize` | ✅ Done |
 | **Typed tools + ReAct agents** | `shikumi-tools` | ✅ Done |
 | **`shikumi` CLI** — `eval`, `trace`, `optimize`, `replay` | `shikumi-cli` | ✅ Done · 🔭 live OTel export planned |
+| **Worked examples (実例)** — runnable, offline counterparts to every motivating example | `shikumi-jitsurei` | ✅ Done |
 
 > Note: today `runProgram` dispatches every node against a provider-neutral model (the
 > prompt-fallback adapter is the exercised path; the native-schema path is wired and verified
@@ -392,6 +420,10 @@ cabal test  all              # hermetic across every package; no network
 
 # Try the CLI offline (no API key):
 cabal run shikumi-cli:exe:shikumi -- eval --program sentiment
+
+# Run the worked examples offline (no API key); list them with:
+cabal run shikumi-jitsurei
+cabal run jitsurei-predict        # …or any example from the table above
 
 # Opt into the live provider smoke test:
 SHIKUMI_LIVE=1 OPENAI_API_KEY=... cabal test shikumi
