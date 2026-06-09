@@ -22,6 +22,7 @@
 packages:
   shikumi
   shikumi-cache
+  shikumi-cli
   shikumi-compile
   shikumi-eval
   shikumi-optimize

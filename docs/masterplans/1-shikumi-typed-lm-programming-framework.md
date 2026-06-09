@@ -182,7 +182,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Complete |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Complete |
 | 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | Complete |
-| 12 | CLI and developer experience | docs/plans/12-cli-and-developer-experience.md | EP-7, EP-8, EP-10 | EP-11 | 9 | Not Started |
+| 12 | CLI and developer experience | docs/plans/12-cli-and-developer-experience.md | EP-7, EP-8, EP-10 | EP-11 | 9 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -353,7 +353,9 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
   (new `shikumi-optimize` package; 9 hermetic tests; held-out score 0.0→1.0 for 3 strategies)
 - [x] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
   (new `shikumi-tools` package; 13 hermetic tests; added the `Embed` program constructor to core)
-- [ ] EP-12: `shikumi` CLI: `eval`, `trace`, `optimize`, `replay`
+- [x] EP-12: `shikumi` CLI: `eval`, `trace`, `optimize`, `replay`
+  (new `shikumi-cli` package + `shikumi` executable; 5 hermetic tests; all four subcommands run
+  offline against a bundled example via a deterministic stub LM; `cabal test all` green)
 
 
 ## Surprises & Discoveries
@@ -663,6 +665,25 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   works; `ProtocolAuto` resolves via `capabilityFor`, and the neutral `_Model` exercises the
   prompt path (EP-4's unwired-routing limitation). Native extract calls `attachSchema` (a no-op
   until the local baikai gains EP-2's `responseFormat`).
+- **EP-12 delivered (2026-06-09) — the initiative is complete.** The `shikumi-cli` package +
+  `shikumi` executable land the user-facing command line: `eval`/`trace`/`optimize`/`replay`
+  (+ a `record` DX helper), all running offline against a bundled `sentiment` example with zero
+  network. `cabal test shikumi-cli-test` green (5 tests); `cabal test all` green across all
+  packages. Cross-plan facts:
+  (a) **It is a thin driver, reusing every sibling surface verbatim** — EP-8's `renderReportText`,
+  EP-7's `renderTree`/`readTraceFile`/`writeTraceFile`/`replayIndex`/`runLLMReplay`, EP-9's
+  `encodeCompiled`, EP-10's `optimize`, EP-1's `runProgram`. No new serialization or rendering.
+  (b) **Offline determinism comes from a deterministic in-process stub LM, not a persistent
+  cache fixture**, because EP-6's persistent backends remain deferred. This is the framework's
+  standard hermetic pattern (mirroring `Shikumi.Trace.Demo`); even the committed trace fixture
+  is generated offline via `record`, so nothing in the CLI ever needs an API key.
+  (c) **The "CLI over typed values" problem is solved by a library-of-builders + a bundled
+  example `main`** (`cliMain exampleRegistry`), with a name-keyed `Registry` of existential
+  `Task`s (each bundling program+dataset+metric+optimizers at one `i`/`o`, avoiding `Typeable`
+  reunification). (d) **Many pre-authored sibling contracts had drifted** (effect rows,
+  `encodeCompiled` vs `saveCompiled`, `renderReportText`, `Metric o = o -> Prediction o ->
+  Score`); all call sites were adapted with the behaviour unchanged, as the plan anticipated.
+  `--otel` is accepted but its live sink is deferred (needs a collector; out of scope offline).
 
 
 ## Decision Log
@@ -745,7 +766,47 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+**Status at completion (2026-06-09).** Eleven of twelve child plans are Complete; EP-6
+(caching) is intentionally **In Progress** — its hermetic core (content-addressed key, the
+`Cache` effect, the in-memory STM backend, `cachedLLM`) shipped, while the persistent
+backends (SQLite/Redis/Postgres) remain deferred. Both upstream baikai contributions
+(`baikai-effectful`, EP-2's native structured output) shipped. `cabal test all` is green
+across all packages — 7 shikumi packages (`shikumi`, `shikumi-cache`, `shikumi-compile`,
+`shikumi-eval`, `shikumi-optimize`, `shikumi-tools`, `shikumi-cli`) plus `shikumi-trace`/
+`shikumi-trace-otel` and the baikai siblings.
+
+**Against the vision.** The seven "done" behaviors are realized: (1) typed `Program i o`
+built from `predict`/`chainOfThought`/`react` and the full combinator set, with invalid
+pipelines failing to compile; (2) schema-driven, total structured I/O with an enumerated
+`ShikumiError`; (3) production runtime — retries/backoff/rate-limit/budget and an in-memory
+cache (persistent backends pending in EP-6); (4) first-class evaluation (`Dataset`/`Metric`/
+`evaluate`/`Report`); (5) compilation (zero/few-shot, CoT, RAG) and optimization (demo
+selection, bootstrap, instruction search, ensemble) demonstrably lifting a held-out score
+0.0→1.0; (6) typed `Tool i o` + a ReAct agent that is a first-class `Program`; (7) a `shikumi`
+CLI exposing `eval`/`trace`/`optimize`/`replay` plus an OTel-capable trace layer. The headline
+sentence — declare a record-typed program, run it in an `Eff` stack, get a decoded value with
+the schema derived from the type — works end-to-end through the prompt-fallback adapter, with
+the provider-native schema path wired and verified for OpenAI (Anthropic native verified by
+pure mapping).
+
+**Cross-cutting lessons.** (a) The GADT deep embedding (EP-4) held up under every later
+consumer: combinators, compilers, optimizers, agents, and the CLI all rewrite/run/serialize
+programs through the one `foldParams`/`mapParamsAt`/`programParams`/`setProgramParams`
+interface, and the one structural addition the whole initiative needed — EP-11's `Embed` node —
+slotted in without disturbing integration point #4's `runProgram` row. (b) Effect honesty paid
+off: confining `IOE` to the bottom interpreter kept every framework signature an accurate
+capability ledger, and EP-11's effect-honest tools fell out of that discipline. (c) The plans
+were authored in parallel against pre-agreed contracts that inevitably drifted as siblings
+landed; the living-document protocol (each plan recording its deviations, the MasterPlan's
+Surprises reconciling them) absorbed the drift without a single integration getting stuck.
+
+**Known gaps / future work (all documented in the child plans, none blocking the vision).**
+EP-6's persistent cache backends (SQLite/Redis/Postgres — the `Response` JSON round-trip
+EP-7 already built unblocks them); real per-call provider/model routing (`runProgram`
+dispatches against the neutral `_Model`, so the native schema path, per-sample temperature, and
+multi-sample eval remain inert until an ambient-model mechanism lands); raw-`IO` ReAct tools +
+an `IOE`-carrying agent runner; the CLI's live OpenTelemetry export sink; and richer optimizer
+internals (per-node bootstrap recovery, a non-static instruction proposer).
 
 
 ## Revision Notes

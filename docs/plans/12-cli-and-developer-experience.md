@@ -69,17 +69,39 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: `shikumi-cli` package scaffolded; builds; depends on sibling packages.
-- [ ] M1: CLI skeleton — `shikumi` executable parses `eval`/`trace`/`optimize`/`replay`
-      subcommands and `--help`, dispatching to stub handlers that print their parsed args.
-- [ ] M2: The `Registry` type and offline interpreter wiring (cache/replay) shared by all
-      subcommands; bundled example program, dataset, and metric defined.
-- [ ] M3: `eval` subcommand renders a `Report` table from a real evaluation run (offline).
-- [ ] M4: `trace` subcommand renders a stored hierarchical trace as a nested tree.
-- [ ] M5: `optimize` subcommand runs an optimizer and saves a `CompiledProgram` file.
-- [ ] M6: `replay` subcommand deterministically replays a stored trace; output identical.
-- [ ] M7: DX features — golden tests over the four transcripts; OTel export flag wired.
-- [ ] M8: End-to-end acceptance: all four transcripts reproduced from a clean checkout.
+- [x] M0: `shikumi-cli` package scaffolded; builds; depends on sibling packages
+      (`shikumi`, `shikumi-eval`, `shikumi-compile`, `shikumi-optimize`, `shikumi-trace`)
+      + `optparse-applicative` (2026-06-09). Added to `cabal.project`.
+- [x] M1: CLI skeleton — the `shikumi` executable parses `eval`/`trace`/`optimize`/`replay`
+      (plus a DX `record` helper) and `--help`/global `--store-dir`/`--otel`, dispatching via
+      `Shikumi.Cli.dispatch`. (Per-subcommand handlers were implemented directly rather than
+      as separate stub then real, since the real handlers were small.)
+- [x] M2: `Registry` of existential `Task`s (bundling program + dataset + metric + canonical
+      input + offline stub responder + named optimizers, one `i`/`o` per task — avoids the
+      cross-existential `Typeable` reunification the sketch implied; see Decision Log); the
+      offline runtime (`Shikumi.Cli.Runtime`: `runStubEval`/`runStubProgram`/
+      `runReplayProgram`/`recordTrace`); and the bundled `exampleRegistry` (the `sentiment`
+      task). A unit test asserts the example runs.
+- [x] M3: `eval` evaluates the named task offline and prints EP-8's `renderReportText`
+      (reused, not reinvented). Bundled example → `score=0.5000`, `pass=2/4`.
+- [x] M4: `trace` loads a stored trace (`readTraceFile`) and renders it with EP-7's
+      `renderTree` (reused). Bundled example → a program span over an `llm-call` leaf.
+- [x] M5: `optimize` runs the named optimizer and writes EP-9's `encodeCompiled` JSON to
+      `--out`. (`encodeCompiled`/`decodeCompiledOnto`, not the sketch's `saveCompiled`/
+      `loadCompiled` which EP-9 never shipped.) Bundled example → a demos-bearing JSON file.
+- [x] M6: `replay` re-runs the program purely from the trace via EP-7's fail-closed
+      `runLLMReplay`, and confirms the output is identical to a fresh stub run with
+      `provider calls: 0`.
+- [x] M7: Hermetic acceptance tests over the four capabilities (`shikumi-cli-test`, 5 tests):
+      deterministic Report assertions, trace span + on-disk round-trip, optimize-saves-demos,
+      and replay-identity. (Used direct HUnit transcript assertions rather than `tasty-golden`
+      to avoid a new dep and the non-determinism of wall-clock trace timings — see Surprises.)
+      The `--otel` flag is accepted and the stack builds with it; wiring EP-7's live OTel sink
+      is deferred (offline acceptance does not exercise a collector — see Decision Log).
+- [x] M8: All four behaviors reproduced offline from the bundled example with no network; a
+      committed trace fixture under `shikumi-cli/example/fixture/sentiment.json` (generated
+      offline via `record`, not via a live API key) makes `trace`/`replay` work from a clean
+      checkout. `cabal test all` green across every package.
 
 
 ## Surprises & Discoveries
@@ -87,7 +109,34 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **The sibling contracts drifted from the sketch; the behavior held.** Every sibling shipped
+  with names/rows different from the Context section's pre-authored contract: `evaluate`/
+  `optimize` carry `(LLM, Concurrent, Error ShikumiError, IOE)` (not just `LLM`); EP-9 ships
+  `encodeCompiled`/`decodeCompiledOnto` (not `saveCompiled`/`loadCompiled`); EP-7 ships
+  `readTraceFile`/`writeTraceFile`/`replayIndex`/`runLLMReplay` + `renderTree` (not
+  `loadTrace`/`listTraces`/`runReplay`); EP-8 ships `renderReportText` (so the CLI reuses it
+  rather than writing `renderReport`); `Metric o = o -> Prediction o -> Score` (not
+  `o -> o -> Double`). All call sites were adjusted; the four behaviors are unchanged. The
+  plan anticipated exactly this ("adjust the call sites and record the deviation").
+- **EP-6's persistent cache was deferred, so the sketch's on-disk cache fixture does not
+  exist.** Offline determinism instead comes from a deterministic in-process /stub/ LM (the
+  framework's standard hermetic pattern, mirroring `Shikumi.Trace.Demo`'s `runStubLLM`):
+  `eval`/`optimize` run against the stub; `record` captures a real `TraceTree` from a stub run
+  and persists it; `replay` re-runs purely from that trace. No network is touched even to
+  /record/ the fixture — strictly better than the sketch's "record with an API key" M8 step.
+- **`cabal list-bin shikumi` is ambiguous** — it resolves to the core package's `shikumi-test`
+  rather than the CLI executable. Use the fully-qualified `cabal list-bin shikumi-cli:exe:shikumi`
+  (or `cabal run shikumi-cli:exe:shikumi`). Evidence: the first acceptance run printed the
+  tasty help screen instead of the CLI help.
+- **Trace rendering embeds wall-clock durations, so the trace transcript is not byte-stable.**
+  `renderTree` prints e.g. `8ms`/`6ms`, which vary per run. The golden-style test therefore
+  asserts the deterministic fragments (span names `sentiment`/`llm-call`, token counts
+  `in=18 out=5`) and a write→read→render round-trip identity, rather than an exact transcript
+  match. Token counts and scores ARE deterministic (read from the stub response's fixed usage).
+- **`Task`'s existential cannot use record selectors.** A GADT record whose fields mention the
+  existential `i`/`o` cannot generate usable selectors, so `Task` is a positional existential
+  matched as `Task prog ds metric input responder opts`; handlers bring the hidden types into
+  scope by pattern-matching, never by a selector.
 
 
 ## Decision Log
@@ -142,6 +191,30 @@ Record every decision made while working on the plan.
   auto-generated `--help`, subcommands via `hsubparser`/`command`), and is registered in the
   environment (`mori registry show pcapriotti/optparse-applicative`).
   Date: 2026-06-07.
+- Decision: **Bundle each task's program + dataset + metric + optimizers + offline stub into
+  one existential `Task`, keyed by name**, and have subcommands take a single `--program NAME`
+  rather than separate `--dataset`/`--metric` flags. Rationale: the sketch's three independent
+  existential maps (programs/datasets/metrics) would force a runtime `Typeable` reunification
+  to prove a program, dataset, and metric share `i`/`o` before `evaluate` could be called.
+  Bundling makes a name resolve to one fully-typed unit, so dispatch is type-safe with no
+  reflection. The bundled example registers exactly one task, matching the plan's single-program
+  acceptance. Date: 2026-06-09.
+- Decision: **Drive offline runs with a deterministic in-process stub LM, not a committed
+  cache fixture.** EP-6 shipped only the in-memory cache (persistent backends deferred), so the
+  sketch's disk-cache offline story has no implementation. The stub (the framework's hermetic
+  pattern) makes `eval`/`optimize` deterministic with zero network, and the committed trace
+  fixture is itself generated offline via `record` (the stub), so even fixture regeneration
+  needs no API key. Date: 2026-06-09.
+- Decision: **Acceptance is HUnit transcript assertions over the four capabilities, not
+  `tasty-golden` files.** Rationale: avoids adding a dependency, and trace timings are
+  wall-clock (non-deterministic), so the robust check asserts the deterministic fragments plus
+  a store round-trip rather than an exact-byte golden. The `--otel` flag is accepted (the stack
+  builds and runs with it) but the live EP-7 OTel sink is not installed in the offline runs;
+  live export needs a collector and is out of scope for hermetic acceptance. Date: 2026-06-09.
+- Decision: **Reuse EP-8's `renderReportText` and EP-7's `renderTree` verbatim** rather than
+  writing the sketch's `renderReport`/`renderTraceTree`. Rationale: the siblings already ship
+  deterministic, tested renderers; reusing them avoids a second format to maintain and keeps
+  the CLI a thin driver. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -149,7 +222,24 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** The `shikumi-cli` package ships a `shikumi` executable with the
+four headline subcommands — `eval`, `trace`, `optimize`, `replay` — plus a `record` DX helper
+and a global `--store-dir`/`--otel`. All run offline against the bundled `sentiment` example
+with zero network: `eval` prints a Report (`score=0.5000`, `pass=2/4`), `trace` renders a
+program→llm-call span tree, `optimize` writes a demos-bearing compiled-program JSON, and
+`replay` reproduces the recorded output with `provider calls: 0`. `cabal test shikumi-cli-test`
+is green (5 hermetic tests) and `cabal test all` is green across every package. The
+library-of-builders shape held up exactly as designed: the bundled `Shikumi.Cli.Example` *is*
+the user's `main` (`cliMain exampleRegistry`), a handful of typed registrations.
+
+**Against the original purpose.** The end state the MasterPlan named is reached — a developer
+drives eval/trace/optimize/replay from a terminal over typed programs. The one honest gap vs.
+the sketch: offline determinism comes from an in-process stub LM rather than a persistent cache
+fixture (EP-6 deferred its persistent backends), and `--otel` is accepted but its live sink is
+not wired (needs a collector). Neither weakens the four behaviors; both are documented in the
+Decision Log and are clean future work. The CLI reuses the siblings' renderers/serializers
+verbatim, so it stays a thin, faithful driver over the framework rather than a second source of
+truth.
 
 
 ## Context and Orientation
