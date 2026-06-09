@@ -38,6 +38,7 @@ import Shikumi.Compile.Types (Compiler (..))
 import Shikumi.Program
   ( Program
       ( Compose,
+        Embed,
         Ensemble,
         FMap,
         MajorityVote,
@@ -86,3 +87,4 @@ install ctx
     go (Validate v p) = Validate v (go p)
     go (MajorityVote k sched p) = MajorityVote k sched (go p)
     go (Ensemble ps reduce) = Ensemble (map go ps) reduce
+    go (Embed f) = Embed f -- an agent node has no 'Predict' to rewrite; pass through

@@ -38,7 +38,8 @@ module Shikumi.Program
         RetryWhen,
         Validate,
         MajorityVote,
-        Ensemble
+        Ensemble,
+        Embed
       ),
     Params (..),
     Demo (..),
@@ -47,6 +48,7 @@ module Shikumi.Program
 
     -- * Construction & execution
     pipeline,
+    embed,
     runProgram,
     runProgramConc,
 
@@ -184,12 +186,30 @@ data Program i o where
   -- | Run several programs on the same input, collect their (homogeneous)
   -- results, and fold them with a total reducer.
   Ensemble :: [Program i r] -> ([r] -> o) -> Program i o
+  -- | An opaque effectful step embedded as a program node. The body is
+  -- constrained to /exactly/ 'runProgram'\'s effect row
+  -- (@LLM@ + @Error ShikumiError@) so an 'Embed' node runs under the ordinary
+  -- 'runProgram'/'runProgramConc' without widening integration point #4\'s
+  -- constraint. This is the constructor multi-step agents (ReAct,
+  -- @docs/plans/11-typed-tools-and-react-agents.md@) are built on: the agent
+  -- loop is one 'Embed' node, so the agent is a real, composable 'Program' that
+  -- is runnable, structurally inspectable ('ShapeEmbed'), and serializable
+  -- (it carries no 'Params', like 'FMap'). The body is a closure, so it is
+  -- opaque to the parameter traversal — exactly as 'FMap'\'s function is.
+  Embed :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
 
 -- | Sequence two programs, read left-to-right ("first @p@, then @q@"). Typechecks
 -- only when @p@'s output type equals @q@'s input type — an invalid pipeline is a
 -- compile error, which is the whole point.
 pipeline :: Program a b -> Program b c -> Program a c
 pipeline = Compose
+
+-- | Embed an opaque effectful step as a 'Program' node. The smart constructor for
+-- 'Embed': lift an @(i -> Eff es o)@ — runnable in 'runProgram'\'s effect row — into
+-- a @Program i o@. Used by ReAct (@docs/plans/11-typed-tools-and-react-agents.md@) to
+-- make a multi-step agent loop a first-class, composable program.
+embed :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
+embed = Embed
 
 -- ---------------------------------------------------------------------------
 -- Execution
@@ -223,6 +243,7 @@ runProgram (RetryWhen ok n p) i = retryWith runProgram ok n p i
 runProgram (Validate v p) i = runProgram p i >>= acceptOrReject v
 runProgram (MajorityVote k _sched p) i = modal <$> replicateM (max 1 k) (runProgram p i)
 runProgram (Ensemble ps reduce) i = reduce <$> traverse (\p -> runProgram p i) ps
+runProgram (Embed f) i = f i
 
 -- | The concurrent executor: identical observable semantics to 'runProgram', but
 -- 'Map' (bounded by its width), 'Parallel', 'MajorityVote', and 'Ensemble' run
@@ -246,6 +267,10 @@ runProgramConc (Validate v p) i = runProgramConc p i >>= acceptOrReject v
 runProgramConc (MajorityVote k _sched p) i =
   modal <$> mapConcurrently (const (runProgramConc p i)) [1 .. max 1 k]
 runProgramConc (Ensemble ps reduce) i = reduce <$> mapConcurrently (\p -> runProgramConc p i) ps
+-- The body requires only @(LLM, Error ShikumiError)@, a subset of this row, so it
+-- runs unchanged; an embedded agent that wants concurrency uses 'runProgramConc'
+-- internally via its own 'Concurrent' handler.
+runProgramConc (Embed f) i = f i
 
 -- | Interpret a single 'Predict' node: overlay its 'Params', render via EP-3's
 -- adapter, issue the 'LLM' call, parse back to a typed @o@. Shared by both
@@ -336,6 +361,9 @@ paramsTraversal h (RetryWhen ok n p) = RetryWhen ok n <$> paramsTraversal h p
 paramsTraversal h (Validate v p) = Validate v <$> paramsTraversal h p
 paramsTraversal h (MajorityVote k sched p) = MajorityVote k sched <$> paramsTraversal h p
 paramsTraversal h (Ensemble ps reduce) = Ensemble <$> traverse (paramsTraversal h) ps <*> pure reduce
+-- 'Embed' carries no 'Params' (its body is an opaque closure, like 'FMap'\'s
+-- function), so it is a traversal leaf — preserved untouched.
+paramsTraversal _ (Embed f) = pure (Embed f)
 
 -- | Read every node's 'Params', in traversal order.
 foldParams :: Program i o -> [Params]
@@ -383,6 +411,7 @@ mapParamsAt n f = fst . go 0
     go idx (Ensemble ps reduce) =
       let (ps', idx') = goList idx ps
        in (Ensemble ps' reduce, idx')
+    go idx (Embed body) = (Embed body, idx) -- leaf, no 'Params'
     -- Thread the running index left-to-right across a member list.
     goList :: forall x y. Int -> [Program x y] -> ([Program x y], Int)
     goList idx [] = ([], idx)
@@ -416,6 +445,8 @@ data ProgramShape
   | ShapeMajorityVote !Int !TempSchedule !ProgramShape
   | -- | an 'Ensemble' node; the reducer is opaque and omitted
     ShapeEnsemble ![ProgramShape]
+  | -- | an 'Embed' node; the embedded effectful body is opaque and omitted
+    ShapeEmbed
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON ProgramShape
@@ -445,6 +476,7 @@ programShape (RetryWhen _ n p) = ShapeRetryWhen n (programShape p)
 programShape (Validate _ p) = ShapeValidate (programShape p)
 programShape (MajorityVote k sched p) = ShapeMajorityVote k sched (programShape p)
 programShape (Ensemble ps _) = ShapeEnsemble (map programShape ps)
+programShape (Embed _) = ShapeEmbed
 
 -- | A stable, parameter-independent label for a 'Predict' node: its output-field
 -- names joined. (EP-3 exposes no @signatureName@; the field names are the stable
@@ -500,6 +532,7 @@ setProgramParams ps prog
     go qs (Ensemble ms reduce) =
       let (ms', qs') = goList qs ms
        in (Ensemble ms' reduce, qs')
+    go qs (Embed f) = (Embed f, qs) -- leaf, consumes no 'Params'
     goList :: forall x y. [Params] -> [Program x y] -> ([Program x y], [Params])
     goList qs [] = ([], qs)
     goList qs (m : ms) =

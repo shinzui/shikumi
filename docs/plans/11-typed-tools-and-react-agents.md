@@ -155,9 +155,31 @@ Record every decision made while working on the plan.
   #1 mandates the shared shikumi error type and totality at the program boundary; a single bad
   argument from the model must not crash a multi-step agent. Date: 2026-06-08.
 
-- Decision: ...
-  Rationale: ...
-  Date: ...
+- Decision: **EP-4 shipped no `Embed`/`liftEff` constructor**, despite this plan
+  (and the MasterPlan's integration point #4) expecting one. EP-11 therefore adds the
+  `Embed` constructor to core `Shikumi.Program` itself, wired through every required
+  function (`runProgram`, `runProgramConc`, `paramsTraversal`, `mapParamsAt`,
+  `programShape`/`ShapeEmbed`, `setProgramParams`) per EP-4's "a new constructor is a
+  compile error until all of them match it" rule. Rationale: `react` must be a real
+  `Program i o` node (Purpose; integration point #4 lists EP-11 as a consumer), and the
+  GADT constructor set is fixed in core — a downstream package cannot add one. Date: 2026-06-09.
+
+- Decision: **`Embed`'s body is constrained to exactly `runProgram`'s effect row
+  `(LLM :> es, Error ShikumiError :> es)` — NOT `IOE`.** Consequently `runProgram`
+  executes agent programs directly (no separate IOE runner), and integration point #4's
+  `runProgram :: (LLM, Error ShikumiError) :> es => …` signature is preserved byte-for-byte.
+  The tradeoff: tool bodies and the ReAct loop run in `(LLM, Error ShikumiError)` rather
+  than `IOE`. Tools are thus *effect-honest* — a tool may call sub-models (`LLM`) and
+  signal failure through the typed `Error ShikumiError` channel (caught as `ToolRunFailed`
+  via `catchError`), but cannot perform arbitrary `IO`. Rationale: the MasterPlan calls #4
+  "the single most important integration point"; widening `runProgram` to `IOE` (the only
+  way to support raw-`IO` `mkToolIO`) would force `IOE` onto every existing consumer
+  (EP-8 eval, EP-9 compile, EP-10 optimize all call `runProgram`/`runCompiled` at the
+  narrow row) and erase the effect ledger. Effect-honest tools are also philosophically
+  truer to shikumi than catching IO exceptions. The acceptance scenario (pure weather
+  tool + mock LM) needs no `IOE`, so nothing in this plan's acceptance is lost.
+  `mkToolIO :: (i -> IO o) -> Tool i o` is therefore **not shipped**; a raw-`IO` tool
+  variant + an `IOE`-carrying `Embed`/runner is deferred future work. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
