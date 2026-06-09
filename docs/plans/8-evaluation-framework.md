@@ -84,8 +84,10 @@ This section must always reflect the actual current state of the work.
       `normalizedStringSimilarity` (token-set Jaccard + normalized Levenshtein),
       `customMetric`, and the combinators `weightedMean`/`threshold`/`invert`; pure-metric
       tests pass (16 tests total). (2026-06-08)
-- [ ] M3: `Shikumi.Eval.Report` defines `Report`, `ExampleResult`, `FailurePolicy`; the
-      report aggregation (`mkReport`) is unit-tested with synthetic per-example results.
+- [x] M3: `Shikumi.Eval.Report` defines `Report`, `ExampleResult`, `FailureReason`,
+      `FailurePolicy`, `EvalConfig`/`defaultEvalConfig`, `UsageTotals` (Monoid), `mkReport`,
+      and the deterministic `renderReportText`; aggregation + render are unit-tested with
+      synthetic results (26 tests total). (2026-06-08)
 - [ ] M4: `Shikumi.Eval.Evaluate.evaluate` runs a program over a dataset with bounded
       parallelism and per-example error handling; an end-to-end test with a mock LM produces
       a `Report` with the expected aggregate score and per-example breakdown.

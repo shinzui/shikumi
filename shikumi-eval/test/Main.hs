@@ -5,6 +5,7 @@
 module Main (main) where
 
 import MetricSpec qualified
+import ReportSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import TypesSpec qualified
 
@@ -14,5 +15,6 @@ main =
     testGroup
       "shikumi-eval"
       [ TypesSpec.tests,
-        MetricSpec.tests
+        MetricSpec.tests,
+        ReportSpec.tests
       ]
