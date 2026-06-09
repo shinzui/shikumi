@@ -176,7 +176,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
-| 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | Not Started |
+| 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Not Started |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Not Started |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Not Started |
@@ -446,6 +446,26 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   still ships **no JSON-Schema validator** (out of scope); EP-3's decoding layer owns turning a
   syntactically-valid-but-shape-wrong body into a typed `ShikumiError`. The mapping functions
   `mapRequest` are now exported from both provider `Api` modules for testing.
+- **EP-6 partially delivered (2026-06-08) — hermetic core done, persistent backends deferred.**
+  The new `shikumi-cache` package ships the content-addressed cache key (**integration point #7**),
+  the `Cache` effect (`lookupCache`/`storeCache`), the in-memory STM backend, the `cachedLLM`
+  memoizer (re-interprets EP-1's `LLM` via `interpose`), and versioning. `cabal test shikumi-cache`
+  green (11 tests). Cross-plan facts:
+  (a) **Integration point #7 is now concrete and pinned.** `Shikumi.Cache.Key.cacheKey :: Model ->
+  Context -> Options -> CacheKey` produces a BLAKE3 256-bit hex digest over the canonical
+  sorted-key JSON with exactly the agreed field set; the golden-pinned key for the fixed test
+  request is `30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113`. **EP-7 imports
+  `Shikumi.Cache.Key` and reuses `cacheKey` verbatim** (no longer a copy) and must reproduce this
+  digest. The `responseFormat` slot reads the real `Options.responseFormat` (EP-2), `null` until
+  EP-3's `attachSchema` is wired.
+  (b) **`blake3` needs a `cabal.project` fix on aarch64-darwin**: `package blake3 { flags: -avx512
+  -avx2 -sse41 -sse2; ghc-options: -optc-DBLAKE3_USE_NEON=0 }` (its vendored SIMD C is broken on
+  ARM). Any plan adding a SIMD-C-vendoring fleet package should expect similar wrangling.
+  (c) **Deferred:** SQLite (M3/M4), Redis (M6), Postgres (M7) — all need a faithful baikai
+  `Response` JSON round-trip (baikai ships no `FromJSON` for `Response`; `Cost` is lossily
+  `Rational`→`Scientific`) plus heavy deps/live servers. None blocks EP-7. EP-6 remains **In
+  Progress** until they land. The second EP-6 progress line ("Postgres + Redis backends") and the
+  SQLite half of the first remain open.
 - **EP-5 delivered (2026-06-08).** The combinator/control-flow layer landed:
   `Shikumi.Program` gained seven GADT constructors (`Map Int`, `Parallel`, `Retry`,
   `RetryWhen`, `Validate`, `MajorityVote`, `Ensemble`) wired through `runProgram`,

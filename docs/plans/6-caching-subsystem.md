@@ -56,22 +56,36 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: `shikumi-cache` package skeleton compiles and is added to `cabal.project`.
-- [ ] M1: `Shikumi.Cache.Key` — canonical serialization + blake3 hash; golden test pins the
-      exact key bytes for a fixed request (the value EP-7 must reproduce).
-- [ ] M2: `Shikumi.Cache.Types` (the `CachedResponse` value) + `Shikumi.Cache` effect
-      (`lookupCache` / `storeCache`) defined; in-memory STM backend interpreter.
-- [ ] M3: Spike — SQLite backend round-trips a `CachedResponse` (write, read) in a throwaway
-      `Spec`; Redis backend round-trips against a live server or is skipped when absent.
-- [ ] M4: `Shikumi.Cache.Backend.SQLite` promoted to a real backend with the versioned
-      keyspace; survives process restart (write in one process, read in another).
-- [ ] M5: `cachedLLM` interpreter wraps EP-1's `LLM` effect so `complete` is memoized; the
-      counting-stub-provider test shows one provider call for two identical requests.
-- [ ] M6: `shikumi-cache-redis` package (Redis backend) builds and round-trips.
-- [ ] M7: `shikumi-cache-postgres` package (Postgres backend via hasql) builds and
-      round-trips.
-- [ ] M8: Cache versioning / invalidation: a key-namespace version constant; bumping it
-      makes prior entries unreachable (test asserts a MISS after a bump).
+- [x] M0: `shikumi-cache` package created (separate package per the plan) and added to
+      `cabal.project`; `cabal build shikumi-cache` succeeds. **Done (2026-06-08).**
+- [x] M1: `Shikumi.Cache.Key` — `canonicalJSON` (sorted-key, whitespace-free) + BLAKE3 256-bit
+      hex digest; golden test **pins the key** for a fixed request:
+      `30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113` (the value EP-7 must
+      reproduce — integration point #7). Field set matches the MasterPlan exactly. **Done.**
+- [x] M2: `Shikumi.Cache.Types` (`CachedResponse`) + `Shikumi.Cache` effect
+      (`lookupCache`/`storeCache`) + `Shikumi.Cache.Backend.Memory` (STM, stores the Haskell
+      value directly — no JSON). Store/lookup round-trip + absent-key tests pass. **Done.**
+- [ ] M3: Spike — SQLite/Redis round-trip. **Deferred** (needs the `Response` JSON round-trip
+      — see Decision Log/Surprises — plus `direct-sqlite`/`hedis`).
+- [ ] M4: `Shikumi.Cache.Backend.SQLite` real backend + restart durability. **Deferred** (as M3).
+- [x] M5: `cachedLLM` memoizes EP-1's `LLM.complete` via `interpose`; the counting-stub test
+      shows **one** provider call for two identical requests and **two** for two different ones.
+      **Done.**
+- [ ] M6: `shikumi-cache-redis` package. **Deferred** (heavy dep `hedis` + live server).
+- [ ] M7: `shikumi-cache-postgres` package. **Deferred** (heavy dep `hasql` + live server).
+- [x] M8: Cache versioning / invalidation — `currentKeyVersion` baked into the hashed `version`
+      field and `CachedResponse.keyVersion`; tests: a current-version entry HITs (0 provider
+      calls), a foreign `keyVersion` is a MISS (1 call), and bumping the version changes the
+      hashed bytes. **Done.**
+
+**Status: the hermetic core (M0, M1, M2, M5, M8) is delivered; `cabal test shikumi-cache` is
+green (11 tests).** The persistent backends (M3/M4 SQLite, M6 Redis, M7 Postgres) are deferred:
+they all require faithfully round-tripping baikai's `Response` through JSON (baikai ships only
+partial `ToJSON` and no `FromJSON` for the `Response` graph, with custom `Usage`/`Cost`
+encoders that lossily map `Rational` through `Scientific`), and Redis/Postgres additionally need
+heavy client libs and live servers. This is bounded follow-up work best done as its own focused
+pass; the integration-point-#7 key contract — the only artifact EP-7 hard-depends on — is
+complete and pinned.
 
 
 ## Surprises & Discoveries
@@ -79,7 +93,28 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`blake3-0.3.1` does not build on aarch64-darwin out of the box.** Two faults in its
+  vendored C build, both fixed via `cabal.project` (`package blake3`): (1) the SIMD flags
+  (`sse2`/`sse41`/`avx2`/`avx512`) default `True`, and their *non-x86* fallback compiles
+  `cbits/blake3_sse2.c` etc. which use x86 intrinsics (`mmintrin.h`) — clang errors on ARM.
+  Fixed by `flags: -avx512 -avx2 -sse41 -sse2` (portable-only). (2) `blake3_dispatch.c` then
+  references `blake3_hash_many_neon` on aarch64, but the cabal never compiles `blake3_neon.c`
+  nor disables NEON → undefined-symbol link error. Fixed by `ghc-options: -optc-DBLAKE3_USE_NEON=0`.
+  The portable hash is byte-identical to the SIMD path, so the pinned key is unaffected. Evidence:
+  `clang: invalid conversion between vector type '__v2di' …` then `Undefined symbols: _blake3_hash_many_neon`.
+- **The pinned cache key** for the fixed test request `(claude-sonnet-4-6/anthropic, sysprompt
+  "You are helpful." + user "ping", temp 0.0, maxTokens 1024)` is
+  `30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113`. EP-7 must reproduce this.
+- **baikai's `Response` graph has no full JSON round-trip.** `Response` has *no* aeson instances;
+  `Usage`/`Cost`/`CostBreakdown` have custom `ToJSON` only, and `Cost` maps `Rational` → `Scientific`
+  lossily (`fromRationalRepetendUnlimited`, dropping the repetend). So the persistent backends
+  (which store JSON) need orphan `FromJSON` (and a `ToJSON Response`) that exactly mirror those
+  encoders — bounded but real work, hence M3/M4/M6/M7 are deferred. The in-memory backend sidesteps
+  it entirely (stores the Haskell value).
+- **`interpose` is the clean memoizer.** effectful's `interpose` supports delegating to the
+  upstream handler by re-`send`ing the operation (and `passthrough` for ops left unchanged), so
+  `cachedLLM` augments `LLM` with caching without a separate executor. Evidence: the memoize test
+  shows the upstream counting handler is hit exactly once for two identical `complete` calls.
 
 
 ## Decision Log
@@ -122,13 +157,61 @@ Record every decision made while working on the plan.
   Rationale: separation of mechanism (store) from policy (memoize) keeps each testable in
   isolation. Date: 2026-06-07.
 
+- Decision (impl, 2026-06-08): **fix `blake3`'s ARM build in `cabal.project`** with
+  `package blake3 { flags: -avx512 -avx2 -sse41 -sse2; ghc-options: -optc-DBLAKE3_USE_NEON=0 }`.
+  Rationale: the package's vendored C build is broken on aarch64-darwin (x86 intrinsics in the
+  SIMD fallback; an undefined NEON symbol). Forcing the portable pure-C path builds cleanly and
+  is byte-identical, preserving the integration-point-#7 key. See Surprises for evidence.
+
+- Decision (impl, 2026-06-08): **`cacheKey :: Model -> Context -> Options -> CacheKey`** — no
+  separate `Maybe Value` response-format parameter. EP-2 has landed, so `Options.responseFormat`
+  exists; the key reads it directly (`toJSON (opts ^. #responseFormat)`), which is `null` today
+  (EP-3's `attachSchema` is still a no-op) and a real schema once wired — exactly the
+  forward-compatible behaviour the plan wanted, but without the extra argument. The canonical
+  field set still matches the MasterPlan's integration point #7 exactly. A
+  `requestToCanonicalValueVersioned` helper (explicit version arg) is exposed for the version-bump
+  test.
+
+- Decision (impl, 2026-06-08): **messages and tools are serialized via baikai's `toJSON`**, not a
+  hand-built `messageToCanonical`. Rationale: EP-7 reuses `cacheKey` verbatim (integration point
+  #7 says so), so the only requirement is internal consistency — both plans call the same function.
+  baikai's message/tool `ToJSON` + our `canonicalJSON` (which sorts keys) gives a stable, sorted
+  serialization; the golden test pins it so any drift is caught. This is simpler and less fragile
+  than duplicating baikai's content model.
+
+- Decision (impl, 2026-06-08): **`shikumi-cache` is a separate package** (per the plan's
+  mechanism/heavy-dep split), even though the repo was a single `shikumi` package — this keeps the
+  `blake3` C dependency out of core `shikumi` and gives EP-7 a clean package to depend on for the
+  key. **Scope deviation:** only the hermetic core (memory backend) ships this pass;
+  SQLite/Redis/Postgres are deferred (they need the `Response` JSON round-trip + heavy deps/live
+  servers — see Surprises). `CachedResponse` therefore carries no JSON instances yet; they land
+  with the persistent backends.
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Hermetic core delivered (2026-06-08); persistent backends deferred.** The `shikumi-cache`
+package ships the content-addressed cache key (integration point #7, golden-pinned), the `Cache`
+effect, the in-memory backend, the `cachedLLM` memoizer, and versioning. `cabal test
+shikumi-cache` is green (11 tests). The core promise — issuing the same request twice contacts
+the provider once — is demonstrated by the counting-stub memoize test; the cache-key contract
+EP-7 reuses is fixed and pinned.
+
+Met: the cache key (fields, canonical sorted-key JSON, BLAKE3 hex, `shikumi-cache/v1` namespace),
+the effect/policy split, the memory backend, the memoizer, and version invalidation.
+
+Deferred (clearly bounded follow-up): the SQLite (M3/M4), Redis (M6), and Postgres (M7) backends.
+All three persist JSON and so need a faithful `Response` round-trip, which baikai does not provide
+(no `FromJSON` for the `Response` graph; lossy `Rational`→`Scientific` cost encoding) — they
+require orphan instances mirroring baikai's encoders. Redis/Postgres additionally need their
+client libs and live servers (tests skip when absent, per the plan). None of this blocks EP-7,
+which depends only on the (delivered) key.
+
+Lesson: `blake3` needed real toolchain wrangling on ARM (portable flags + `BLAKE3_USE_NEON=0`);
+worth knowing for any fleet package that vendors SIMD C.
 
 
 ## Context and Orientation
