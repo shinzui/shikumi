@@ -5,6 +5,7 @@
 -- API key.
 module Main (main) where
 
+import BootstrapSpec qualified
 import LabeledFewShotSpec qualified
 import OptimizeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -15,5 +16,6 @@ main =
     testGroup
       "shikumi-optimize"
       [ OptimizeSpec.tests,
-        LabeledFewShotSpec.tests
+        LabeledFewShotSpec.tests,
+        BootstrapSpec.tests
       ]

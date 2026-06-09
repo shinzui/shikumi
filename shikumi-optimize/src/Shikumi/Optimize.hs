@@ -18,6 +18,7 @@ module Shikumi.Optimize
     module Shikumi.Optimize.Types,
     module Shikumi.Optimize.Search,
     module Shikumi.Optimize.LabeledFewShot,
+    module Shikumi.Optimize.Bootstrap,
   )
 where
 
@@ -28,6 +29,7 @@ import Shikumi.Compile.Types (CompiledProgram)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
+import Shikumi.Optimize.Bootstrap
 import Shikumi.Optimize.LabeledFewShot
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Types
