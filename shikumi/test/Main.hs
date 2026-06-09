@@ -3,6 +3,7 @@
 module Main (main) where
 
 import AdapterSpec qualified
+import CombinatorSpec qualified
 import EndToEndSpec qualified
 import ErrorSpec qualified
 import LLMSpec qualified
@@ -32,5 +33,6 @@ main =
         SerializeSpec.tests,
         ModuleSpec.tests,
         ProgramAcceptanceSpec.tests,
+        CombinatorSpec.tests,
         LiveSpec.tests
       ]

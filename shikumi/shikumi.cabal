@@ -31,6 +31,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Adapter
+    Shikumi.Combinator
     Shikumi.Error
     Shikumi.LLM
     Shikumi.LLM.Budget
@@ -66,6 +67,7 @@ test-suite shikumi-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     AdapterSpec
+    CombinatorSpec
     EndToEndSpec
     ErrorSpec
     Fixtures
@@ -78,6 +80,7 @@ test-suite shikumi-test
     ResilienceSpec
     SchemaSpec
     SerializeSpec
+    Shikumi.LLM.Mock
     SignatureSpec
     StubProvider
 

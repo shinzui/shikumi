@@ -28,14 +28,27 @@
 -- exposes @render@/@parse@/@adapterFor@ rather than a single @runSignature@).
 module Shikumi.Program
   ( -- * The representation
-    Program (Predict, Compose, FMap),
+    Program
+      ( Predict,
+        Compose,
+        FMap,
+        Map,
+        Parallel,
+        Retry,
+        RetryWhen,
+        Validate,
+        MajorityVote,
+        Ensemble
+      ),
     Params (..),
     Demo (..),
     emptyParams,
+    TempSchedule (..),
 
     -- * Construction & execution
     pipeline,
     runProgram,
+    runProgramConc,
 
     -- * Parameter interface (the optimizer/compiler contract)
     paramsTraversal,
@@ -53,6 +66,7 @@ module Shikumi.Program
 where
 
 import Baikai (Model, _Model)
+import Control.Monad (replicateM)
 import Data.Aeson (FromJSON, ToJSON, Value)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
@@ -60,10 +74,12 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
-import Effectful.Error.Static (Error, throwError)
+import Effectful.Concurrent (Concurrent)
+import Effectful.Concurrent.Async (concurrently, mapConcurrently, pooledMapConcurrentlyN)
+import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModel)
 import Shikumi.Schema.Types (fieldName)
@@ -108,6 +124,25 @@ instance FromJSON Demo
 emptyParams :: Params
 emptyParams = Params Nothing []
 
+-- | How 'MajorityVote' varies sampling temperature across its @K@ samples.
+-- 'TempFixed' lists an explicit temperature per sample (cycled if shorter than
+-- @K@); 'TempSpread base spread' centres on @base@ and fans out by @spread@.
+--
+-- The schedule is stored on the node and participates in its structural shape,
+-- but is not yet threaded onto the wire request: 'runProgram' dispatches every
+-- 'Predict' against the neutral model with adapter-fixed options (the same
+-- "real provider/model routing is unwired" limitation EP-4 records). Wiring the
+-- per-sample temperature awaits a real-routing mechanism; until then the schedule
+-- is carried, serialized, and inspectable but inert at run time.
+data TempSchedule
+  = TempFixed ![Double]
+  | TempSpread !Double !Double
+  deriving stock (Eq, Show, Generic)
+
+instance ToJSON TempSchedule
+
+instance FromJSON TempSchedule
+
 -- ---------------------------------------------------------------------------
 -- The GADT
 -- ---------------------------------------------------------------------------
@@ -127,6 +162,28 @@ data Program i o where
     Program i o
   Compose :: Program a b -> Program b c -> Program a c
   FMap :: (o -> o') -> Program i o -> Program i o'
+  -- | Apply a program to every element of a list. The 'Int' is the
+  -- concurrency width honoured by 'runProgramConc' (1 = sequential);
+  -- 'runProgram' always runs sequentially regardless of the width.
+  Map :: Int -> Program a b -> Program [a] [b]
+  -- | Run two programs on the /same/ input and pair their outputs.
+  Parallel :: Program i a -> Program i b -> Program i (a, b)
+  -- | Re-run a program up to @n@ total attempts on any 'ShikumiError'.
+  Retry :: Int -> Program i o -> Program i o
+  -- | Like 'Retry' but only retries errors satisfying the predicate; a
+  -- non-matching error propagates after a single attempt.
+  RetryWhen :: (ShikumiError -> Bool) -> Int -> Program i o -> Program i o
+  -- | Run a program, then check its output: 'Right' accepts (optionally
+  -- normalizing), 'Left' rejects with a reason surfaced as a
+  -- 'ValidationFailure'.
+  Validate :: (o -> Either Text o) -> Program i o -> Program i o
+  -- | Sample a program @K@ times and return the modal (most-frequent under
+  -- 'Eq', ties broken by first-seen) output. The 'TempSchedule' is carried
+  -- but not yet applied to the wire (see 'TempSchedule').
+  MajorityVote :: (Eq o) => Int -> TempSchedule -> Program i o -> Program i o
+  -- | Run several programs on the same input, collect their (homogeneous)
+  -- results, and fold them with a total reducer.
+  Ensemble :: [Program i r] -> ([r] -> o) -> Program i o
 
 -- | Sequence two programs, read left-to-right ("first @p@, then @q@"). Typechecks
 -- only when @p@'s output type equals @q@'s input type — an invalid pipeline is a
@@ -156,14 +213,92 @@ runProgram ::
   Program i o ->
   i ->
   Eff es o
-runProgram (Predict sig ps) i = do
+runProgram (Predict sig ps) i = runPredict sig ps i
+runProgram (Compose f g) i = runProgram f i >>= runProgram g
+runProgram (FMap k p) i = k <$> runProgram p i
+runProgram (Map _ p) xs = traverse (runProgram p) xs
+runProgram (Parallel pa pb) i = (,) <$> runProgram pa i <*> runProgram pb i
+runProgram (Retry n p) i = retryWith runProgram (const True) n p i
+runProgram (RetryWhen ok n p) i = retryWith runProgram ok n p i
+runProgram (Validate v p) i = runProgram p i >>= acceptOrReject v
+runProgram (MajorityVote k _sched p) i = modal <$> replicateM (max 1 k) (runProgram p i)
+runProgram (Ensemble ps reduce) i = reduce <$> traverse (\p -> runProgram p i) ps
+
+-- | The concurrent executor: identical observable semantics to 'runProgram', but
+-- 'Map' (bounded by its width), 'Parallel', 'MajorityVote', and 'Ensemble' run
+-- their independent sub-programs concurrently via @effectful@'s 'Concurrent'
+-- effect. Offered as an additive opt-in so 'runProgram' can keep the exact
+-- @(LLM, Error ShikumiError)@ constraint that is the MasterPlan's integration
+-- point #4 — adding 'Concurrent' there would force it onto every consumer.
+runProgramConc ::
+  (LLM :> es, Error ShikumiError :> es, Concurrent :> es) =>
+  Program i o ->
+  i ->
+  Eff es o
+runProgramConc (Predict sig ps) i = runPredict sig ps i
+runProgramConc (Compose f g) i = runProgramConc f i >>= runProgramConc g
+runProgramConc (FMap k p) i = k <$> runProgramConc p i
+runProgramConc (Map w p) xs = pooledMapConcurrentlyN (max 1 w) (runProgramConc p) xs
+runProgramConc (Parallel pa pb) i = concurrently (runProgramConc pa i) (runProgramConc pb i)
+runProgramConc (Retry n p) i = retryWith runProgramConc (const True) n p i
+runProgramConc (RetryWhen ok n p) i = retryWith runProgramConc ok n p i
+runProgramConc (Validate v p) i = runProgramConc p i >>= acceptOrReject v
+runProgramConc (MajorityVote k _sched p) i =
+  modal <$> mapConcurrently (const (runProgramConc p i)) [1 .. max 1 k]
+runProgramConc (Ensemble ps reduce) i = reduce <$> mapConcurrently (\p -> runProgramConc p i) ps
+
+-- | Interpret a single 'Predict' node: overlay its 'Params', render via EP-3's
+-- adapter, issue the 'LLM' call, parse back to a typed @o@. Shared by both
+-- executors so the wire behaviour is defined once.
+runPredict ::
+  (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
+  (LLM :> es, Error ShikumiError :> es) =>
+  Signature i o ->
+  Params ->
+  i ->
+  Eff es o
+runPredict sig ps i = do
   sig' <- effectiveSignature sig ps
   let adapter = adapterFor defaultModel
       (ctx, opts) = render adapter sig' i
   resp <- complete defaultModel ctx opts
   either throwError pure (parse adapter sig' resp)
-runProgram (Compose f g) i = runProgram f i >>= runProgram g
-runProgram (FMap k p) i = k <$> runProgram p i
+
+-- | Apply a validator to a program's output, surfacing a rejection as a
+-- 'ValidationFailure'.
+acceptOrReject ::
+  (Error ShikumiError :> es) => (o -> Either Text o) -> o -> Eff es o
+acceptOrReject v o = either (throwError . ValidationFailure) pure (v o)
+
+-- | The retry loop, parameterized over the executor so 'runProgram' and
+-- 'runProgramConc' share it. Runs @p@ on @i@; on a matching error with attempts
+-- remaining, re-runs; otherwise surfaces the last error.
+retryWith ::
+  (Error ShikumiError :> es) =>
+  (Program i o -> i -> Eff es o) ->
+  (ShikumiError -> Bool) ->
+  Int ->
+  Program i o ->
+  i ->
+  Eff es o
+retryWith run ok n p i = go (max 1 n)
+  where
+    go left =
+      run p i `catchError` \_cs e ->
+        if ok e && left > 1 then go (left - 1) else throwError e
+
+-- | The modal value of a non-empty list: most frequent under 'Eq', ties broken
+-- by first appearance. Tallies in first-seen order, then keeps the first entry
+-- whose count is strictly greatest.
+modal :: (Eq o) => [o] -> o
+modal = pickBest . foldl' tally []
+  where
+    tally acc x = case break ((== x) . fst) acc of
+      (pre, (y, c) : post) -> pre ++ (y, c + 1) : post
+      (pre, []) -> pre ++ [(x, 1 :: Int)]
+    pickBest [] = error "Shikumi.Program.modal: empty sample list"
+    pickBest (z : zs) =
+      fst (foldl' (\best cur -> if snd cur > snd best then cur else best) z zs)
 
 -- | Overlay a node's 'Params' onto its signature: substitute the instruction
 -- override (when present) and decode the JSON demos into the signature's typed
@@ -194,6 +329,13 @@ paramsTraversal :: (Applicative f) => (Params -> f Params) -> Program i o -> f (
 paramsTraversal h (Predict sig ps) = Predict sig <$> h ps
 paramsTraversal h (Compose f g) = Compose <$> paramsTraversal h f <*> paramsTraversal h g
 paramsTraversal h (FMap k p) = FMap k <$> paramsTraversal h p
+paramsTraversal h (Map w p) = Map w <$> paramsTraversal h p
+paramsTraversal h (Parallel pa pb) = Parallel <$> paramsTraversal h pa <*> paramsTraversal h pb
+paramsTraversal h (Retry n p) = Retry n <$> paramsTraversal h p
+paramsTraversal h (RetryWhen ok n p) = RetryWhen ok n <$> paramsTraversal h p
+paramsTraversal h (Validate v p) = Validate v <$> paramsTraversal h p
+paramsTraversal h (MajorityVote k sched p) = MajorityVote k sched <$> paramsTraversal h p
+paramsTraversal h (Ensemble ps reduce) = Ensemble <$> traverse (paramsTraversal h) ps <*> pure reduce
 
 -- | Read every node's 'Params', in traversal order.
 foldParams :: Program i o -> [Params]
@@ -219,6 +361,35 @@ mapParamsAt n f = fst . go 0
     go idx (FMap k p) =
       let (p', idx') = go idx p
        in (FMap k p', idx')
+    go idx (Map w p) =
+      let (p', idx') = go idx p
+       in (Map w p', idx')
+    go idx (Parallel a b) =
+      let (a', idx') = go idx a
+          (b', idx'') = go idx' b
+       in (Parallel a' b', idx'')
+    go idx (Retry m p) =
+      let (p', idx') = go idx p
+       in (Retry m p', idx')
+    go idx (RetryWhen ok m p) =
+      let (p', idx') = go idx p
+       in (RetryWhen ok m p', idx')
+    go idx (Validate v p) =
+      let (p', idx') = go idx p
+       in (Validate v p', idx')
+    go idx (MajorityVote k sched p) =
+      let (p', idx') = go idx p
+       in (MajorityVote k sched p', idx')
+    go idx (Ensemble ps reduce) =
+      let (ps', idx') = goList idx ps
+       in (Ensemble ps' reduce, idx')
+    -- Thread the running index left-to-right across a member list.
+    goList :: forall x y. Int -> [Program x y] -> ([Program x y], Int)
+    goList idx [] = ([], idx)
+    goList idx (q : qs) =
+      let (q', idx') = go idx q
+          (qs', idx'') = goList idx' qs
+       in (q' : qs', idx'')
 
 -- ---------------------------------------------------------------------------
 -- Serialization (parameter state only, never closures)
@@ -234,6 +405,17 @@ data ProgramShape
   | ShapeCompose !ProgramShape !ProgramShape
   | -- | an 'FMap' node; the function is opaque and omitted
     ShapeFMap !ProgramShape
+  | -- | a 'Map' node, carrying its concurrency width
+    ShapeMap !Int !ProgramShape
+  | ShapeParallel !ProgramShape !ProgramShape
+  | ShapeRetry !Int !ProgramShape
+  | -- | a 'RetryWhen' node; the predicate is opaque and omitted
+    ShapeRetryWhen !Int !ProgramShape
+  | -- | a 'Validate' node; the validator is opaque and omitted
+    ShapeValidate !ProgramShape
+  | ShapeMajorityVote !Int !TempSchedule !ProgramShape
+  | -- | an 'Ensemble' node; the reducer is opaque and omitted
+    ShapeEnsemble ![ProgramShape]
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON ProgramShape
@@ -256,6 +438,13 @@ programShape :: Program i o -> ProgramShape
 programShape (Predict sig _) = ShapePredict (sigLabel sig)
 programShape (Compose a b) = ShapeCompose (programShape a) (programShape b)
 programShape (FMap _ p) = ShapeFMap (programShape p)
+programShape (Map w p) = ShapeMap w (programShape p)
+programShape (Parallel a b) = ShapeParallel (programShape a) (programShape b)
+programShape (Retry n p) = ShapeRetry n (programShape p)
+programShape (RetryWhen _ n p) = ShapeRetryWhen n (programShape p)
+programShape (Validate _ p) = ShapeValidate (programShape p)
+programShape (MajorityVote k sched p) = ShapeMajorityVote k sched (programShape p)
+programShape (Ensemble ps _) = ShapeEnsemble (map programShape ps)
 
 -- | A stable, parameter-independent label for a 'Predict' node: its output-field
 -- names joined. (EP-3 exposes no @signatureName@; the field names are the stable
@@ -289,3 +478,31 @@ setProgramParams ps prog
     go qs (FMap k p) =
       let (p', qs') = go qs p
        in (FMap k p', qs')
+    go qs (Map w p) =
+      let (p', qs') = go qs p
+       in (Map w p', qs')
+    go qs (Parallel a b) =
+      let (a', qs') = go qs a
+          (b', qs'') = go qs' b
+       in (Parallel a' b', qs'')
+    go qs (Retry m p) =
+      let (p', qs') = go qs p
+       in (Retry m p', qs')
+    go qs (RetryWhen ok m p) =
+      let (p', qs') = go qs p
+       in (RetryWhen ok m p', qs')
+    go qs (Validate v p) =
+      let (p', qs') = go qs p
+       in (Validate v p', qs')
+    go qs (MajorityVote k sched p) =
+      let (p', qs') = go qs p
+       in (MajorityVote k sched p', qs')
+    go qs (Ensemble ms reduce) =
+      let (ms', qs') = goList qs ms
+       in (Ensemble ms' reduce, qs')
+    goList :: forall x y. [Params] -> [Program x y] -> ([Program x y], [Params])
+    goList qs [] = ([], qs)
+    goList qs (m : ms) =
+      let (m', qs') = go qs m
+          (ms', qs'') = goList qs' ms
+       in (m' : ms', qs'')
