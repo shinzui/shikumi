@@ -16,6 +16,7 @@ where
 
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Shikumi.Adapter (ToPrompt)
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Schema.Types (Field (..), field)
 
@@ -44,6 +45,8 @@ instance ToSchema Article
 
 instance FromModel Article
 
+instance ToPrompt Article
+
 data Summary = Summary
   { headline :: Field "A one-line summary" Text,
     bullets :: Field "Three to five key points" [Text],
@@ -56,6 +59,8 @@ data Summary = Summary
 instance ToSchema Summary
 
 instance FromModel Summary
+
+instance ToPrompt Summary
 
 -- | A domain rule: a summary must have three to five bullet points.
 instance Validatable Summary where

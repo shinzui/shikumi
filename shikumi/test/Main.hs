@@ -2,11 +2,14 @@
 -- 'defaultMain'; the live spec (M5) is gated at runtime on @SHIKUMI_LIVE@.
 module Main (main) where
 
+import AdapterSpec qualified
+import EndToEndSpec qualified
 import ErrorSpec qualified
 import LLMSpec qualified
 import LiveSpec qualified
 import ResilienceSpec qualified
 import SchemaSpec qualified
+import SignatureSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -16,6 +19,9 @@ main =
       "shikumi"
       [ ErrorSpec.tests,
         SchemaSpec.tests,
+        SignatureSpec.tests,
+        AdapterSpec.tests,
+        EndToEndSpec.tests,
         LLMSpec.tests,
         ResilienceSpec.tests,
         LiveSpec.tests

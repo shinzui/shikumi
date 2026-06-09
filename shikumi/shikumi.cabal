@@ -30,12 +30,14 @@ library
   import:          common-options
   hs-source-dirs:  src
   exposed-modules:
+    Shikumi.Adapter
     Shikumi.Error
     Shikumi.LLM
     Shikumi.LLM.Budget
     Shikumi.Prelude
     Shikumi.Schema
     Shikumi.Schema.Types
+    Shikumi.Signature
 
   build-depends:
     , aeson
@@ -61,12 +63,15 @@ test-suite shikumi-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    AdapterSpec
+    EndToEndSpec
     ErrorSpec
     Fixtures
     LiveSpec
     LLMSpec
     ResilienceSpec
     SchemaSpec
+    SignatureSpec
     StubProvider
 
   build-depends:
