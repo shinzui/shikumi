@@ -176,7 +176,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
-| 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
+| 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | Complete |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Complete |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Complete |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Complete |
@@ -340,8 +340,11 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
 - [x] EP-4: `predict` and `chainOfThought`
 - [x] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
-- [ ] EP-6: Cache effect with memory + SQLite backends
-- [ ] EP-6: Postgres + Redis backends
+- [x] EP-6: Cache effect with memory + SQLite backends (SQLite ships a real cross-OS-process
+  restart-durability test)
+- [x] EP-6: Postgres + Redis backends (`shikumi-cache-postgres` via `ephemeral-pg`;
+  `shikumi-cache-redis` over a UNIX-socket server; dev servers wired into the nix flake via
+  `just services` / process-compose)
 - [x] EP-7: Hierarchical trace tree (over the `LLM` effect via `interpose`, not baikai's
   `TraceSink`) + nested OTel spans (`shikumi-trace-otel`)
 - [x] EP-7: Deterministic replay from stored traces
@@ -677,6 +680,31 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   cache fixture**, because EP-6's persistent backends remain deferred. This is the framework's
   standard hermetic pattern (mirroring `Shikumi.Trace.Demo`); even the committed trace fixture
   is generated offline via `record`, so nothing in the CLI ever needs an API key.
+- **EP-6 completed (2026-06-09) — the initiative is now fully complete.** The deferred persistent
+  cache backends landed, closing the last open work stream. SQLite ships in core `shikumi-cache`
+  (`Shikumi.Cache.Backend.SQLite`, `direct-sqlite`) with a **real cross-OS-process** restart-
+  durability test (the suite re-execs itself in write/read phases against one temp file). Redis
+  (`shikumi-cache-redis`, `hedis`) and Postgres (`shikumi-cache-postgres`, `hasql`) ship as separate
+  packages; the Redis test runs against a UNIX-socket server and skips cleanly when absent, while
+  the Postgres test is hermetic via **`ephemeral-pg`** (spins up its own throwaway cluster — no
+  external server). `cabal test all` is green across all packages. Cross-plan facts:
+  (a) **The `Response` JSON round-trip that drove the deferral was already solved by EP-7.** Rather
+  than have `shikumi-cache` depend on `shikumi-trace` (wrong direction) or duplicate the orphan
+  instances (overlapping-instance failure for anyone importing both), the orphans were **moved down**
+  to `Shikumi.Cache.ResponseJSON`; `CachedResponse` now derives `ToJSON`/`FromJSON`, and EP-7's
+  `Shikumi.Trace.ResponseJSON` is now a one-line re-export shim. Integration point #7's key is
+  unchanged (still the pinned `30b2…8113`); this only added the *value* round-trip.
+  (b) **The user asked to wire the dev servers into the nix flake.** `nix/haskell.nix` now provides
+  `postgresql`/`redis`/`process-compose`/`openssl` and socket-scoped env; `process-compose.yaml` +
+  a `Justfile` give `just services`, starting Postgres + Redis over **UNIX sockets** (Postgres with
+  `listen_addresses=''`) so neither conflicts with another server on a TCP port. `cabal.project`
+  gained `package postgresql-libpq { flags: +use-pkg-config }` (the pinned nixpkgs ships no
+  `pg_config` binary; libpq.pc additionally `Requires: libssl`, hence `openssl`).
+  (c) **Toolchain/API notes for future SQL work:** `hasql` 1.10 runs a session via
+  `Hasql.Connection.use` (connection-first), not `Hasql.Session.run`, and uses
+  `preparable`/`unpreparable` statement constructors; `hedis` 0.16 `del` takes a `NonEmpty` and
+  selects a socket via `connectAddr = ConnectAddrUnixSocket`. SQL is written with GHC 9.12's
+  `MultilineStrings` extension.
   (c) **The "CLI over typed values" problem is solved by a library-of-builders + a bundled
   example `main`** (`cliMain exampleRegistry`), with a name-keyed `Registry` of existential
   `Task`s (each bundling program+dataset+metric+optimizers at one `i`/`o`, avoiding `Typeable`
@@ -766,20 +794,21 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-**Status at completion (2026-06-09).** Eleven of twelve child plans are Complete; EP-6
-(caching) is intentionally **In Progress** — its hermetic core (content-addressed key, the
-`Cache` effect, the in-memory STM backend, `cachedLLM`) shipped, while the persistent
-backends (SQLite/Redis/Postgres) remain deferred. Both upstream baikai contributions
-(`baikai-effectful`, EP-2's native structured output) shipped. `cabal test all` is green
-across all packages — 7 shikumi packages (`shikumi`, `shikumi-cache`, `shikumi-compile`,
-`shikumi-eval`, `shikumi-optimize`, `shikumi-tools`, `shikumi-cli`) plus `shikumi-trace`/
-`shikumi-trace-otel` and the baikai siblings.
+**Status at completion (2026-06-09).** **All twelve child plans are Complete.** EP-6 (caching) —
+the last open stream — landed its persistent backends: SQLite in core `shikumi-cache`, plus the
+`shikumi-cache-redis` and `shikumi-cache-postgres` packages, all four backends round-tripping.
+Both upstream baikai contributions (`baikai-effectful`, EP-2's native structured output) shipped.
+`cabal test all` is green across all packages — 9 shikumi packages (`shikumi`, `shikumi-cache`,
+`shikumi-cache-redis`, `shikumi-cache-postgres`, `shikumi-compile`, `shikumi-eval`,
+`shikumi-optimize`, `shikumi-tools`, `shikumi-cli`) plus `shikumi-trace`/`shikumi-trace-otel` and
+the baikai siblings. Dev-time Postgres/Redis are wired into the nix flake (`just services` /
+process-compose, UNIX sockets); the Postgres test suite is hermetic via `ephemeral-pg`.
 
 **Against the vision.** The seven "done" behaviors are realized: (1) typed `Program i o`
 built from `predict`/`chainOfThought`/`react` and the full combinator set, with invalid
 pipelines failing to compile; (2) schema-driven, total structured I/O with an enumerated
-`ShikumiError`; (3) production runtime — retries/backoff/rate-limit/budget and an in-memory
-cache (persistent backends pending in EP-6); (4) first-class evaluation (`Dataset`/`Metric`/
+`ShikumiError`; (3) production runtime — retries/backoff/rate-limit/budget and the full
+cache (memory + SQLite + Redis + Postgres, all four backends round-tripping); (4) first-class evaluation (`Dataset`/`Metric`/
 `evaluate`/`Report`); (5) compilation (zero/few-shot, CoT, RAG) and optimization (demo
 selection, bootstrap, instruction search, ensemble) demonstrably lifting a held-out score
 0.0→1.0; (6) typed `Tool i o` + a ReAct agent that is a first-class `Program`; (7) a `shikumi`
@@ -801,8 +830,7 @@ landed; the living-document protocol (each plan recording its deviations, the Ma
 Surprises reconciling them) absorbed the drift without a single integration getting stuck.
 
 **Known gaps / future work (all documented in the child plans, none blocking the vision).**
-EP-6's persistent cache backends (SQLite/Redis/Postgres — the `Response` JSON round-trip
-EP-7 already built unblocks them); real per-call provider/model routing (`runProgram`
+Real per-call provider/model routing (`runProgram`
 dispatches against the neutral `_Model`, so the native schema path, per-sample temperature, and
 multi-sample eval remain inert until an ambient-model mechanism lands); raw-`IO` ReAct tools +
 an `IOE`-carrying agent runner; the CLI's live OpenTelemetry export sink; and richer optimizer
@@ -834,3 +862,16 @@ internals (per-node bootstrap recovery, a non-static instruction proposer).
   in the Decision Log: the decisive reason is that `IOE` in a consumer row erases the effect
   ledger (and `MonadIO m` at `m = Eff es` forces `IOE :> es`), not mere ergonomics; the
   dynamic `Baikai` effect keeps `IOE` confined to the bottom interpreter.
+- 2026-06-09: **Completed EP-6**, the last open child plan, by implementing its deferred
+  persistent cache backends — SQLite (core `shikumi-cache`, with a real cross-OS-process
+  restart-durability test) and the `shikumi-cache-redis` / `shikumi-cache-postgres` packages
+  (Postgres tested hermetically via `ephemeral-pg`). At the user's direction, dev-time
+  Postgres + Redis are wired into the nix flake (`just services` / process-compose) over UNIX
+  sockets so they never conflict with another server on a TCP port. The `Response` JSON
+  round-trip that originally drove the deferral (and that EP-7 had already built) was relocated
+  from `Shikumi.Trace.ResponseJSON` down to `Shikumi.Cache.ResponseJSON` so the lowest layer that
+  needs it owns it, with EP-7's module re-exporting to avoid duplicate orphan instances. Marked
+  EP-6 **Complete** in the Exec-Plan Registry, checked off both EP-6 Progress lines, and updated
+  Surprises & Discoveries and Outcomes & Retrospective (the initiative is now fully complete —
+  all twelve child plans Complete, `cabal test all` green). No other plans or integration points
+  changed (integration point #7's pinned key is unchanged; this added only the value round-trip).

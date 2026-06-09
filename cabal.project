@@ -22,6 +22,8 @@
 packages:
   shikumi
   shikumi-cache
+  shikumi-cache-redis
+  shikumi-cache-postgres
   shikumi-cli
   shikumi-compile
   shikumi-eval
@@ -33,6 +35,11 @@ packages:
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-effectful
+  -- ephemeral-pg (shinzui/ephemeral-pg) backs the shikumi-cache-postgres test:
+  -- it spins up a throwaway PostgreSQL instance per run (no external server).
+  -- Local path because it co-develops in the fleet and is not on Hackage in the
+  -- revision shikumi builds against (mirrors the baikai siblings above).
+  /Users/shinzui/Keikaku/bokuno/ephemeral-pg-project/ephemeral-pg
 
 -- blake3 (EP-6 cache key) vendors SIMD C/asm. Its non-x86 fallback for the SSE
 -- flags still compiles x86 intrinsics (mmintrin.h), which fails under clang on
@@ -45,6 +52,13 @@ package blake3
   -- aarch64, so blake3_dispatch.c references an undefined blake3_hash_many_neon.
   -- Define BLAKE3_USE_NEON=0 so dispatch uses the portable path on ARM.
   ghc-options: -optc-DBLAKE3_USE_NEON=0
+
+-- hasql (EP-6 Postgres backend) depends on postgresql-libpq, which by default
+-- shells out to `pg_config` to find libpq. The pinned nixpkgs ships libpq's
+-- pkg-config file (libpq.pc) but no standalone `pg_config` binary, so build it
+-- against pkg-config instead.
+package postgresql-libpq
+  flags: +use-pkg-config
 
 test-show-details: direct
 tests: True

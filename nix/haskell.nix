@@ -28,10 +28,50 @@
           [
             # project dev tools beyond the mkDevShell defaults:
             pkgs.just
+            # EP-6 persistent cache backends. `postgresql` provides libpq +
+            # pg_config (so `hasql` builds) and initdb/postgres/pg_ctl (so the
+            # `ephemeral-pg`-backed Postgres test and the process-compose
+            # postgres can run). `redis` provides redis-server/redis-cli for
+            # the Redis backend's local server. `process-compose` starts both
+            # over UNIX sockets (see process-compose.yaml) so neither binds a
+            # TCP port and conflicts with another running server.
+            pkgs.postgresql
+            # libpq's pkg-config file (libpq.pc) requires libssl/libcrypto;
+            # `postgresql-libpq-pkgconfig` resolves them via pkg-config, so
+            # openssl's .pc files must be on PKG_CONFIG_PATH at build time.
+            pkgs.openssl
+            pkgs.redis
+            pkgs.process-compose
           ]
           ++ config.haskellProject.extraDevPackages;
         shellHook = ''
           ${config.pre-commit.installationScript}
+
+          # ── EP-6 local services (UNIX sockets only; no TCP) ─────────────────
+          # The dev-time Postgres/Redis started by `just services` (process-compose)
+          # listen on UNIX sockets under ./.dev, so they never collide with another
+          # Postgres/Redis already bound to a TCP port on this machine. The Postgres
+          # *test suite* uses `ephemeral-pg`, which spins up its own throwaway
+          # server; these dirs are only for the manual `just services` / Redis path.
+          export SHIKUMI_DEV_DIR="$PWD/.dev"
+
+          # Postgres: socket-only. PGHOST is a directory (the socket dir), which is
+          # how libpq selects a UNIX socket instead of TCP.
+          export PGHOST="$SHIKUMI_DEV_DIR/pg"
+          export PGDATA="$PGHOST/data"
+          export PGLOG="$PGHOST/postgres.log"
+          export PGDATABASE=shikumi
+
+          # Redis: socket-only (the test reads REDIS_SOCKET; absent server → skip).
+          export REDIS_SOCKET="$SHIKUMI_DEV_DIR/redis/redis.sock"
+          export REDIS_LOG="$SHIKUMI_DEV_DIR/redis/redis.log"
+
+          mkdir -p "$PGHOST" "$SHIKUMI_DEV_DIR/redis"
+
+          if [ ! -d "$PGDATA" ]; then
+            echo "shikumi: initializing local PostgreSQL cluster (socket-only)…"
+            initdb --auth=trust --no-locale --encoding=UTF8 -D "$PGDATA" >/dev/null
+          fi
         '';
       };
     in

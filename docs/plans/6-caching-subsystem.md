@@ -65,27 +65,43 @@ This section must always reflect the actual current state of the work.
 - [x] M2: `Shikumi.Cache.Types` (`CachedResponse`) + `Shikumi.Cache` effect
       (`lookupCache`/`storeCache`) + `Shikumi.Cache.Backend.Memory` (STM, stores the Haskell
       value directly — no JSON). Store/lookup round-trip + absent-key tests pass. **Done.**
-- [ ] M3: Spike — SQLite/Redis round-trip. **Deferred** (needs the `Response` JSON round-trip
-      — see Decision Log/Surprises — plus `direct-sqlite`/`hedis`).
-- [ ] M4: `Shikumi.Cache.Backend.SQLite` real backend + restart durability. **Deferred** (as M3).
+- [x] M3+M4: `Shikumi.Cache.Backend.SQLite` real backend + restart durability. **Done
+      (2026-06-09).** The throwaway M3 spike was folded into M4 — the de-risking it existed for
+      (does the binding work? does a `Response` survive a JSON round-trip?) is moot now that
+      `direct-sqlite` is a thin bundled binding and EP-7 already proved the `Response` round-trip
+      (see Surprises/Decision Log). The backend (`openSQLiteCache`/`closeSQLiteCache`/
+      `withSQLiteCache`/`runCacheSQLite`, `CREATE TABLE IF NOT EXISTS` + `INSERT OR REPLACE`,
+      decode-failure → MISS) ships in core `shikumi-cache`; tests: a store/lookup round-trip and a
+      **real cross-OS-process restart** test (the suite re-execs itself in a write phase then a
+      read phase against the same temp file via `SHIKUMI_SQLITE_PHASE`/`SHIKUMI_SQLITE_FILE`).
 - [x] M5: `cachedLLM` memoizes EP-1's `LLM.complete` via `interpose`; the counting-stub test
       shows **one** provider call for two identical requests and **two** for two different ones.
       **Done.**
-- [ ] M6: `shikumi-cache-redis` package. **Deferred** (heavy dep `hedis` + live server).
-- [ ] M7: `shikumi-cache-postgres` package. **Deferred** (heavy dep `hasql` + live server).
+- [x] M6: `shikumi-cache-redis` package. **Done (2026-06-09).** `Shikumi.Cache.Backend.Redis`
+      (`openRedisCache`/`openRedisCacheWithTTL`/`closeRedisCache`/`runCacheRedis`, key
+      `shikumi:cache:<hex>`, `SETEX` with a 7-day default TTL, absent/decode-fail → MISS). The
+      test connects to a UNIX-socket Redis (`REDIS_SOCKET`, started by `just services` /
+      process-compose) and verifies MISS→HIT via `cachedLLM` + counting stub; it **skips cleanly**
+      (exit 0) when no server is reachable.
+- [x] M7: `shikumi-cache-postgres` package. **Done (2026-06-09).** `Shikumi.Cache.Backend.Postgres`
+      (`openPostgresCache`/`closePostgresCache`/`runCachePostgres`, `jsonb` value column, upsert
+      `ON CONFLICT … DO UPDATE`). The test uses **`ephemeral-pg`** to spin up a throwaway PostgreSQL
+      (its own `initdb`/`postgres` over a private socket), so it is hermetic and needs no external
+      server; it verifies the same MISS→HIT behaviour and skips cleanly if the cluster cannot start.
 - [x] M8: Cache versioning / invalidation — `currentKeyVersion` baked into the hashed `version`
       field and `CachedResponse.keyVersion`; tests: a current-version entry HITs (0 provider
       calls), a foreign `keyVersion` is a MISS (1 call), and bumping the version changes the
       hashed bytes. **Done.**
 
-**Status: the hermetic core (M0, M1, M2, M5, M8) is delivered; `cabal test shikumi-cache` is
-green (11 tests).** The persistent backends (M3/M4 SQLite, M6 Redis, M7 Postgres) are deferred:
-they all require faithfully round-tripping baikai's `Response` through JSON (baikai ships only
-partial `ToJSON` and no `FromJSON` for the `Response` graph, with custom `Usage`/`Cost`
-encoders that lossily map `Rational` through `Scientific`), and Redis/Postgres additionally need
-heavy client libs and live servers. This is bounded follow-up work best done as its own focused
-pass; the integration-point-#7 key contract — the only artifact EP-7 hard-depends on — is
-complete and pinned.
+**Status: COMPLETE (2026-06-09).** All nine milestones (M0–M8) are delivered; the four backends
+(memory, SQLite, Redis, Postgres) all round-trip. `cabal test all` is green across the project,
+including `shikumi-cache-test` (memory + SQLite round-trip + real cross-process restart + memoize
++ versioning), `shikumi-cache-redis-test` (against a socket Redis), and
+`shikumi-cache-postgres-test` (against an `ephemeral-pg` instance). The `Response` JSON round-trip
+that originally drove M3/M4/M6/M7's deferral now lives once in `Shikumi.Cache.ResponseJSON`
+(EP-7's `Shikumi.Trace.ResponseJSON` re-exports it). Local dev servers are wired into the nix
+flake: `just services` (process-compose) starts Postgres + Redis over UNIX sockets (Postgres with
+`listen_addresses=''` so it never conflicts with another server on a TCP port).
 
 
 ## Surprises & Discoveries
@@ -115,6 +131,29 @@ implementation. Provide concise evidence.
   upstream handler by re-`send`ing the operation (and `passthrough` for ops left unchanged), so
   `cachedLLM` augments `LLM` with caching without a separate executor. Evidence: the memoize test
   shows the upstream counting handler is hit exactly once for two identical `complete` calls.
+- **The `Response` round-trip blocker was already solved by EP-7 (2026-06-09).** When the
+  persistent backends were resumed, the round-trip that drove their deferral existed — EP-7 had
+  shipped orphan `ToJSON`/`FromJSON` for the `Response` graph in `Shikumi.Trace.ResponseJSON`.
+  Rather than depend on `shikumi-trace` (wrong direction — trace already depends on cache) or
+  duplicate the orphans (which would make any module importing both packages fail with overlapping
+  instances), the orphans were **moved down** into `Shikumi.Cache.ResponseJSON`; `CachedResponse`
+  now derives `ToJSON`/`FromJSON`, and `Shikumi.Trace.ResponseJSON` became a one-line shim that
+  re-exports them. Single source of truth, no duplication.
+- **`hasql` 1.10 moved the session runner.** `Hasql.Session` no longer exports `run`; a `Session`
+  is executed against a bare connection with `Hasql.Connection.use :: Connection -> Session a ->
+  IO (Either SessionError a)` (note the argument order is `Connection`-first, the reverse of the
+  old `run`). The `Statement` constructor is also gone in favour of the `preparable` /
+  `unpreparable` smart constructors.
+- **`postgresql-libpq` needs pkg-config + openssl on this toolchain.** The pinned nixpkgs ships no
+  standalone `pg_config` binary, so `cabal.project` sets `package postgresql-libpq { flags:
+  +use-pkg-config }` and the solver picks `postgresql-libpq-pkgconfig`. That variant resolves
+  `libpq.pc`, which in turn `Requires: libssl libcrypto` — so the dev shell must also provide
+  `openssl` (its `.pc` files) or the build fails with "Package 'libssl', required by 'libpq', not
+  found". Evidence: the first `cabal build all` failed exactly there until `pkgs.openssl` was added
+  to `nix/haskell.nix`.
+- **`hedis` 0.16 `del` takes a `NonEmpty`.** `Database.Redis.del :: NonEmpty ByteString -> Redis
+  …` (not `[ByteString]`); the connection address is `connectAddr = ConnectAddrUnixSocket path`
+  (the older `connectPort`/`UnixSocket` fields were replaced by the `ConnectAddr` sum).
 
 
 ## Decision Log
@@ -187,31 +226,66 @@ Record every decision made while working on the plan.
   servers — see Surprises). `CachedResponse` therefore carries no JSON instances yet; they land
   with the persistent backends.
 
+- Decision (impl, 2026-06-09): **fold the M3 spike into M4.** The spike existed to de-risk the
+  SQLite/Redis bindings and the `Response` round-trip *before* committing the design. By the time
+  the persistent backends were resumed both risks were retired (EP-7 shipped the `Response`
+  round-trip; `direct-sqlite` is a thin bundled binding), so a throwaway spike test suite would add
+  nothing. M4's real backend ships directly, with the round-trip and a real cross-process restart
+  test in the main `shikumi-cache-test`. Rationale: the spike's purpose no longer exists; a real
+  test is strictly more valuable than a throwaway one.
+
+- Decision (impl, 2026-06-09): **move the `Response` JSON orphans down to
+  `Shikumi.Cache.ResponseJSON`** and have EP-7's `Shikumi.Trace.ResponseJSON` re-export them, so
+  `CachedResponse` can derive `ToJSON`/`FromJSON` without `shikumi-cache` depending on
+  `shikumi-trace` and without two packages defining overlapping orphan instances. Rationale: cache
+  is lower in the stack than trace (trace already imports `Shikumi.Cache.Key`); the orphans belong
+  at the lowest layer that needs them. See Surprises.
+
+- Decision (impl, 2026-06-09): **the Postgres test uses `ephemeral-pg`, not the process-compose
+  server.** Per the user's direction, the test spins up its own throwaway PostgreSQL via
+  `EphemeralPg.start`/`stop` (hermetic, parallel-safe, no port/socket coordination), while the
+  process-compose Postgres/Redis (started by `just services`) are the *dev-time* servers for manual
+  exploration and the Redis test. Both Postgres paths use UNIX sockets; process-compose's runs with
+  `listen_addresses=''` so it never conflicts with another Postgres bound to a TCP port.
+
+- Decision (impl, 2026-06-09): **wire the dev servers into the nix flake.** `nix/haskell.nix` adds
+  `postgresql`, `redis`, `process-compose`, and `openssl` to the dev shell and exports
+  socket-scoped `PGHOST`/`PGDATA`/`REDIS_SOCKET` env (initialising the PG cluster on first entry);
+  `process-compose.yaml` + a `Justfile` provide `just services`. `cabal.project` sets `package
+  postgresql-libpq { flags: +use-pkg-config }` (no `pg_config` binary in this nixpkgs) and adds
+  `direct-sqlite` (core), the two new packages, and `ephemeral-pg` (local path) as packages.
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-**Hermetic core delivered (2026-06-08); persistent backends deferred.** The `shikumi-cache`
-package ships the content-addressed cache key (integration point #7, golden-pinned), the `Cache`
-effect, the in-memory backend, the `cachedLLM` memoizer, and versioning. `cabal test
-shikumi-cache` is green (11 tests). The core promise — issuing the same request twice contacts
-the provider once — is demonstrated by the counting-stub memoize test; the cache-key contract
-EP-7 reuses is fixed and pinned.
+**COMPLETE (2026-06-09).** The hermetic core landed first (2026-06-08); the persistent backends
+followed (2026-06-09). The `shikumi-cache` package ships the content-addressed cache key
+(integration point #7, golden-pinned), the `Cache` effect, the in-memory backend, the SQLite
+backend, the `cachedLLM` memoizer, versioning, and the `Response` JSON round-trip
+(`Shikumi.Cache.ResponseJSON`); `shikumi-cache-redis` and `shikumi-cache-postgres` add the
+server-backed stores. All four backends round-trip a `CachedResponse`; `cabal test all` is green.
 
-Met: the cache key (fields, canonical sorted-key JSON, BLAKE3 hex, `shikumi-cache/v1` namespace),
-the effect/policy split, the memory backend, the memoizer, and version invalidation.
+Met (everything the plan specified): the cache key (fields, canonical sorted-key JSON, BLAKE3 hex,
+`shikumi-cache/v1` namespace); the effect/policy split; **all four backends** — memory (M2), SQLite
+(M3/M4, with a real cross-OS-process restart-durability test), Redis (M6, socket server, graceful
+skip), Postgres (M7, hermetic via `ephemeral-pg`); the `cachedLLM` memoizer (M5); and version
+invalidation (M8). The headline promise — same request twice contacts the provider once — is shown
+for every backend (counting-stub MISS→HIT). Durable-across-restart is shown for SQLite by a real
+subprocess test, and cross-connection persistence for Redis/Postgres.
 
-Deferred (clearly bounded follow-up): the SQLite (M3/M4), Redis (M6), and Postgres (M7) backends.
-All three persist JSON and so need a faithful `Response` round-trip, which baikai does not provide
-(no `FromJSON` for the `Response` graph; lossy `Rational`→`Scientific` cost encoding) — they
-require orphan instances mirroring baikai's encoders. Redis/Postgres additionally need their
-client libs and live servers (tests skip when absent, per the plan). None of this blocks EP-7,
-which depends only on the (delivered) key.
+Beyond the plan: local dev servers are wired into the nix flake (`just services` starts
+Postgres + Redis over UNIX sockets via process-compose; Postgres uses `listen_addresses=''` so it
+cannot collide with another server on a TCP port), per the user's direction.
 
-Lesson: `blake3` needed real toolchain wrangling on ARM (portable flags + `BLAKE3_USE_NEON=0`);
-worth knowing for any fleet package that vendors SIMD C.
+Lessons: (a) `blake3` needed ARM toolchain wrangling (portable flags + `BLAKE3_USE_NEON=0`).
+(b) `postgresql-libpq` on this nixpkgs needs `+use-pkg-config` *and* `openssl` on the pkg-config
+path (libpq.pc `Requires: libssl`). (c) `hasql` 1.10 runs a session via `Hasql.Connection.use`
+(connection-first), not `Hasql.Session.run`, and builds statements with `preparable`/`unpreparable`.
+(d) the `Response` round-trip that drove the original deferral was already solved by EP-7; the fix
+was to relocate those orphans to the lowest layer (cache) rather than duplicate them.
 
 
 ## Context and Orientation

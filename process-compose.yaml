@@ -1,0 +1,63 @@
+# Local dev services for shikumi's EP-6 persistent cache backends.
+#
+# Both services listen on UNIX sockets only (no TCP), so they never collide
+# with another Postgres/Redis already bound to a port on this machine. The
+# socket paths come from the dev-shell environment (see nix/haskell.nix):
+#   Postgres → $PGHOST           (a directory; libpq selects the socket from it)
+#   Redis    → $REDIS_SOCKET     (a .sock file path)
+#
+# Start with `just services` (or `process-compose up`). Stop with Ctrl-C or
+# `just services-down`. The Postgres *test suite* does NOT use this server — it
+# uses `ephemeral-pg`, which spins up its own throwaway instance. This server is
+# for manual exploration and for the Redis backend's test (which connects to
+# $REDIS_SOCKET and skips cleanly when no server is reachable).
+version: "0.5"
+
+log_level: info
+log_location: ./.dev/process-compose.log
+
+processes:
+  postgres:
+    # Socket-only: --unix_socket_directories=$PGHOST and listen_addresses=''
+    # (empty) disables all TCP listeners. `pg_ctl start -w` blocks until ready.
+    command: |
+      pg_ctl start -w -D "$PGDATA" -l "$PGLOG" \
+        -o "--unix_socket_directories=$PGHOST" \
+        -o "-c listen_addresses=''"
+    is_daemon: true
+    shutdown:
+      command: pg_ctl stop -m fast -D "$PGDATA"
+    readiness_probe:
+      exec:
+        command: pg_isready -h "$PGHOST" -d "$PGDATABASE"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 4
+      failure_threshold: 10
+    availability:
+      restart: on_failure
+
+  # Create the dev database once Postgres is ready (idempotent).
+  createdb:
+    command: |
+      createdb -h "$PGHOST" "$PGDATABASE" 2>/dev/null || true
+    depends_on:
+      postgres:
+        condition: process_healthy
+
+  redis:
+    # Socket-only: --port 0 disables the TCP listener; --unixsocket binds the
+    # UNIX socket the Redis backend test connects to.
+    command: |
+      redis-server --port 0 \
+        --unixsocket "$REDIS_SOCKET" --unixsocketperm 700 \
+        --logfile "$REDIS_LOG" --daemonize no --save ""
+    readiness_probe:
+      exec:
+        command: redis-cli -s "$REDIS_SOCKET" ping
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 4
+      failure_threshold: 10
+    availability:
+      restart: on_failure

@@ -1,13 +1,15 @@
 cabal-version: 3.4
-name:          shikumi-cache
+name:          shikumi-cache-postgres
 version:       0.1.0.0
-synopsis:      Content-addressed response caching for shikumi (EP-6)
+synopsis:      Postgres-backed shikumi cache (EP-6)
 description:
-  The caching subsystem for shikumi: a content-addressed cache key (a BLAKE3
-  digest over a canonical request serialization — the contract EP-7's replay
-  reproduces), a provider-neutral @Cache@ effect, an in-memory backend, and the
-  @cachedLLM@ memoizing interpreter that wraps EP-1's @LLM@ effect so identical
-  requests contact the provider once.
+  A PostgreSQL backend for shikumi's @Cache@ effect (EP-6), in a separate
+  package so the @hasql@ client (and libpq) is only pulled in when used. Entries
+  live in a @shikumi_cache(key text primary key, value jsonb, stored_at
+  timestamptz)@ table, upserted on conflict; the value is the JSON of a
+  @CachedResponse@ (the @Response@ round-trip comes from @shikumi-cache@'s
+  @Shikumi.Cache.ResponseJSON@). The test uses @ephemeral-pg@ to spin up a
+  throwaway server, so it needs no external database.
 
 license:       BSD-3-Clause
 author:        Nadeem Bitar
@@ -32,56 +34,32 @@ common common-options
 library
   import:          common-options
   hs-source-dirs:  src
-  exposed-modules:
-    Shikumi.Cache
-    Shikumi.Cache.Backend.Memory
-    Shikumi.Cache.Backend.SQLite
-    Shikumi.Cache.Key
-    Shikumi.Cache.ResponseJSON
-    Shikumi.Cache.Types
-
+  exposed-modules: Shikumi.Cache.Backend.Postgres
   build-depends:
     , aeson
-    , baikai
     , base           >=4.20 && <5
-    , blake3
-    , bytestring
-    , containers
-    , direct-sqlite
     , effectful
-    , generic-lens
-    , lens           ^>=5.3
-    , scientific
-    , shikumi
-    , stm
+    , hasql
+    , shikumi-cache
     , text           ^>=2.1
-    , time
-    , vector
 
-test-suite shikumi-cache-test
+test-suite shikumi-cache-postgres-test
   import:         common-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
-    , aeson
     , baikai
     , base
-    , bytestring
-    , containers
-    , directory
     , effectful
-    , filepath
+    , ephemeral-pg
     , generic-lens
     , lens
-    , process
     , shikumi
     , shikumi-cache
-    , stm
+    , shikumi-cache-postgres
     , tasty
     , tasty-hunit
-    , temporary
     , text
-    , time
     , vector

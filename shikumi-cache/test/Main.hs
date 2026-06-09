@@ -1,8 +1,15 @@
--- | EP-6 acceptance (hermetic core): the content-addressed cache key (integration
--- point #7, golden-pinned), the in-memory backend round-trip, the @cachedLLM@
--- memoizer (the headline one-provider-call behaviour) via a counting stub, and
--- versioning/invalidation. The persistent backends (SQLite/Redis/Postgres) are
--- separate milestones — see the plan.
+-- | EP-6 acceptance: the content-addressed cache key (integration point #7,
+-- golden-pinned), the in-memory backend round-trip, the SQLite backend
+-- round-trip and cross-process restart durability, the @cachedLLM@ memoizer (the
+-- headline one-provider-call behaviour) via a counting stub, and
+-- versioning/invalidation. The server-backed Redis/Postgres backends are tested
+-- in their own packages (@shikumi-cache-redis@/@shikumi-cache-postgres@).
+--
+-- The SQLite restart test re-executes this binary as a subprocess in a "write"
+-- and a "read" phase against the same temp file (selected by the
+-- @SHIKUMI_SQLITE_PHASE@ / @SHIKUMI_SQLITE_FILE@ env vars), proving the entry
+-- survives on disk across OS processes — not merely across handles in one
+-- process.
 module Main (main) where
 
 import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options, _Response)
@@ -24,8 +31,14 @@ import Shikumi.Cache
     storeCache,
   )
 import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
+import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned)
 import Shikumi.LLM (LLM (..), complete)
+import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
+import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
+import System.Process (CreateProcess (env), proc, readCreateProcessWithExitCode)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -68,16 +81,54 @@ runCountingLLM ref resp = interpret $ \_ -> \case
 -- Tests
 -- ---------------------------------------------------------------------------
 
+-- | The fixed key/entry the SQLite restart test writes and reads back. Both the
+-- write and read subprocess phases derive them identically from the fixtures.
+restartKey :: CacheKey
+restartKey = cacheKey fixModel fixCtx fixOpts
+
+restartEntry :: CachedResponse
+restartEntry = CachedResponse stubResponse someTime currentKeyVersion
+
 main :: IO ()
-main =
-  defaultMain $
-    testGroup
-      "shikumi-cache"
-      [ keyTests,
-        memoryTests,
-        memoizeTests,
-        versioningTests
-      ]
+main = do
+  -- The SQLite restart test re-executes this binary with SHIKUMI_SQLITE_PHASE
+  -- set, so a "write" then a "read" run hit the same on-disk file as distinct
+  -- OS processes. These short-circuit before tasty runs.
+  phase <- lookupEnv "SHIKUMI_SQLITE_PHASE"
+  case phase of
+    Just "write" -> sqliteWritePhase
+    Just "read" -> sqliteReadPhase
+    _ ->
+      defaultMain $
+        testGroup
+          "shikumi-cache"
+          [ keyTests,
+            memoryTests,
+            sqliteTests,
+            memoizeTests,
+            versioningTests
+          ]
+
+-- | Subprocess phase: store the fixed entry into the SQLite file named by
+-- @SHIKUMI_SQLITE_FILE@, then exit. Nothing lingers in this process's memory.
+sqliteWritePhase :: IO ()
+sqliteWritePhase = do
+  file <- requireEnv "SHIKUMI_SQLITE_FILE"
+  withSQLiteCache file $ \c ->
+    runEff . runCacheSQLite c $ storeCache restartKey restartEntry
+  exitSuccess
+
+-- | Subprocess phase: open the same file fresh and read the entry back; exit 0
+-- iff it decodes to exactly the written entry.
+sqliteReadPhase :: IO ()
+sqliteReadPhase = do
+  file <- requireEnv "SHIKUMI_SQLITE_FILE"
+  got <- withSQLiteCache file $ \c -> runEff . runCacheSQLite c $ lookupCache restartKey
+  if got == Just restartEntry then exitSuccess else exitFailure
+
+requireEnv :: String -> IO String
+requireEnv name =
+  lookupEnv name >>= maybe (error ("missing env var: " <> name)) pure
 
 keyTests :: TestTree
 keyTests =
@@ -112,6 +163,37 @@ memoryTests =
         tv <- newMemoryCache
         got <- runEff . runCacheMemory tv $ lookupCache (CacheKey "deadbeef")
         got @?= Nothing
+    ]
+
+sqliteTests :: TestTree
+sqliteTests =
+  testGroup
+    "sqlite"
+    [ testCase "store-then-lookup round-trips a CachedResponse" $
+        withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
+          let file = dir </> "cache.db"
+          got <-
+            withSQLiteCache file $ \c ->
+              runEff . runCacheSQLite c $ (storeCache restartKey restartEntry >> lookupCache restartKey)
+          got @?= Just restartEntry,
+      testCase "an absent key returns Nothing" $
+        withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
+          let file = dir </> "cache.db"
+          got <- withSQLiteCache file $ \c -> runEff . runCacheSQLite c $ lookupCache (CacheKey "deadbeef")
+          got @?= Nothing,
+      testCase "restart: an entry written by one OS process is read by another from disk" $
+        withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
+          let file = dir </> "restart.db"
+          exe <- getExecutablePath
+          baseEnv <- getEnvironment
+          let runPhase ph =
+                readCreateProcessWithExitCode
+                  (proc exe []) {env = Just (baseEnv ++ [("SHIKUMI_SQLITE_PHASE", ph), ("SHIKUMI_SQLITE_FILE", file)])}
+                  ""
+          (wc, _, werr) <- runPhase "write"
+          assertBool ("write phase failed: " <> werr) (wc == ExitSuccess)
+          (rc, _, rerr) <- runPhase "read"
+          assertBool ("read phase did not find the on-disk entry: " <> rerr) (rc == ExitSuccess)
     ]
 
 memoizeTests :: TestTree

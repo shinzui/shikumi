@@ -1,13 +1,14 @@
 cabal-version: 3.4
-name:          shikumi-cache
+name:          shikumi-cache-redis
 version:       0.1.0.0
-synopsis:      Content-addressed response caching for shikumi (EP-6)
+synopsis:      Redis-backed shikumi cache (EP-6)
 description:
-  The caching subsystem for shikumi: a content-addressed cache key (a BLAKE3
-  digest over a canonical request serialization — the contract EP-7's replay
-  reproduces), a provider-neutral @Cache@ effect, an in-memory backend, and the
-  @cachedLLM@ memoizing interpreter that wraps EP-1's @LLM@ effect so identical
-  requests contact the provider once.
+  A Redis backend for shikumi's @Cache@ effect (EP-6), kept in a separate
+  package so the heavy @hedis@ client and a running Redis server are only
+  pulled in when actually used. Entries are stored under the string key
+  @shikumi:cache:\<hex\>@ with a configurable TTL; the value is the UTF-8 JSON of
+  a @CachedResponse@ (the @Response@ round-trip comes from @shikumi-cache@'s
+  @Shikumi.Cache.ResponseJSON@).
 
 license:       BSD-3-Clause
 author:        Nadeem Bitar
@@ -25,63 +26,40 @@ common common-options
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
-    MultilineStrings
     OverloadedLabels
     OverloadedStrings
 
 library
   import:          common-options
   hs-source-dirs:  src
-  exposed-modules:
-    Shikumi.Cache
-    Shikumi.Cache.Backend.Memory
-    Shikumi.Cache.Backend.SQLite
-    Shikumi.Cache.Key
-    Shikumi.Cache.ResponseJSON
-    Shikumi.Cache.Types
-
+  exposed-modules: Shikumi.Cache.Backend.Redis
   build-depends:
     , aeson
-    , baikai
     , base           >=4.20 && <5
-    , blake3
     , bytestring
-    , containers
-    , direct-sqlite
     , effectful
-    , generic-lens
-    , lens           ^>=5.3
-    , scientific
-    , shikumi
-    , stm
+    , hedis
+    , shikumi-cache
     , text           ^>=2.1
-    , time
-    , vector
 
-test-suite shikumi-cache-test
+test-suite shikumi-cache-redis-test
   import:         common-options
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
-    , aeson
     , baikai
     , base
     , bytestring
-    , containers
-    , directory
     , effectful
-    , filepath
     , generic-lens
+    , hedis
     , lens
-    , process
     , shikumi
     , shikumi-cache
-    , stm
+    , shikumi-cache-redis
     , tasty
     , tasty-hunit
-    , temporary
     , text
-    , time
     , vector
