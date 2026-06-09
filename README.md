@@ -143,9 +143,9 @@ is still legible. The resilience interpreter knows which of these are *transient
 
 ## Motivating examples
 
-> The snippets below assume the **full V0.1–V0.5 vision** of the master plan is available.
-> See **[Implementation status](#implementation-status)** for what is built today versus
-> planned. Anything marked 🔭 is the designed surface, not yet shipped.
+> The snippets below reflect the **shipped** surface. The only items not yet built are the
+> *persistent* cache backends (the in-memory cache ships; SQLite/Postgres/Redis are planned)
+> and the CLI's *live* OpenTelemetry export — see **[Implementation status](#implementation-status)**.
 
 ### 1. Chain-of-thought is just a derived program
 
@@ -213,64 +213,104 @@ baikai's native `response_format` (OpenAI) / `output_config` (Anthropic), so the
 `[[ ## field ## ]]` prompt format that's parsed the same way. The program code is identical;
 only the wire differs.
 
-### 5. 🔭 Evaluate against a dataset with a typed metric
+### 5. Evaluate against a dataset with a typed metric
 
 ```haskell
-report <- evaluate classify dataset accuracyMetric
-print (score report)          -- 0.0 .. 1.0
-print (latencyP95 report)     -- typed latency / token / cost breakdown
-print (failures report)       -- per-example failure analysis
+report <- evaluatePure dataset exactMatch classify
+print  (aggregateScore report)   -- 0.0 .. 1.0
+putStr (renderReportText report)  -- score, pass/fail, tokens, cost, latency
 ```
 
 `Dataset i o`, `Metric o`, and `Report` are all typed by `i`/`o` — not the untyped bags
-DSPy uses. Golden tests drop straight into the project's test runner.
+DSPy uses (`Metric o = o -> Prediction o -> Score`). A failing example scores zero rather
+than aborting the run, so an optimizer scoring many candidates measures robustness. Golden
+helpers drop straight into the project's test runner.
 
-### 6. 🔭 Compile, then optimize against data
+### 6. Compile, then optimize against data
 
 ```haskell
--- Compile a program few-shot / chain-of-thought / retrieval-augmented:
-compiled <- compileFewShot classify trainset
+-- Compile a prompting strategy into the program (zero-shot / few-shot / CoT / RAG):
+let compiled = compile chainOfThoughtCompiler classify
 
 -- Then let an optimizer search for better demos and instructions,
 -- driven by evaluation against a metric:
-optimized <- bootstrapFewShot
-               BootstrapConfig { rounds = 8, candidates = 16 }
-               classify trainset accuracyMetric
+optimized <- optimize (bootstrapFewShot classify defaultBudget)
+                       trainset exactMatch classify
 
--- Save the tuned parameters and replay later:
-saveProgram "classify.v2" optimized
+-- Save the tuned parameter state, load it back onto a structural template:
+BL.writeFile "classify.json" (encodeCompiled optimized)
+-- decodeCompiledOnto classify <$> BL.readFile "classify.json"
 ```
 
 This is the payoff of the GADT deep embedding: an optimizer **traverses and rewrites each
 node's parameters** (its instruction override and few-shot demos) as data, without runtime
 reflection — then serializes the tuned parameter vector. A program's parameter count equals
 its number of `Predict` nodes; `foldParams` reads them, `mapParamsAt n` edits node *n*, and
-`programParams` / `setProgramParams` save and load them.
+`programParams` / `setProgramParams` save and load them. Four optimizers ship: `labeledFewShot`,
+`bootstrapFewShot`, `instructionSearch`, and `ensembleSearch`.
 
-### 7. 🔭 Typed tools and a ReAct agent loop
+### 7. Typed tools and a ReAct agent loop
+
+A tool is an ordinary function over record types; its argument schema is Generic-derived and
+lowered to baikai's wire tool. A `react` agent is itself a `Program`, so it composes, traces,
+and optimizes like any other:
 
 ```haskell
-weatherTool :: Tool City Forecast   -- argument schema is Generic-derived
-weatherTool = tool "get_weather" lookupForecast
+weatherTool :: Tool City Forecast
+weatherTool = mkTool "get_weather" "Look up a city's forecast." (\c -> pure (lookupForecast c))
 
 researcher :: Program Question Answer
-researcher = react agentSig [weatherTool, searchTool, calcTool]
+researcher = react agentSig (mkRegistry [SomeTool weatherTool, SomeTool searchTool]) defaultReActConfig
 ```
 
-### 8. 🔭 Caching, tracing, and deterministic replay
+The loop alternates *thought → action → observation* until the model finishes or a bound is
+hit, then extracts the typed answer; malformed tool arguments become a typed `ToolError`
+observation the model can recover from, never a crash. `reactWithTrajectory` exposes the
+recorded steps for evaluation.
+
+### 8. Caching, tracing, and deterministic replay
+
+Caching, tracing, and replay are each an `interpose` over the same `LLM` effect, so you opt
+into them by stacking interpreters:
 
 ```haskell
-runEff
-  . runErrorNoCallStack @ShikumiError
-  . runTraceOTel                      -- hierarchical spans, OpenTelemetry
-  . runCacheSQLite "cache.db"         -- memory / SQLite / Postgres / Redis
-  . runLLMResilient cfg
-  $ runProgram summarize article
+(result, tree) <-
+  runEff . runErrorNoCallStack @ShikumiError . runTrace . cachedLLM . tracedLLM
+    . runLLMResilient cfg
+    $ runProgram summarize article
+
+renderTree tree              -- a nested span outline with timings & token usage
+writeTraceFile "run.json" tree
 ```
 
 The cache key is a BLAKE3 digest over the canonical request, so identical calls are served
-from cache; stored traces let you **replay** an entire run deterministically — and the
-`shikumi` CLI exposes `eval`, `trace`, `optimize`, and `replay` over the same machinery.
+from the (in-memory) cache. Stored traces let you **replay** an entire run deterministically
+via `runLLMReplay` (fail-closed: an unrecorded request is an error, never a network call) —
+and the `shikumi` CLI exposes `eval`, `trace`, `optimize`, and `replay` over the same
+machinery.
+
+---
+
+## The CLI
+
+A shikumi `Program i o` is a typed Haskell *value*, so the CLI is a **library of subcommand
+builders** you wire around your own programs in a few lines — the bundled `shikumi`
+executable is exactly that `main`:
+
+```haskell
+main :: IO ()
+main = cliMain exampleRegistry   -- register your typed programs, datasets, metrics
+```
+
+Four subcommands surface the framework, all runnable **offline** (a deterministic in-process
+stub LM; no API key, no network):
+
+```bash
+shikumi eval     --program sentiment                       # → a Report table
+shikumi trace    sentiment --store-dir .shikumi            # → a nested span tree
+shikumi optimize --program sentiment --optimizer bootstrap-fewshot --out p.json
+shikumi replay   sentiment --store-dir .shikumi            # → identical output, 0 provider calls
+```
 
 ---
 
@@ -313,27 +353,30 @@ its type tells you exactly what it can do.
 
 ## Implementation status
 
-This is an in-progress framework decomposed into twelve ExecPlans across five phases (see
+The framework was built as twelve ExecPlans across five phases (see
 [`docs/masterplans/1-shikumi-typed-lm-programming-framework.md`](docs/masterplans/1-shikumi-typed-lm-programming-framework.md)).
+All twelve are delivered; `cabal test all` is green across every package, hermetically.
 
-| Area | Status |
-|---|---|
-| **Runtime substrate** — `LLM` effect over baikai, `ShikumiError`, retries / rate-limiting / budget | ✅ Done |
-| **Native structured output** — `response_format` / `output_config` (upstreamed to baikai) | ✅ Done |
-| **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam | ✅ Done |
-| **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, parameter traversal & serialization | ✅ Done |
-| **Combinators** — `>>>`, `mapP`, `parallel2`, `retry`, `validate`, `majorityVote`, `ensemble` | 🔧 In progress |
-| Caching (memory / SQLite / Postgres / Redis) | 🔭 Planned |
-| Hierarchical tracing, OTel, deterministic replay | 🔭 Planned |
-| Evaluation — `Dataset` / `Metric` / `evaluate` / `Report` | 🔭 Planned |
-| Compiler — zero-shot / few-shot / CoT / RAG | 🔭 Planned |
-| Optimizer — demo selection, bootstrap few-shot, instruction & ensemble search | 🔭 Planned |
-| Typed tools + ReAct agents | 🔭 Planned |
-| `shikumi` CLI — `eval`, `trace`, `optimize`, `replay` | 🔭 Planned |
+| Area | Package | Status |
+|---|---|---|
+| **Runtime substrate** — `LLM` effect over baikai, `ShikumiError`, retries / rate-limiting / budget | `shikumi` | ✅ Done |
+| **Native structured output** — `response_format` / `output_config` (upstreamed to baikai) | *baikai* | ✅ Done |
+| **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam | `shikumi` | ✅ Done |
+| **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, parameter traversal & serialization | `shikumi` | ✅ Done |
+| **Combinators** — `>>>`, `mapP`, `parallel2`, `retry`, `validate`, `majorityVote`, `ensemble` | `shikumi` | ✅ Done |
+| **Caching** — content-addressed key, `Cache` effect, in-memory backend | `shikumi-cache` | ✅ Core done · 🔭 SQLite/Postgres/Redis planned |
+| **Hierarchical tracing, OTel, deterministic replay** | `shikumi-trace`(`-otel`) | ✅ Done |
+| **Evaluation** — `Dataset` / `Metric` / `evaluate` / `Report` | `shikumi-eval` | ✅ Done |
+| **Compiler** — zero-shot / few-shot / CoT / RAG | `shikumi-compile` | ✅ Done |
+| **Optimizer** — demo selection, bootstrap few-shot, instruction & ensemble search | `shikumi-optimize` | ✅ Done |
+| **Typed tools + ReAct agents** | `shikumi-tools` | ✅ Done |
+| **`shikumi` CLI** — `eval`, `trace`, `optimize`, `replay` | `shikumi-cli` | ✅ Done · 🔭 live OTel export planned |
 
 > Note: today `runProgram` dispatches every node against a provider-neutral model (the
-> prompt-fallback adapter). Real provider/model routing is supplied by the evaluation and
-> CLI layers (or a future `Reader Model` effect) and is being wired in.
+> prompt-fallback adapter is the exercised path; the native-schema path is wired and verified
+> for OpenAI). Real per-call provider/model routing — which also unblocks per-sample
+> temperature and the multi-sample eval path — awaits an ambient-model mechanism (e.g. a
+> `Reader Model` effect); the offline CLI drives runs through a deterministic stub LM.
 
 ---
 
@@ -344,8 +387,11 @@ Shikumi builds with **GHC 9.12.4** inside a Nix dev shell, and depends on local 
 
 ```bash
 nix develop .#ghc9124
-cabal build shikumi
-cabal test  shikumi          # hermetic; no network
+cabal build all
+cabal test  all              # hermetic across every package; no network
+
+# Try the CLI offline (no API key):
+cabal run shikumi-cli:exe:shikumi -- eval --program sentiment
 
 # Opt into the live provider smoke test:
 SHIKUMI_LIVE=1 OPENAI_API_KEY=... cabal test shikumi
