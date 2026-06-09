@@ -23,6 +23,7 @@ packages:
   shikumi
   shikumi-cache
   shikumi-trace
+  shikumi-trace-otel
   /Users/shinzui/Keikaku/bokuno/baikai/baikai
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
   /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai

@@ -101,9 +101,14 @@ This section must always reflect the actual current state of the work.
       *dependent* pipeline captured live, persisted, reloaded, and replayed offline yields
       byte-identical outputs with the provider counter at **0**; a mutated request raises
       `ReplayDivergence`.
-- [ ] M4: `shikumi-trace-otel` package emitting one nested OTel span per tree node with
-      GenAI semantic-convention attributes; in-memory-exporter test asserting parent/child
-      nesting.
+- [x] M4: `shikumi-trace-otel` package delivered — `Shikumi.Trace.OpenTelemetry.exportTree ::
+      MonadIO m => Tracer -> TraceTree -> m ()` walks the tree depth-first and creates each
+      child span in a `Context` carrying its parent span (`OpenTelemetry.Context.insertSpan`),
+      so the nesting is real (not flat like baikai's adapter). LM-call spans carry GenAI
+      semantic-convention attributes; all spans carry `shikumi.*` keys. **Done (2026-06-08).**
+      `cabal test shikumi-trace-otel` green: the in-memory exporter captures one span per node,
+      both LM-call spans carry `gen_ai.request.model`, all spans share one trace id, and every
+      non-root span's parent is an emitted span (exactly one root).
 - [ ] M5: the `shikumi-trace-demo` executable tying it together (live trace → persist →
       offline replay) and the documented acceptance transcript.
 
