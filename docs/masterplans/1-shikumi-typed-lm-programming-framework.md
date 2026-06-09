@@ -179,7 +179,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Complete |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Complete |
-| 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Not Started |
+| 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Complete |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Not Started |
 | 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | Not Started |
 | 12 | CLI and developer experience | docs/plans/12-cli-and-developer-experience.md | EP-7, EP-8, EP-10 | EP-11 | 9 | Not Started |
@@ -347,7 +347,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-7: Deterministic replay from stored traces
 - [x] EP-8: `Dataset`/`Metric`/`evaluate`/`Report` + built-in metrics + golden tests
   (new `shikumi-eval` package; 36 hermetic tests)
-- [ ] EP-9: Zero-shot, few-shot, chain-of-thought, and retrieval-augmented compilers
+- [x] EP-9: Zero-shot, few-shot, chain-of-thought, and retrieval-augmented compilers
+  (new `shikumi-compile` package; `CompiledProgram` owned; 13 hermetic tests)
 - [ ] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
 - [ ] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
 - [ ] EP-12: `shikumi` CLI: `eval`, `trace`, `optimize`, `replay`
@@ -575,6 +576,34 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   multi-sample path and `semanticSimilarity`'s embedding backend remain inert pending real
   per-call model routing (EP-4's unwired-`_Model` limitation) and a substrate embedding op —
   neither blocks EP-10/EP-12. See EP-8's Outcomes & Retrospective.
+- **EP-9 delivered (2026-06-09).** The compiler layer landed in the new `shikumi-compile`
+  package; `cabal test shikumi-compile-test` is green (13 hermetic tests) and `cabal build
+  all` is green. Cross-plan facts that **fix integration point #6** for EP-10 (optimizer)
+  and EP-12 (CLI):
+  (a) **`CompiledProgram i o` is a `newtype` over `Program i o`** (`Shikumi.Compile.Types`),
+  not a program-plus-side-table — because EP-4 stores each node's `Params` *on the node*, a
+  compiler produces a fully-formed `Program` with nothing left over. `compile :: Compiler ->
+  Program i o -> CompiledProgram i o` is **pure**; `runCompiled` inherits EP-4's exact
+  `(LLM, Error ShikumiError) :> es` row (integration point #4). EP-10 returns a
+  `CompiledProgram`; EP-12 loads/runs/saves one. Neither redefines the type.
+  (b) **`Compiler` is a rank-2 `newtype { runCompiler :: forall i o. Program i o -> Program
+  i o }`** — type-agnostic, so one compiler value applies to any program. The four shipped
+  compilers: `zeroShot :: Text -> Compiler`, `fewShot :: [Demo] -> Compiler` /
+  `fewShotTyped`, `chainOfThoughtCompiler :: Compiler`, `rag :: Retriever -> Text ->
+  Compiler`.
+  (c) **Serialization reuses EP-4 verbatim**: `encodeCompiled = encode . programParams` and
+  `decodeCompiledOnto template = setProgramParams <$> eitherDecode` (parameter-state against
+  a structural template, DSPy's `dump_state`/`load_state`). EP-12's save/load and EP-10's
+  candidate persistence should use these; the node-count guard (`ParamCountMismatch`) is
+  EP-4's. **The plan's hand-rolled `assignInOrder` was unnecessary** — EP-4 already shipped
+  `programParams`/`setProgramParams`/`programShape`.
+  (d) **Two compilers (`chainOfThoughtCompiler`, `rag`) are structural rewrites over EP-4's
+  exported GADT constructors**, not parameter flips — there is no `reasoning` field on
+  `Params`, and EP-4 ships no effectful `embed` node, so RAG retrieves at compile time
+  against a fixed query (the documented fallback). Both preserve a node's existing
+  `instructionOverride` (which wins at run time), so the intended order is CoT/RAG *before*
+  `zeroShot`/`fewShot`. EP-10, when it composes strategies, should respect that order. See
+  EP-9's Decision Log / Surprises.
 
 
 ## Decision Log

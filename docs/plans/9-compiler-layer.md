@@ -83,30 +83,36 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (prototype): `shikumi-compile` package skeleton builds; `Compiler` newtype and
+- [x] M0 (prototype): `shikumi-compile` package skeleton builds; `Compiler` newtype and
   `compile`/`CompiledProgram` defined as thin wrappers over EP-4's parameter traversal;
   a no-op `identity` compiler round-trips a program unchanged (asserted by re-running it
-  against the capturing stub and observing the same prompt).
-- [ ] M1: capturing stub adapter + prompt-inspection test harness in
-  `shikumi-compile`'s test suite; a baseline test renders the *uncompiled* program's
-  prompt and records what it looks like (so later milestones can assert a *diff*).
-- [ ] M2: `zeroShot` compiler — sets each node's instruction, clears demonstrations;
-  test asserts the rendered prompt carries the instruction and carries *no* demos.
-- [ ] M3: `fewShot` compiler — injects a static list of demonstrations into every node's
-  params; test asserts every node (including a node nested inside a `Pipeline`) now
-  renders the injected demos in its prompt.
-- [ ] M4: `chainOfThoughtCompiler` — turns on the reasoning field / wraps each `Predict`
-  node so it reasons first; test asserts the rendered prompt now contains the reasoning
-  cue at every node.
-- [ ] M5: `Retriever` interface + trivial in-memory retriever + `rag` compiler; test
-  asserts a retrieved passage is threaded into the program input and appears in the
-  rendered prompt.
-- [ ] M6: serialization — `encodeCompiled` / `decodeCompiled` round-trip a
-  `CompiledProgram` through JSON (reusing EP-4's parameter-state serialization); test
-  asserts a compiled-then-serialized-then-deserialized program renders the identical
-  prompt to the in-memory compiled one.
-- [ ] M7: documentation pass — Decision Log, Surprises, Outcomes filled; the package is
-  exported from `cabal.project`; `cabal test shikumi-compile-test` is green.
+  against the capturing stub and observing the same prompt). **Done (2026-06-09).**
+- [x] M1: capturing stub adapter + prompt-inspection test harness (`Test.Capture`,
+  `Test.Fixtures`); a baseline test renders the *uncompiled* `qaBase` prompt and asserts
+  its default instruction is present and no demo content is. **Done.**
+- [x] M2: `zeroShot` compiler — sets each node's `instructionOverride`, clears
+  `demos`; test asserts the rendered prompt carries the instruction (and the pure
+  `foldParams` read shows no demos), at both nodes of a pipeline. **Done.**
+- [x] M3: `fewShot`/`fewShotTyped` compiler — injects a static demo list into every
+  node's `Params`; `qaBase` test asserts the demos render in the prompt, and the
+  `qaPipeline` pure assertion shows `[3,3]` demos per node. **Done.**
+- [x] M4: `chainOfThoughtCompiler` — a **structural rewrite** turning each `Predict sig
+  ps` into `FMap value (chainOfThoughtRaw sig)` (carrying `ps`); test asserts the
+  reasoning cue (`"step by step"`) appears in the prompt at every node. **Done.**
+- [x] M5: `Retriever`/`Passage`/`inMemoryRetriever` + `rag` compiler (compile-time
+  fallback — EP-4 ships no embed node); tests assert ranking (pure) and that the
+  retrieved passage appears in the prompt while non-matching passages do not. **Done.**
+- [x] M6: serialization — `encodeCompiled` / `decodeCompiledOnto` reusing EP-4's
+  `programParams`/`setProgramParams`; round-trip renders an identical prompt (zero-shot
+  pipeline + few-shot single node), and a wrong-shaped template returns `Left`. **Done.**
+- [x] M7: documentation pass — Decision Log, Surprises, Outcomes filled; package added to
+  `cabal.project`; `cabal test shikumi-compile-test` green (13 tests); `cabal build all`
+  green. **Done.**
+
+**Status: EP-9 complete.** `cabal test shikumi-compile-test` is green (13 tests, hermetic,
+no network). All four compilers (zero-shot, few-shot, chain-of-thought, RAG), the owned
+`CompiledProgram` type, the `Retriever` interface, and parameter-state serialization are
+delivered.
 
 
 ## Surprises & Discoveries
@@ -114,12 +120,56 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. Populate as milestones land. The most likely surprises, called out so the
-implementer watches for them: (a) whether EP-4's parameter traversal can reach
-`Predict` nodes that are *constructed inside a function passed to `FMap`* — see the
-"closures hide nodes" hazard in Context and Orientation; (b) whether chain-of-thought is
-best expressed as a parameter flip on `Predict` or as a structural rewrite to a
-`ChainOfThought` node — see the Decision Log seed on that question.)
+The delivered EP-4 (`Shikumi.Program`) and EP-3/EP-4 surface differed from this plan's
+*assumed* contract in several concrete ways; each is recorded here with how the
+implementation adapted (the *shapes* held; the names did not).
+
+- **`Params` has no `reasoning` field.** The real type is `Params { instructionOverride
+  :: Maybe Text, demos :: [Demo] }` — not the plan's assumed `{ instruction,
+  demonstrations, reasoning }`. So `zeroShot` sets `instructionOverride`/`demos` and the
+  chain-of-thought "parameter-flip fallback" (flip `reasoning = True`) does **not exist**.
+  This forced chain-of-thought to be the *structural rewrite* the Decision Log already
+  preferred (see below). Evidence: `Shikumi/Program.hs` lines 99–102.
+- **`Demo` is `Shikumi.Program.Demo { demoInput :: Value, demoOutput :: Value }`** — the
+  assumed shape, JSON-keyed. `fewShotTyped` builds it from `toJSON` pairs. The signature's
+  *typed* demos are a separate `Shikumi.Signature.Demo i o`; the JSON `Params` demos are
+  decoded into those at run time by EP-4's `effectiveSignature`.
+- **`foldParams :: Program i o -> [Params]`** (returns the ordered list), not the assumed
+  `Monoid m => (Params -> m) -> Program i o -> m`. And **EP-4 already ships
+  `programParams`/`setProgramParams`/`programShape`** — exactly the parameter-state
+  serialization M6 needed. So `Shikumi.Compile.Serialize` is a *thin JSON wrapper* over
+  those (`encode (programParams p)` / `setProgramParams <$> eitherDecode`), not the
+  hand-rolled `assignInOrder` the plan sketched. The node-count guard and node-order
+  contract are EP-4's. No `Shikumi.Compile.Traverse` adapter module was needed — `mapParams`
+  is imported from `Shikumi.Program` directly.
+- **EP-4 exports the GADT constructors** (`Program(Predict, Compose, FMap, Map, Parallel,
+  Retry, RetryWhen, Validate, MajorityVote, Ensemble)`). This is what makes the
+  chain-of-thought and RAG *structural* rewrites possible from a downstream package: both
+  pattern-match every constructor and rebuild. Per the EP-4/EP-5 rule, a function over the
+  GADT must match *all* ten constructors — both rewrites do.
+- **EP-4 ships no effectful `embed`/`Embed` node.** The plan's RAG "approach 1" (install a
+  runtime retrieval step keyed on the actual input) is therefore impossible; `rag` uses the
+  documented fallback — retrieve once at *compile time* against a fixed query (`rag ::
+  Retriever -> Text -> Compiler`), run purely via `runPureEff` (the in-memory retriever is
+  `forall es. Eff es [Passage]`, so it discharges at `'[]`), and inject the formatted
+  passages into each node's *signature instruction* via the structural rewrite (preserving
+  the base instruction with `setInstruction (getInstruction sig <> ctx) sig`).
+- **Demos render as `Context.messages`, not the system prompt** (the fallback adapter emits
+  user/assistant demo pairs). So the capturing harness asserts on the JSON of the *whole*
+  `Context` (`encode ctx` — `Context` has `ToJSON`), which contains both the system prompt
+  (instruction / reasoning cue / RAG context) and the messages (demos). Capturing only the
+  system prompt — as EP-4's own `runRecordingLLM` does — would miss few-shot demos.
+- **The few-shot pipeline reach is asserted purely** (`map (length . demos) (foldParams …)
+  == [3,3]`), not by running. A single demo pool is type-mismatched at the second
+  (`Draft -> Answer`) node, and EP-4's `effectiveSignature` *decodes* demos eagerly, so
+  running would throw `MissingField` at the mismatched node before rendering. DSPy's
+  `LabeledFewShot` has the same "same pool everywhere" property; the reach guarantee is the
+  point, and the pure `foldParams` read proves it without the decode hazard. The strong
+  "demos appear in the prompt" assertion uses the single-node `qaBase` where they line up.
+
+The "closures hide nodes" `FMap` hazard the plan flagged did not bite: all fixtures and
+compilers build programs by composing `Program` values, never by hiding a sub-program
+inside an `FMap` closure, so every node is reachable as data.
 
 
 ## Decision Log
@@ -179,14 +229,77 @@ Record every decision made while working on the plan.
   thinking level), M4 will flip that field instead and this entry will be updated with the
   reason. Either way the *observable* outcome is identical: the rendered prompt instructs
   the model to reason. Date: 2026-06-08.
+- Decision (M4, confirmed 2026-06-09): chain-of-thought **is** the structural rewrite —
+  there is no parameter-flip fallback because the delivered `Params` carries **no
+  `reasoning` field**. Each `Predict sig ps` becomes `FMap value (mapParams (const ps)
+  (chainOfThoughtRaw sig))`, reusing `Shikumi.Module.chainOfThoughtRaw` (which augments the
+  output with a `reasoning` field and the "think step by step" instruction) and projecting
+  the answer back with `FMap value`. EP-4 ships no `rewriteNodes` helper, so the rewrite is
+  spelled out over all ten exported GADT constructors. The node's existing `ps` is carried
+  across verbatim; this reproduces `Shikumi.Module.chainOfThought` exactly for the common
+  base-program case (`emptyParams`). Caveat documented in `Shikumi.Compile.ChainOfThought`:
+  a pre-existing `instructionOverride` still wins at run time (apply CoT before zero-shot),
+  and pre-existing demos must be CoT-shaped to decode under the augmented output (apply CoT
+  before few-shot). Date: 2026-06-09.
+- Decision (M5, 2026-06-09): `rag :: Retriever -> Text -> Compiler` uses the plan's
+  **compile-time fallback** (approach 2), because EP-4 ships **no effectful embed node** to
+  install a runtime retrieval step (approach 1). Retrieval runs once at compile time against
+  the supplied fixed query (purely, via `runPureEff` — the `inMemoryRetriever` is
+  `forall es. Eff es [Passage]`), and the formatted passages are injected into every node's
+  signature instruction by a structural rewrite that *preserves* the base instruction
+  (`setInstruction (getInstruction sig <> "\n\n" <> ctx) sig`). `compile` stays pure. The
+  documented limitation: retrieval is independent of the actual program input; true
+  per-input runtime retrieval is a TODO that awaits an EP-4 embed node. Date: 2026-06-09.
+- Decision (M6, 2026-06-09): serialization is a **thin wrapper over EP-4's already-shipped
+  `programParams`/`setProgramParams`**, not the hand-rolled `assignInOrder` the plan
+  sketched — EP-4 delivered exactly the parameter-state save/load (with a `ParamCountMismatch`
+  guard) M6 needed. `encodeCompiled = encode . programParams . compiledProgram`;
+  `decodeCompiledOnto template = setProgramParams <$> eitherDecode`, rendering the
+  `ParamCountMismatch` as a human-readable `Left`. Date: 2026-06-09.
+- Decision (M0, 2026-06-09): dropped the planned `Shikumi.Compile.Traverse` adapter module
+  — EP-4 exports `mapParams`/`foldParams` directly, so the compilers import them from
+  `Shikumi.Program` with no adapter. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+**EP-9 delivered (2026-06-09).** The new `shikumi-compile` package ships the compiler
+layer; `cabal test shikumi-compile-test` is green (13 hermetic tests, no network) and
+`cabal build all` is green.
 
-(To be filled during and after implementation.)
+Met, against the Purpose:
+- **`compile` is pure** and applies to any program (the rank-2 `Compiler` newtype).
+- **All four compilers** work, each verified by the prompt the model would have seen:
+  `zeroShot` (instruction set, demos cleared, reaches both pipeline nodes), `fewShot` /
+  `fewShotTyped` (injected demos render; `[3,3]` per-node reach), `chainOfThoughtCompiler`
+  (the reasoning cue reaches every node via the structural rewrite), and `rag` (the
+  retrieved passage appears, non-matching passages do not; the in-memory retriever ranks
+  correctly).
+- **`CompiledProgram i o`** (integration point #6) is owned here as a newtype over
+  `Program`, with `encodeCompiled`/`decodeCompiledOnto` round-tripping the parameter state
+  and rejecting a wrong-shaped template.
+- The **capturing-stub** strategy made every acceptance assertion an offline, deterministic
+  `cabal test`.
+
+Gaps / deferred (clearly bounded, none blocking EP-10):
+- **RAG retrieval is compile-time and query-fixed**, the documented fallback, because EP-4
+  ships no effectful embed node. True per-input runtime retrieval awaits such a node.
+- **Chain-of-thought and RAG preserve a node's existing `instructionOverride`**, which wins
+  at run time — so the intended composition order is CoT/RAG *before* `zeroShot`/`fewShot`.
+  This is documented in each module and is consistent with applying prompting strategies in
+  a sensible order; a future `instructionPrefix`-style param could lift the restriction.
+
+Comparison to vision: the MasterPlan's EP-9 goal — "the same base program, transformed by a
+one-line `compile`, sends a different prompt at every node" — holds, demonstrated offline.
+EP-10 (optimizer) can now emit `CompiledProgram` values and serialize them; EP-12 (CLI) can
+load/run/save them.
+
+Lessons: (1) EP-4's exported GADT constructors + the `programParams`/`setProgramParams`
+interface did most of the heavy lifting — the compiler layer is genuinely thin, and the
+riskiest milestones (M4 structural rewrite, M6 serialization) reduced to reusing EP-4
+primitives. (2) Asserting on the *whole* rendered `Context` JSON (not just the system
+prompt) is what lets one harness check instructions, reasoning cues, RAG context, *and*
+few-shot demos uniformly.
 
 
 ## Context and Orientation
