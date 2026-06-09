@@ -27,6 +27,7 @@ packages:
   shikumi-cli
   shikumi-compile
   shikumi-eval
+  shikumi-jitsurei
   shikumi-optimize
   shikumi-tools
   shikumi-trace
