@@ -39,6 +39,8 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Optimize
+    Shikumi.Optimize.LabeledFewShot
+    Shikumi.Optimize.Search
     Shikumi.Optimize.Types
 
   build-depends:
@@ -58,6 +60,7 @@ test-suite shikumi-optimize-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    LabeledFewShotSpec
     OptimizeSpec
     StubLM
 

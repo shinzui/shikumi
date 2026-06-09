@@ -92,8 +92,13 @@ This section must always reflect the actual current state of the work.
       `optimize` driver compile against the **real** sibling types; a no-op optimizer
       round-trips a program through `optimize`. **Done (2026-06-09).** `cabal test
       shikumi-optimize` green (1 test); `cabal build all` green.
-- [ ] M1: `labeledFewShot` implemented; candidate demo-set search; unit test shows the
-      chosen demo set is the highest-scoring of those tried.
+- [x] M1: `labeledFewShot` implemented; candidate demo-set search; unit test shows the
+      chosen demo set is the highest-scoring of those tried. **Done (2026-06-09).**
+      Candidate sets are the deterministic size-@k@ combinations of the training demos
+      (`labeledCandidateSets`, exported for the test); the test recomputes every candidate's
+      score and asserts the chosen set attains the (non-trivial) maximum. Shared plumbing
+      (`selectBest`/`scoreOn`/`freezeProgram`) lives in `Shikumi.Optimize.Search` to break the
+      `Shikumi.Optimize` ⇄ optimizer-module import cycle.
 - [ ] M2: trace-to-demo recovery implemented (read per-node input/output from the EP-7 trace
       tree); `bootstrapFewShot` implemented; test shows bootstrapped demos are attached only
       for metric-passing examples.
