@@ -103,9 +103,11 @@ This section must always reflect the actual current state of the work.
       (`recoverDemo`) rather than per-node from the EP-7 trace (see Decision Log — the
       delivered trace lacks node correlation); test shows bootstrapped demos are attached only
       for metric-passing teacher runs. **Done (2026-06-09).**
-- [ ] M3: `instructionSearch` implemented with an LM-backed proposal program and a budgeted
-      proposal/selection loop; test shows the best-scoring proposed instruction is selected
-      per node and the budget bound is respected.
+- [x] M3: `instructionSearch` implemented with an LM-backed proposal program
+      (`proposeInstruction`) and a budgeted coordinate-ascent proposal/selection loop; tests
+      show the best-scoring proposed instruction is selected per node and the raw-LM-call
+      budget bound is respected (counting stub). **Done (2026-06-09).** `fieldSummary` is
+      static (EP-4 exposes no per-node signature accessor).
 - [ ] M4: `ensembleSearch` implemented over the `Ensemble` combinator; test shows the
       ensemble scores at least as high as its best member.
 - [ ] M5 (acceptance): end-to-end test optimizes a deliberately-underspecified program on a

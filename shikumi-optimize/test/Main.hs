@@ -6,6 +6,7 @@
 module Main (main) where
 
 import BootstrapSpec qualified
+import InstructionSpec qualified
 import LabeledFewShotSpec qualified
 import OptimizeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -17,5 +18,6 @@ main =
       "shikumi-optimize"
       [ OptimizeSpec.tests,
         LabeledFewShotSpec.tests,
-        BootstrapSpec.tests
+        BootstrapSpec.tests,
+        InstructionSpec.tests
       ]
