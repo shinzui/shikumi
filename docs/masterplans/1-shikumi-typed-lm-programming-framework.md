@@ -89,6 +89,22 @@ stream (EP-2) contributes a single feature *back into baikai* — native structu
 support (`response_format` / JSON schema) — because the user chose provider-enforced
 schemas over prompt-coaxed ones, and that capability belongs in the transport layer.
 
+Two contributions land in the baikai repository itself rather than in shikumi. EP-2 (above)
+is one. The second, **`baikai-effectful`**, is **already delivered** — a thin, policy-free
+`effectful` binding over baikai's transport, now a published sibling package in the baikai
+repo (module `Baikai.Effectful`). It provides a dynamic `Baikai` effect with operations
+`Complete` (blocking), `StreamCollect` (materialized event list), and the higher-order
+`StreamEach` (per-event callback running in the caller's `Eff es`), plus interpreters
+`runBaikai` (global registry) and `runBaikaiWith` (explicit registry), carrying no retries,
+caching, budgets, or error remapping. EP-1's higher-level `LLM` effect is built *in terms of*
+it, so shikumi's framework code dispatches through an effect and never touches `IO`/`IOE`
+directly — only the bottom interpreter does. `baikai-effectful` is tracked as its own
+ExecPlan in the baikai repo
+(`/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`,
+all four milestones complete as of 2026-06-08), not as a child of this MasterPlan, but it is
+a hard dependency of EP-1 — now satisfied. (Parameterizing baikai over `MonadIO m` was
+considered and rejected — see the Decision Log.)
+
 **In scope:** everything in the seven behaviors above, across the spec's V0.1–V0.5
 roadmap, plus the one upstream baikai extension.
 
@@ -176,11 +192,15 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3
 
 The graph is rooted at the substrate and fans out by phase. In prose:
 
-**EP-1 (runtime + LLM effect)** has no dependencies and is the foundation: it defines the
-`effectful` effect (`LLM`) that wraps baikai's `completeRequest`/`streamRequest`, the
-shikumi error type (mapping `BaikaiError` plus shikumi-specific failures), and the
-retries/backoff/rate-limiting/budget machinery baikai lacks. Almost everything has a hard
-or soft dependency on it.
+**EP-1 (runtime + LLM effect)** has one external, cross-repo hard dependency —
+`baikai-effectful` (the thin `Baikai` transport effect in the baikai repo at
+`docs/plans/23-baikai-effectful-effectful-transport-binding.md`), **now delivered and
+satisfied** — and is otherwise the foundation: it defines the higher-level `effectful` effect
+(`LLM`), implemented *in terms of* the `Baikai` effect rather than calling baikai's
+`completeRequest`/`streamRequest` directly, adds the shikumi error type (mapping `BaikaiError`
+plus shikumi-specific failures), and the retries/backoff/rate-limiting/budget machinery
+baikai lacks. With `baikai-effectful` complete, EP-1 is unblocked. Almost everything else has
+a hard or soft dependency on EP-1.
 
 **EP-2 (baikai structured-output extension)** has no dependencies and lives in the baikai
 repository. It is an *integration dependency* of EP-3: EP-3 must agree with EP-2 on how a
@@ -236,12 +256,23 @@ and finalize once EP-6 is far enough along for replay.
 These are the shared artifacts where two or more plans must agree. Each names the owning
 plan (responsible for defining the artifact) and how consumers use it.
 
-1. **The `LLM` effect and shikumi error type.** *Owner: EP-1.* The `effectful` effect
-   that exposes a single provider-neutral call (wrapping baikai `completeRequest`/
-   `streamRequest`) and the enumerated shikumi error type (invalid JSON, missing field,
-   schema mismatch, validation failure, provider failure, timeout, budget exceeded —
-   mapping `Baikai.Error.BaikaiError` into the shikumi space). *Consumers:* EP-3 (issues
-   calls), EP-6 (wraps the effect with caching), EP-7 (traces it), EP-11 (tool loop).
+1. **The `LLM` effect and shikumi error type.** *Owner: EP-1, layered on the `Baikai`
+   transport effect owned by `baikai-effectful`.* The `effectful` effect that exposes a
+   single provider-neutral call and the enumerated shikumi error type (invalid JSON, missing
+   field, schema mismatch, validation failure, provider failure, timeout, budget exceeded —
+   mapping `Baikai.Error.BaikaiError` into the shikumi space). The `LLM` interpreter is built
+   *on top of* the policy-free `Baikai` effect from `baikai-effectful`
+   (`/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`,
+   operations `Complete`/`StreamCollect`/`StreamEach`, interpreters `runBaikai`/
+   `runBaikaiWith`) rather than calling baikai's `IO` functions directly, so retries, rate
+   limiting, budget, and error mapping live in `LLM` while raw transport lives one layer
+   down. Those `Baikai` operation and interpreter shapes are a cross-repo integration
+   contract: EP-1 and the `baikai-effectful` plan must agree on them. **This contract is now
+   fixed** — `baikai-effectful` shipped on 2026-06-08 with `Baikai`'s operations
+   (`Complete`/`StreamCollect`/`StreamEach`) and interpreters (`runBaikai`/`runBaikaiWith ::
+   ProviderRegistry -> ...`) as published in `Baikai.Effectful`; EP-1 builds against exactly
+   these. *Consumers:* EP-3
+   (issues calls), EP-6 (wraps the effect with caching), EP-7 (traces it), EP-11 (tool loop).
    Every plan must use this error type rather than inventing its own.
 
 2. **Request schema attachment (native structured output).** *Owner: EP-2 (in baikai),
@@ -349,6 +380,24 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   cache-key hash (EP-7 had SHA-256; corrected to EP-6's BLAKE3 + exact field set), and the
   EP-2↔EP-3 schema-attachment contract (aligned on EP-2's `ResponseFormat` sum type and the
   `attachSchema` helper). No other inconsistencies found across the twelve plans.
+- During effect-binding design (2026-06-08): confirmed baikai's transport is `IO`/streamly
+  throughout — `completeRequest :: ... -> IO Response`, `streamRequest :: ... -> Stream IO
+  AssistantMessageEvent`, an `IORef`-backed `ProviderRegistry`, and a `Fold IO` reassembly
+  path. This made the choice clear: a thin `baikai-effectful` `Baikai` effect (handler =
+  `liftIO`/`localSeqUnliftIO` over today's `IO` baikai) gives the clean layering shikumi
+  wants, whereas parameterizing baikai over `MonadIO m` would have to thread `m` through the
+  `IORef` registry and the `Stream IO`/`Fold IO` layer for no capability gain. The
+  `baikai-effectful` plan lives in the baikai repo with its own intention; EP-1 gains it as a
+  hard, cross-repo dependency. See Decision Log (2026-06-08).
+- `baikai-effectful` **shipped (2026-06-08)** — all four of its milestones are complete: the
+  package builds, hermetic `CompleteSpec`/`StreamSpec` pass, a gated live call succeeded
+  (`LIVE: Sure!` via `openai_gpt_4o_mini`), and `mori show --full` lists it. EP-1's only
+  cross-repo hard dependency is therefore satisfied; EP-1 can be implemented directly against
+  the published `Baikai` effect. A clarification confirmed during this work: putting `IOE` in
+  a function's row erases the effect ledger (under `IOE` you can `liftIO` arbitrary `IO`), and
+  a `MonadIO m` baikai at `m = Eff es` would force exactly that `IOE :> es` onto consumers —
+  which is why the dynamic `Baikai` effect (with `IOE` confined to the bottom interpreter), not
+  monad parameterization, is the design that keeps consumer signatures honest.
 
 
 ## Decision Log
@@ -402,6 +451,28 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   structured JSON through existing assistant text so baikai's `Response` type is unchanged.
   Rationale: more faithful and less invasive than the originally-assumed workaround. See
   Surprises & Discoveries. Date: 2026-06-07.
+- Decision: Introduce a **`baikai-effectful` package** (a thin, policy-free `effectful`
+  binding over baikai's transport — a dynamic `Baikai` effect with `Complete`/`StreamCollect`/
+  `StreamEach` and `runBaikai`/`runBaikaiWith` interpreters) and implement EP-1's higher-level
+  `LLM` effect *in terms of* it, so shikumi's framework code never carries `IOE` and only the
+  bottom interpreter does. **Rejected** the alternative of parameterizing baikai itself over
+  `MonadIO m`. The reason is not merely ergonomic: `MonadIO m` instantiated at `m = Eff es`
+  still requires `MonadIO (Eff es)`, which is `IOE :> es` — so it forces `IOE` into the
+  *consumer's* effect row, and `IOE` is the top capability whose presence lets a function
+  `liftIO` arbitrary `IO`. Putting `IOE` in a signature therefore collapses the effect row
+  from an honest capability ledger ("this does only baikai calls", `Baikai :> es`) into "this
+  may do anything". A `MonadIO m` baikai cannot avoid that, and it cannot push effects *into*
+  baikai's internals either; it would also be invasive on baikai's `IORef` registry and
+  streamly `Stream IO`/`Fold IO` layer. The dynamic `Baikai` effect is the right tool: `IOE`
+  appears only as a residual discharged at the bottom (on `runBaikaiWith`/`runEff`), never in
+  consumer signatures, which keeps the ledger honest. The `baikai-effectful` plan lives **in
+  the baikai repo** at
+  `/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`
+  under its own intention `intention_01ktmqmrjre89r3c3qq6fj3j5h` (not a child of this
+  MasterPlan, but a hard dependency of EP-1). **Delivered 2026-06-08**: all four milestones
+  complete — package builds, hermetic `CompleteSpec`/`StreamSpec` pass, a gated `LiveSpec`
+  ran a real call (`LIVE: Sure!`, `openai_gpt_4o_mini`), and `mori show --full` lists the
+  package. Date: 2026-06-08.
 
 
 ## Outcomes & Retrospective
@@ -410,3 +481,30 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+
+## Revision Notes
+
+- 2026-06-08: Recorded the decision to introduce `baikai-effectful` — a thin, policy-free
+  `effectful` binding over baikai's transport (a dynamic `Baikai` effect with
+  `Complete`/`StreamCollect`/`StreamEach` and `runBaikai`/`runBaikaiWith`) — and to build
+  EP-1's `LLM` effect in terms of it; rejected parameterizing baikai over `MonadIO m` as
+  cosmetic and invasive. The `baikai-effectful` ExecPlan was authored in the baikai repo
+  (`/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`)
+  under intention `intention_01ktmqmrjre89r3c3qq6fj3j5h`; it is a hard, cross-repo dependency
+  of EP-1, not a child of this MasterPlan. Updated Vision & Scope ("Relationship to baikai"),
+  Dependency Graph (EP-1), Integration Points (#1), Surprises & Discoveries, and the Decision
+  Log accordingly. EP-1's own ExecPlan
+  (`docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md`) should be revised
+  in a follow-up to interpret `LLM` over the `Baikai` effect rather than calling baikai's
+  `IO` functions directly; the cross-repo operation/interpreter shapes are the integration
+  contract to hold stable.
+- 2026-06-08: Reflected that `baikai-effectful` is **delivered** (all four milestones complete
+  in the baikai repo: package builds, hermetic `CompleteSpec`/`StreamSpec` pass, gated
+  `LiveSpec` ran a real call, `mori` lists the package). Updated Vision & Scope, the EP-1
+  Dependency-Graph paragraph, Integration Point #1, the Decision Log, and Surprises &
+  Discoveries to mark EP-1's cross-repo hard dependency as satisfied and the `Baikai`
+  operation/interpreter contract as fixed. Also tightened the `MonadIO m`-rejection rationale
+  in the Decision Log: the decisive reason is that `IOE` in a consumer row erases the effect
+  ledger (and `MonadIO m` at `m = Eff es` forces `IOE :> es`), not mere ergonomics; the
+  dynamic `Baikai` effect keeps `IOE` confined to the bottom interpreter.

@@ -154,6 +154,25 @@ Record every decision made while working on the plan.
   hermetic tests are required for CI; the live path proves the real integration without
   making it mandatory. Date: 2026-06-08.
 
+- Decision (pending cascade): EP-1's `LLM` effect will be implemented **on top of the
+  `Baikai` transport effect** from the new `baikai-effectful` package, rather than calling
+  baikai's `IO` functions (`completeRequestWith`/`streamRequestWith`) directly. That package
+  is a thin, policy-free `effectful` binding authored in the baikai repo at
+  `/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`
+  (a dynamic `Baikai` effect with operations `Complete`/`StreamCollect`/`StreamEach` and
+  interpreters `runBaikai`/`runBaikaiWith :: ProviderRegistry -> ...`). After it lands, this
+  plan's interpreters `runLLM`/`runLLMWith`/`runLLMResilient` should require `Baikai :> es`
+  (and keep `Error ShikumiError :> es`) and obtain transport via `complete`/`streamCollect`
+  rather than `liftIO (Baikai.completeRequestWith ...)`; `runLLMWith reg` becomes
+  `… . runBaikaiWith reg`, and the resilience/error-mapping/budget logic stays exactly as
+  specified here, just wrapping the `Baikai` operations instead of raw `IO`. The Milestone 3
+  code blocks that show `liftIO (try (Baikai.completeRequestWith ...))` are to be rewritten
+  in that follow-up; the stub-provider test approach is unchanged (stubs register into a
+  `ProviderRegistry` either way). Rationale: keeps shikumi framework code off `IOE`/baikai
+  directly, per the MasterPlan decision dated 2026-06-08 and integration point #1.
+  `baikai-effectful` carries its own intention `intention_01ktmqmrjre89r3c3qq6fj3j5h` and is
+  a hard dependency of this plan. Date: 2026-06-08.
+
 
 ## Outcomes & Retrospective
 
@@ -1090,4 +1109,11 @@ caching and tracing will `reinterpret`/`interpose` on `LLM`, so they must sit ab
 
 ## Revision Notes
 
-(No revisions yet — initial authoring.)
+- 2026-06-08: Recorded a pending cascade (see Decision Log) — EP-1's `LLM` effect will be
+  built on the `Baikai` transport effect from the new `baikai-effectful` package
+  (`/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`),
+  a hard cross-repo dependency, instead of calling baikai's `IO` functions directly. The
+  interpreter signatures and the Milestone 3/4 transport call sites are to be rewritten to
+  dispatch through `Baikai` (`complete`/`streamCollect`, `runBaikaiWith reg`) once that
+  package lands; all resilience, error-mapping, and budget logic stays as specified. This
+  note flags the change; the code blocks above are updated in that follow-up.
