@@ -75,11 +75,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `shikumi-eval` package scaffolded; `Shikumi.Eval.Types` defines `Score`,
-      `Example`, `Prediction`, `Dataset`, `Metric`, plus smart constructors; builds with
-      `cabal build shikumi-eval`.
-- [ ] M1: Unit tests for the data model and `Score` arithmetic pass under
-      `cabal test shikumi-eval`.
+- [x] M1: `shikumi-eval` package scaffolded; `Shikumi.Eval.Types` defines `Score`,
+      `Example`, `Prediction`, `Dataset`, plus smart constructors; builds with
+      `cabal build shikumi-eval`. (2026-06-08)
+- [x] M1: Unit tests for the data model and `Score` arithmetic pass under
+      `cabal test shikumi-eval` (5 tests). (2026-06-08)
 - [ ] M2: `Shikumi.Eval.Metric` provides `exactMatch`, `normalizedStringSimilarity`,
       `customMetric`, and the combinators `weightedMean`/`threshold`; pure-metric tests
       pass.
