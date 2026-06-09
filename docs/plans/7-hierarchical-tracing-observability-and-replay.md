@@ -73,8 +73,16 @@ This section must always reflect the actual current state of the work.
       baikai-`TraceSink` capture to an `interpose` over EP-1's `LLM` effect (EP-1 exposes no sink
       seam; `LLM.complete` returns the full `Response`) — see Decision Log. `cabal test
       shikumi-trace --test-options='-p spike'` green (1 test).
-- [ ] M1: the `Shikumi.Trace` effect and in-memory hierarchical `TraceTree`, with
-      `withSpan`, automatic baikai-event capture, and a terminal pretty-printer.
+- [x] M1: the `Shikumi.Trace` effect and in-memory hierarchical `TraceTree` are delivered —
+      `SpanKind`/`SpanId`/`SpanAttrs`/`Span`/`TraceTree`, `withSpan`/`currentSpanId`/`bumpRetry`/
+      `recordToolCall`/`annotateSpan`, `runTrace :: Eff (Trace : es) a -> Eff es (a, TraceTree)`,
+      `childrenOf`, and `renderTree`. LM-call leaves are captured by `tracedLLM` (interpose on
+      `LLM`), which fills each leaf from the returned `Response` (model, provider, latency,
+      tokens, cost, tool calls, response JSON, and the EP-6 `cacheKey`). The
+      `Shikumi.Trace.ResponseJSON` orphan instances (faithful `Response` round-trip) landed here
+      since `tracedLLM` needs `toJSON resp`. **Done (2026-06-08).** `cabal test shikumi-trace
+      --test-options='-p tree'` green: one root, two module children, one LM-call leaf each, and
+      `renderTree` shows the model lines indented under their modules.
 - [ ] M2: serialize/deserialize the `TraceTree` to a stable on-disk JSON format keyed by the
       EP-6 content-addressed cache key; round-trip property test.
 - [ ] M3: deterministic replay interpreter for the `LLM` effect that resolves calls from a
