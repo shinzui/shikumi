@@ -172,7 +172,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | #  | Title | Path | Hard Deps | Soft Deps | Milestones | Status |
 |----|-------|------|-----------|-----------|------------|--------|
 | 1  | Shikumi runtime substrate and LLM effect over baikai | docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md | None | None | 5 | Complete |
-| 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Not Started |
+| 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Complete |
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Not Started |
@@ -333,8 +333,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 
 - [x] EP-1: LLM effect over baikai with a working end-to-end call through `Eff`
 - [x] EP-1: Retries, backoff, rate limiting, and budget controls
-- [ ] EP-2: `response_format` / JSON schema field on baikai `Options`
-- [ ] EP-2: Anthropic and OpenAI provider mappings emit/parse native structured output
+- [x] EP-2: `response_format` / JSON schema field on baikai `Options`
+- [x] EP-2: Anthropic and OpenAI provider mappings emit/parse native structured output
 - [x] EP-3: Generic-derived JSON schema + decode from record types
 - [x] EP-3: `Signature` + field metadata + the `Adapter` seam (native + fallback)
 - [x] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
@@ -426,6 +426,26 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   a `MonadIO m` baikai at `m = Eff es` would force exactly that `IOE :> es` onto consumers —
   which is why the dynamic `Baikai` effect (with `IOE` confined to the bottom interpreter), not
   monad parameterization, is the design that keeps consumer signatures honest.
+- **EP-2 delivered (2026-06-08).** The upstream baikai structured-output capability landed in
+  the baikai repo (commits `4a12f08`, `0cdbb18`, `d8ebc84`, `0b974e1`). `Baikai.ResponseFormat`
+  (`JsonSchema { name, schema, strict }` | `JsonObject`) + `Options.responseFormat :: Maybe
+  ResponseFormat` (default `Nothing`, re-exported from `Baikai`); OpenAI `mapRequest` maps it to
+  native `response_format`, Anthropic `mapRequest` to native `output_config` (via
+  `Messages.jsonSchemaConfig`; `strict` dropped, `JsonObject` → permissive `{"type":"object"}`).
+  Pure mapping tests pass for both providers; the live `gpt-4o-mini` smoke returned
+  `{"age":36,"name":"Ada Lovelace"}` for a schema-bearing request that never mentions JSON,
+  proving server-side enforcement. Cross-plan facts that **fix integration point #2** for EP-3
+  and EP-11: (a) attach a schema by setting `Options.responseFormat` to `Just (JsonSchema {name,
+  schema, strict})` (schema = raw JSON-Schema `Value`) or `Just JsonObject`; `Nothing` =
+  today's unconstrained behaviour. (b) The structured JSON comes back as **ordinary assistant
+  text** — no new content kind — so `Baikai.Response`/`Content`/`Message` are unchanged; read it
+  with `flattenAssistantBlocks` and JSON-decode. (c) **EP-3's native adapter can now be wired
+  for real**: EP-3 shipped with `attachSchema` as a no-op pending EP-2; it can now set
+  `responseFormat` and stop relying solely on the prompt fallback (the Anthropic native path is
+  untested live — no Anthropic key was present — but its pure mapping is verified). (d) baikai
+  still ships **no JSON-Schema validator** (out of scope); EP-3's decoding layer owns turning a
+  syntactically-valid-but-shape-wrong body into a typed `ShikumiError`. The mapping functions
+  `mapRequest` are now exported from both provider `Api` modules for testing.
 - **EP-4 delivered (2026-06-08).** The keystone landed: `Shikumi.Program` (the `Program i o`
   GADT — `Predict`/`Compose`/`FMap` — `Params`/`Demo`, `pipeline`, `runProgram`, the
   `paramsTraversal`/`foldParams`/`mapParams`/`mapParamsAt` parameter interface, and

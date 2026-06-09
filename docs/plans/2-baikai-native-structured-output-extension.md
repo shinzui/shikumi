@@ -86,19 +86,39 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `Baikai.ResponseFormat` module defining `ResponseFormat` exists; `Options` gains a
+- [x] M1: `Baikai.ResponseFormat` module defining `ResponseFormat` exists; `Options` gains a
   `responseFormat` field; `_Options` defaults it to `Nothing`; `Baikai` re-exports it;
-  `cabal build baikai` succeeds.
-- [ ] M2: OpenAI Chat Completions provider maps `responseFormat` onto the upstream
+  `cabal build baikai` succeeds. **Done (2026-06-08):** module created (with
+  `-Wno-partial-fields`, matching `Baikai.Trace.Event`), `Options` field + `_Options` default
+  added, re-exported from `Baikai`, listed in `baikai.cabal` exposed-modules. `cabal build
+  baikai` is warning-free; `cabal test baikai` green (41 tests) including a new round-trip
+  assertion for both `JsonObject` and `JsonSchema`.
+- [x] M2: OpenAI Chat Completions provider maps `responseFormat` onto the upstream
   `response_format` field; `cabal build baikai-openai` succeeds and a pure mapping test
-  asserts the produced request carries the expected `response_format`.
-- [ ] M3: Anthropic Messages provider maps `responseFormat` onto the upstream
+  asserts the produced request carries the expected `response_format`. **Done (2026-06-08):**
+  `mkOpenAIResponseFormat` helper added and wired into `mapRequest`; `mapRequest` exported for
+  testing. Upstream `RF.ResponseFormat`/`JSONSchema` have no `Eq`, so the test pattern-matches
+  `Chat.response_format` to `RF.JSON_Schema` and asserts `name`/`schema`/`strict`/`description`
+  field-by-field. `cabal test baikai-openai` green (5 tests). Added `aeson` + `openai` to the
+  test stanza.
+- [x] M3: Anthropic Messages provider maps `responseFormat` onto the upstream
   `output_config`; `cabal build baikai-claude` succeeds and a pure mapping test asserts the
-  produced request carries the expected `output_config`.
-- [ ] M4: `baikai-smoke` gains a structured-output smoke case that, when a provider key is
+  produced request carries the expected `output_config`. **Done (2026-06-08):**
+  `mkAnthropicOutputConfig` helper added (`JsonSchema` → `Messages.jsonSchemaConfig`; `strict`
+  dropped — Anthropic is always schema-enforcing; `JsonObject` → permissive `{"type":"object"}`)
+  and wired into `mapRequest`; `mapRequest` exported. Upstream `OutputConfig`/`OutputFormat`
+  derive `Eq`, so the test asserts `Messages.output_config req == Just (jsonSchemaConfig
+  personSchema)` directly. `cabal test baikai-claude` green (4 tests). Added `aeson` + `claude`
+  to the test stanza.
+- [x] M4: `baikai-smoke` gains a structured-output smoke case that, when a provider key is
   present, sends a schema-bearing request and asserts the returned text parses as JSON and
   validates against the schema; it skips (does not fail) when no key is set. `cabal build
-  baikai-smoke` succeeds; the live run shows a conformant-JSON transcript.
+  baikai-smoke` succeeds; the live run shows a conformant-JSON transcript. **Done (2026-06-08):**
+  `StructuredSmoke.hs` created (mirrors `ToolsSmoke`), wired into `Smoke.hs` (`runStructuredCase`
+  wrapper + `or hadStructured` in the skip guard) and `other-modules`. No-key run exits 0 with a
+  structured-output skip line. **Live run (gpt-4o-mini via `OPENAI_API_KEY`) passed with the
+  conformant transcript:** `json={"age":36,"name":"Ada Lovelace"}` — a schema-shaped object
+  returned even though the prompt never mentions JSON, confirming server-side schema enforcement.
 
 
 ## Surprises & Discoveries
@@ -207,7 +227,47 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered in full (2026-06-08).** All four milestones complete; the purpose is met:
+a request carrying a JSON schema yields a response whose body validates against that schema.
+The live demonstration is the decisive proof — `gpt-4o-mini` returned
+`{"age":36,"name":"Ada Lovelace"}` for a prompt that never mentions JSON, so the provider is
+enforcing the attached schema server-side.
+
+What landed, against the plan:
+
+- **M1** — `Baikai.ResponseFormat` (`JsonSchema { name, schema, strict }` | `JsonObject`),
+  `Options.responseFormat :: Maybe ResponseFormat` defaulting to `Nothing`, re-exported from
+  the umbrella `Baikai`. Exactly as specified.
+- **M2** — OpenAI: `mkOpenAIResponseFormat` → upstream `response_format` (`JsonObject` →
+  `JSON_Object`; `JsonSchema` → named, explicitly-strict `JSON_Schema`; schema forwarded
+  verbatim). `mapRequest` exported for a pure test.
+- **M3** — Anthropic: `mkAnthropicOutputConfig` → native `output_config` via
+  `Messages.jsonSchemaConfig`. `strict` dropped (Anthropic is always schema-enforcing);
+  `JsonObject` downgrades to a permissive `{"type":"object"}` schema. `mapRequest` exported.
+- **M4** — `StructuredSmoke.hs`: live conformance case that skips without a key and asserts
+  the schema-shaped object otherwise.
+
+No `Baikai.Response`/`Content`/`Message` change was needed — the structured payload arrives as
+ordinary assistant text, exactly as the Surprises entries predicted. The cross-plan contract
+(integration point #2) is therefore as documented and fixed for EP-3 to consume.
+
+Deviations / notes:
+- `ResponseFormat` carries `{-# OPTIONS_GHC -Wno-partial-fields #-}` (the `strict`/`name`/
+  `schema` fields are partial across the two constructors), matching `Baikai.Trace.Event`'s
+  convention — baikai builds with `-Wpartial-fields` fleet-wide.
+- Comparison strategy split by upstream `Eq` availability: OpenAI's `ResponseFormat`/`JSONSchema`
+  derive only `Generic`/`Show`, so the M2 test pattern-matches and checks fields individually;
+  Anthropic's `OutputConfig`/`OutputFormat` derive `Eq`, so M3 compares directly against
+  `jsonSchemaConfig personSchema`.
+- Test stanzas gained deps: `baikai-openai-test` += `aeson`, `openai`; `baikai-claude-test` +=
+  `aeson`, `claude`.
+
+Gaps / not done (out of scope, as planned): baikai still ships no JSON Schema *validator* — the
+smoke test does a structural shape check, and the schema `Value` is forwarded to the provider
+verbatim; downstream (EP-3) owns turning a syntactically-valid-but-shape-wrong body into a typed
+error. The Anthropic native path was not exercised live (no Anthropic key was present during
+implementation); its pure mapping test passes and the wire shape matches the upstream SDK's
+documented `output_config`.
 
 
 ## Context and Orientation
