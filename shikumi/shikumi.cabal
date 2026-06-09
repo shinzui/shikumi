@@ -39,6 +39,7 @@ library
     Shikumi.Module
     Shikumi.Prelude
     Shikumi.Program
+    Shikumi.Routing
     Shikumi.Schema
     Shikumi.Schema.Types
     Shikumi.Signature
@@ -80,6 +81,7 @@ test-suite shikumi-test
     ProgramFixtures
     ProgramSpec
     ResilienceSpec
+    RoutingSpec
     SchemaSpec
     SerializeSpec
     Shikumi.Effect.TimeSpec
@@ -94,6 +96,7 @@ test-suite shikumi-test
     , baikai-effectful
     , baikai-openai
     , base
+    , containers
     , effectful
     , generic-lens
     , lens

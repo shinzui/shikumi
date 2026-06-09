@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | The keystone of shikumi (EP-4): a typed /deep embedding/ of an LM program as
 -- inspectable data. A 'Program' @i o@ is a tree of three constructors that can be
@@ -68,7 +69,6 @@ module Shikumi.Program
 where
 
 import Baikai (Model, _Model)
-import Control.Monad (replicateM)
 import Data.Aeson (FromJSON, ToJSON, Value)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
@@ -78,12 +78,21 @@ import Data.Text qualified as T
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Concurrent.Async (concurrently, mapConcurrently, pooledMapConcurrentlyN)
+import Effectful.Dispatch.Dynamic (interpose, passthrough)
 import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor)
+import Shikumi.Adapter
+  ( Adapter (..),
+    ToPrompt,
+    adapterFor,
+    attachSchema,
+    fallbackAdapter,
+    nativeAdapter,
+    stampTemperature,
+  )
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.LLM (LLM, complete)
-import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModel)
+import Shikumi.LLM (LLM (..), Response, complete)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
 import Shikumi.Schema.Types (fieldName)
 import Shikumi.Signature (Signature, getInstruction, outputFields, setDemos, setInstruction)
 import Shikumi.Signature qualified as Sig
@@ -128,14 +137,16 @@ emptyParams = Params Nothing []
 
 -- | How 'MajorityVote' varies sampling temperature across its @K@ samples.
 -- 'TempFixed' lists an explicit temperature per sample (cycled if shorter than
--- @K@); 'TempSpread base spread' centres on @base@ and fans out by @spread@.
+-- @K@, empty = leave temperature at the provider default); 'TempSpread base spread'
+-- centres on @base@ and fans @K@ values out evenly across @[base-spread,
+-- base+spread]@.
 --
--- The schedule is stored on the node and participates in its structural shape,
--- but is not yet threaded onto the wire request: 'runProgram' dispatches every
--- 'Predict' against the neutral model with adapter-fixed options (the same
--- "real provider/model routing is unwired" limitation EP-4 records). Wiring the
--- per-sample temperature awaits a real-routing mechanism; until then the schedule
--- is carried, serialized, and inspectable but inert at run time.
+-- Since EP-14 the schedule is /live/: each sample's temperature is stamped onto the
+-- private request-metadata channel ('Shikumi.Adapter.stampTemperature') and the
+-- router ("Shikumi.Routing".@routeLLM@) sets @Options.temperature@ from it, so the
+-- @K@ samples are sent with distinct temperatures on the wire. (Without a router
+-- installed the stamp is inert, as no interpreter realizes it — the hermetic stub
+-- path and the live path both install one.)
 data TempSchedule
   = TempFixed ![Double]
   | TempSpread !Double !Double
@@ -180,8 +191,8 @@ data Program i o where
   -- 'ValidationFailure'.
   Validate :: (o -> Either Text o) -> Program i o -> Program i o
   -- | Sample a program @K@ times and return the modal (most-frequent under
-  -- 'Eq', ties broken by first-seen) output. The 'TempSchedule' is carried
-  -- but not yet applied to the wire (see 'TempSchedule').
+  -- 'Eq', ties broken by first-seen) output. Each sample is run with its
+  -- 'TempSchedule' temperature applied to the wire (see 'TempSchedule').
   MajorityVote :: (Eq o) => Int -> TempSchedule -> Program i o -> Program i o
   -- | Run several programs on the same input, collect their (homogeneous)
   -- results, and fold them with a total reducer.
@@ -215,13 +226,15 @@ embed = Embed
 -- Execution
 -- ---------------------------------------------------------------------------
 
--- | The provider-neutral model every node dispatches against. It is the bottom
--- 'Baikai' registry, not the program, that selects a real provider; EP-4 uses the
--- neutral '_Model', which 'adapterFor' maps to the prompt-fallback adapter (the
--- MasterPlan's "exercised path" until EP-2 lands native schemas). Wiring a real
--- ambient model is deferred to the plans that need real routing.
-defaultModel :: Model
-defaultModel = _Model
+-- | The inert placeholder model 'runPredict' passes to 'complete'. Since EP-14
+-- 'runProgram' is model-agnostic: it never chooses a real provider itself. The
+-- ambient model is supplied below the stack by "Shikumi.Routing".@runRouting@ and
+-- the router ("Shikumi.Routing".@routeLLM@) overwrites this placeholder with it on
+-- every outgoing call. With no router installed (the bare-stub test path) the call
+-- still carries '_Model', which 'adapterFor' maps to the prompt-fallback adapter —
+-- preserving EP-4's original behaviour for un-routed runs.
+placeholderModel :: Model
+placeholderModel = _Model
 
 -- | Interpret a program as a typed @Eff@ computation. A 'Predict' node overlays
 -- its 'Params' onto the signature (effective instruction + decoded demos), renders
@@ -241,7 +254,8 @@ runProgram (Parallel pa pb) i = (,) <$> runProgram pa i <*> runProgram pb i
 runProgram (Retry n p) i = retryWith runProgram (const True) n p i
 runProgram (RetryWhen ok n p) i = retryWith runProgram ok n p i
 runProgram (Validate v p) i = runProgram p i >>= acceptOrReject v
-runProgram (MajorityVote k _sched p) i = modal <$> replicateM (max 1 k) (runProgram p i)
+runProgram (MajorityVote k sched p) i =
+  modal <$> traverse (\mt -> withSampleTemp mt (runProgram p i)) (sampleTemps (max 1 k) sched)
 runProgram (Ensemble ps reduce) i = reduce <$> traverse (\p -> runProgram p i) ps
 runProgram (Embed f) i = f i
 
@@ -264,8 +278,8 @@ runProgramConc (Parallel pa pb) i = concurrently (runProgramConc pa i) (runProgr
 runProgramConc (Retry n p) i = retryWith runProgramConc (const True) n p i
 runProgramConc (RetryWhen ok n p) i = retryWith runProgramConc ok n p i
 runProgramConc (Validate v p) i = runProgramConc p i >>= acceptOrReject v
-runProgramConc (MajorityVote k _sched p) i =
-  modal <$> mapConcurrently (const (runProgramConc p i)) [1 .. max 1 k]
+runProgramConc (MajorityVote k sched p) i =
+  modal <$> mapConcurrently (\mt -> withSampleTemp mt (runProgramConc p i)) (sampleTemps (max 1 k) sched)
 runProgramConc (Ensemble ps reduce) i = reduce <$> mapConcurrently (\p -> runProgramConc p i) ps
 -- The body requires only @(LLM, Error ShikumiError)@, a subset of this row, so it
 -- runs unchanged; an embedded agent that wants concurrency uses 'runProgramConc'
@@ -276,6 +290,7 @@ runProgramConc (Embed f) i = f i
 -- adapter, issue the 'LLM' call, parse back to a typed @o@. Shared by both
 -- executors so the wire behaviour is defined once.
 runPredict ::
+  forall i o es.
   (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
   (LLM :> es, Error ShikumiError :> es) =>
   Signature i o ->
@@ -284,10 +299,64 @@ runPredict ::
   Eff es o
 runPredict sig ps i = do
   sig' <- effectiveSignature sig ps
-  let adapter = adapterFor defaultModel
-      (ctx, opts) = render adapter sig' i
-  resp <- complete defaultModel ctx opts
-  either throwError pure (parse adapter sig' resp)
+  let adapter = adapterFor placeholderModel
+      (ctx, opts0) = render adapter sig' i
+      -- Stamp the derived schema onto the metadata channel regardless of which
+      -- adapter rendered the prompt; the router attaches a real @responseFormat@
+      -- from it for native-capable models and strips it otherwise.
+      opts = attachSchema (deriveSchema @o) opts0
+  resp <- complete placeholderModel ctx opts
+  either throwError pure (parseResponse sig' resp)
+
+-- | Decode a response back into the typed output, tolerant of /either/ wire shape:
+-- a native model (whose @responseFormat@ the router enforced) replies with a JSON
+-- object, while a fallback model replies with @[[ ## field ## ]]@ sections. Because
+-- a model-agnostic 'runPredict' cannot know at render time which the real model is,
+-- we try the native JSON parse first and fall back to the section parser, reporting
+-- the fallback parser's error when both fail (so un-routed runs keep their exact
+-- prior error behaviour).
+parseResponse ::
+  forall i o.
+  (FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
+  Signature i o ->
+  Response ->
+  Either ShikumiError o
+parseResponse sig' resp =
+  case parse (nativeAdapter @i @o) sig' resp of
+    Right o -> Right o
+    Left _ -> parse (fallbackAdapter @i @o) sig' resp
+
+-- | The per-sample temperatures for a 'MajorityVote' of @k@ samples. 'Nothing'
+-- leaves the provider default in place; 'Just t' is stamped onto the sample's
+-- requests. The multiset is identical between 'runProgram' and 'runProgramConc'.
+sampleTemps :: Int -> TempSchedule -> [Maybe Double]
+sampleTemps k (TempFixed xs)
+  | null xs = replicate k Nothing
+  | otherwise = map Just (take k (cycle xs))
+sampleTemps k (TempSpread base spread) = map Just (spreadTemps k base spread)
+
+-- | @k@ temperatures fanned evenly across @[base-spread, base+spread]@; a single
+-- sample sits exactly on @base@.
+spreadTemps :: Int -> Double -> Double -> [Double]
+spreadTemps k base spread
+  | k <= 1 = [base]
+  | otherwise = [base - spread + fromIntegral i * step | i <- [0 .. k - 1]]
+  where
+    step = (2 * spread) / fromIntegral (k - 1)
+
+-- | Run an action with one sample's temperature stamped onto every outgoing
+-- 'Complete' (via the private metadata channel the router realizes). 'Nothing' runs
+-- the action unchanged. Scoped to this sample only via 'interpose', so sibling
+-- samples are unaffected and nested votes compose.
+withSampleTemp :: (LLM :> es) => Maybe Double -> Eff es a -> Eff es a
+withSampleTemp Nothing act = act
+withSampleTemp (Just t) act =
+  interpose
+    ( \env -> \case
+        Complete m c o -> complete m c (stampTemperature t o)
+        other -> passthrough env other
+    )
+    act
 
 -- | Apply a validator to a program's output, surfacing a rejection as a
 -- 'ValidationFailure'.

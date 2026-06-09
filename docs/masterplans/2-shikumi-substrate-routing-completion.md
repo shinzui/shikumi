@@ -113,7 +113,7 @@ the ambient effect, but the ambient effect is the contract.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 14 | Ambient model routing and live native structured output | docs/plans/14-ambient-model-routing-and-live-native-structured-output.md | None | None | Not Started |
+| 14 | Ambient model routing and live native structured output | docs/plans/14-ambient-model-routing-and-live-native-structured-output.md | None | None | Complete |
 | 15 | Embedding backend over baikai | docs/plans/15-embedding-backend-over-baikai.md | None | None | Not Started |
 | 16 | Node-correlated tracing and feedback channel | docs/plans/16-node-correlated-tracing-and-feedback-channel.md | None | EP-14 | Not Started |
 | 17 | Live OpenTelemetry export sink | docs/plans/17-live-opentelemetry-export-sink.md | None | EP-16 | Not Started |
@@ -207,8 +207,8 @@ plan embeds the relevant excerpt.
 
 ## Progress
 
-- [ ] EP-14: Ambient `Routing` effect + interpreter; `runProgram`/`runProgramConc` dispatch a named model
-- [ ] EP-14: Live `attachSchema` (native `responseFormat`) + per-sample temperature applied on the wire
+- [x] EP-14: Ambient `Routing` effect + interpreter; `runProgram`/`runProgramConc` dispatch a named model
+- [x] EP-14: Live `attachSchema` (native `responseFormat`) + per-sample temperature applied on the wire
 - [ ] EP-15: Upstream baikai embeddings client (new transport)
 - [ ] EP-15: Shikumi `Embedding`-effect interpreter; `semanticSimilarity` runs end-to-end
 - [ ] EP-16: `NodePath` identity + `runProgramTraced` correlating spans to nodes

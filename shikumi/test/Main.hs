@@ -12,6 +12,7 @@ import ModuleSpec qualified
 import ProgramAcceptanceSpec qualified
 import ProgramSpec qualified
 import ResilienceSpec qualified
+import RoutingSpec qualified
 import SchemaSpec qualified
 import SerializeSpec qualified
 import Shikumi.Effect.TimeSpec qualified
@@ -31,6 +32,7 @@ main =
         LLMSpec.tests,
         ResilienceSpec.tests,
         ProgramSpec.tests,
+        RoutingSpec.tests,
         SerializeSpec.tests,
         ModuleSpec.tests,
         ProgramAcceptanceSpec.tests,

@@ -90,24 +90,28 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M0 (prototype):** A throwaway spike proves a `Routing` interpreter installed below a
-  hand-written `runProgram`-shaped loop causes a derived schema to reach `Options.responseFormat`
-  and a per-sample temperature to reach the wire, observed via a capturing stub LM. Spike code
-  lives under `shikumi/test/` (or a scratch module) and is deleted/retired once M1–M3 land.
-- [ ] **M1:** `Shikumi.Routing` effect + `runRouting :: Model -> Eff (Routing : es) a -> Eff es a`
-  exist; `runProgram`/`runProgramConc` read the ambient model via the router (not `_Model`); the
-  pinned integration-point-#4 signature is unchanged; hermetic test shows the routed model's id
-  on the captured request.
-- [ ] **M2:** `attachSchema` is a real setter; native-capable models carry
-  `Options.responseFormat = Just (JsonSchema {...})`; fallback models are unchanged; hermetic
-  test shows the schema on the wire for a native model and its absence for a fallback model.
-- [ ] **M3:** `MajorityVote`'s `TempSchedule` sets `Options.temperature` per sample; hermetic
-  test shows distinct temperatures across the `k` captured requests; `runProgram` and
-  `runProgramConc` agree.
+- [x] **M0 (prototype):** Subsumed. The `interpose`-on-`LLM` seam is already proven twice in the
+  repo (`cachedLLM`, `tracedLLM`), so rather than ship a throwaway spike module we went straight
+  to the production `Shikumi.Routing` and validated the identical four assertions in the
+  production `RoutingSpec` (`shikumi/test/RoutingSpec.hs`). Recorded in the Decision Log.
+- [x] **M1:** `Shikumi.Routing` effect + `runRouting :: Model -> Eff (Routing : es) a -> Eff es a`
+  exist (`shikumi/src/Shikumi/Routing.hs`); `runProgram`/`runProgramConc` dispatch the ambient
+  model via `routeLLM` (the placeholder `_Model` is overwritten); the pinned
+  integration-point-#4 signature is unchanged (verified by build of the whole fleet). `RoutingSpec`
+  test "routes the ambient model id onto the wire" passes (captured `modelId == "gpt-4o-mini"`).
+- [x] **M2:** `attachSchema` is a real setter onto the `Options.metadata` channel; `routeLLM`
+  turns it into `Options.responseFormat = Just (JsonSchema {...})` for native-capable models and
+  strips it; fallback models leave `responseFormat = Nothing`. Tests "native model attaches
+  responseFormat with the derived schema" and "fallback model leaves responseFormat unset" pass;
+  both assert the private key is stripped.
+- [x] **M3:** `MajorityVote`'s `TempSchedule` is threaded per sample via the metadata channel and
+  realized by `routeLLM` as `Options.temperature`. Tests show distinct spread temperatures
+  `{0.1,0.5,0.9}`, exact fixed `[0.1,0.9]`, the private temperature key stripped, and
+  `runProgram`/`runProgramConc` agree on the multiset.
 - [ ] **M4 (optional, gated):** A `SHIKUMI_LIVE`-gated live test routes a real provider and
-  asserts a schema-conforming reply.
-- [ ] Master-plan Progress checkboxes for EP-14 ticked; Decision Log / Surprises updated as
-  discoveries occur.
+  asserts a schema-conforming reply. Deferred — the hermetic stub path (M0–M3) is the exercised
+  one; the existing `LiveSpec` already proves real OpenAI dispatch end to end.
+- [x] Master-plan Progress checkboxes for EP-14 ticked; Decision Log / Surprises updated.
 
 
 ## Surprises & Discoveries
@@ -115,7 +119,28 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **baikai's `responseFormat`/`metadata` fields already exist.** The `Shikumi.Adapter` header
+  comment claimed "EP-2 is not yet merged … `Options` has no `responseFormat` field," but the
+  current baikai checkout (`baikai/src/Baikai/Options.hs`) already carries both `responseFormat ::
+  Maybe ResponseFormat` and `metadata :: Map Text Value`, and `Baikai.ResponseFormat.JsonSchema`
+  exists. So no upstream baikai change was needed for EP-14; the stale comment was corrected.
+- **The render-time adapter cannot be the model-dependent one.** Because `runProgram` renders
+  before the ambient model is known, it cannot pick native-vs-fallback rendering/parsing per the
+  real model. Rather than switch the default render to native (which would have broken every
+  existing marker-fed hermetic test), `runPredict` keeps the existing fallback render, *stamps*
+  the derived schema onto the metadata channel, and parses *leniently* — trying the native JSON
+  parse first and falling back to the marker parser, surfacing the fallback parser's error when
+  both fail. This keeps all 80 prior tests green (markers still parse, error behaviour unchanged)
+  while making the native routed path coherent: a native model whose `responseFormat` the router
+  enforced replies with JSON, which the lenient parser decodes. Evidence: `cabal test shikumi`
+  green at 86 tests; `RoutingSpec` proves the captured native request carries the schema and the
+  decode still succeeds against a marker stub response.
+- **Metadata keys live in `Shikumi.Adapter`, not `Shikumi.Routing`.** The plan suggested defining
+  the reserved keys in `Shikumi.Routing`, but `Routing` imports `Adapter` (for `capabilityFor`),
+  so the keys must sit in a module both `Adapter` (writer of the schema key), `Program` (writer of
+  the temperature key, via `stampTemperature`), and `Routing` (reader of both) can import without a
+  cycle. `Adapter` is that lowest common module, so `metaResponseSchemaKey`/`metaTemperatureKey`
+  and `stampTemperature` are exported from it. The keys are still defined exactly once.
 
 
 ## Decision Log
@@ -135,7 +160,8 @@ Record every decision made while working on the plan.
   `runProgram`. See "Context and Orientation" for how the model and the derived schema are made
   visible to the router. **This decision does not alter integration point #4; no cross-plan
   notification is required.**
-  Date: (fill when M0 lands).
+  Date: 2026-06-09 (confirmed in implementation: the whole fleet builds and tests green with the
+  pinned `runProgram` row unchanged).
 - Decision: Carry the derived JSON Schema and the per-sample temperature **as request metadata
   on `Options.metadata`** so the model-agnostic `runProgram` can emit them and the model-aware
   router can read them and translate them into `responseFormat` / `temperature` against the real
@@ -150,7 +176,34 @@ Record every decision made while working on the plan.
   derivation where the types live (in the adapter, parameterised over `o`) while keeping the
   provider decision where the model lives (in the router). See "Interfaces and Dependencies" for
   the exact key names and shapes.
-  Date: (fill when M0 lands).
+  Date: 2026-06-09 (confirmed in implementation: the whole fleet builds and tests green with the
+  pinned `runProgram` row unchanged).
+
+
+- Decision: **Skip the throwaway M0 spike module and validate the mechanism directly in the
+  production `RoutingSpec`.**
+  Rationale: the `interpose`-on-`LLM` seam is already proven in production by `cachedLLM` and
+  `tracedLLM`; a separate spike would test machinery the repo already exercises. The four M0
+  acceptance assertions (routed model id; native `responseFormat` carries the derived schema;
+  distinct per-sample temperatures; private metadata keys stripped) are all asserted in
+  `shikumi/test/RoutingSpec.hs` against the real `Shikumi.Routing`. No spike code was written or
+  retired.
+  Date: 2026-06-09.
+- Decision: **`runPredict` renders with the existing (fallback) adapter and parses leniently
+  (native JSON first, marker fallback), rather than switching the render to native.**
+  Rationale: a model-agnostic `runPredict` cannot know at render time whether the real model is
+  native-capable, and switching the default render to native JSON would break every existing
+  marker-fed hermetic test. Keeping the fallback render (prompts unchanged) plus stamping the
+  schema onto the metadata channel plus a lenient parser preserves all prior behaviour while
+  making the native routed path coherent (the router enforces `responseFormat`, the model returns
+  JSON, the lenient parser decodes it). The fallback parser's error is surfaced when both parses
+  fail, so un-routed error behaviour is byte-identical to before.
+  Date: 2026-06-09.
+- Decision: **Define the reserved metadata keys (and `stampTemperature`) in `Shikumi.Adapter`.**
+  Rationale: `Shikumi.Routing` imports `Shikumi.Adapter` for `capabilityFor`, so the keys cannot
+  live in `Routing` without a cycle; `Adapter` is the lowest module shared by the schema writer
+  (`Adapter`), the temperature writer (`Program`), and the reader (`Routing`).
+  Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -158,7 +211,18 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-14 delivered. `Shikumi.Routing` provides the ambient `Routing` effect, `runRouting`, and the
+`routeLLM` re-interpreter; `runProgram`/`runProgramConc` are now model-agnostic (the placeholder
+`_Model` is overwritten by the router) while keeping integration point #4's pinned signature
+exactly. `attachSchema` is a live setter onto the private metadata channel, and `routeLLM` turns
+it into a native `Options.responseFormat` for native-capable models (stripped for fallback ones).
+`MajorityVote`'s `TempSchedule` is now live: each sample's temperature is threaded down and set on
+the wire, identically under both executors. Validated hermetically by `shikumi/test/RoutingSpec.hs`
+(6 cases) and the whole fleet stays green (`cabal test all` exit 0). Gaps: M4 (gated live
+provider check) deferred — the existing `LiveSpec` already proves real OpenAI dispatch, and the
+hermetic path is the exercised one; the native prompt is still the fallback marker prompt (a
+native model relies on `responseFormat` enforcement plus the lenient JSON parse), which a later
+plan can refine to emit a JSON-oriented prompt when desired.
 
 
 ## Context and Orientation

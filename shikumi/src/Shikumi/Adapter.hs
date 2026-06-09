@@ -13,10 +13,16 @@
 -- sections and re-parses them, for models without native structured output.
 -- 'capabilityFor' selects per model.
 --
--- Note on EP-2: baikai's @Options@ does not yet carry a @responseFormat@ field
--- (that is delivered by EP-2). Until it lands, 'attachSchema' is a no-op and the
--- native adapter reads the JSON from the assistant text. Exactly one place
--- ('attachSchema') touches the future baikai field.
+-- Native structured output is wired through a private /metadata channel/ (EP-14).
+-- Because a 'Program' renders before the ambient model is known (the model is
+-- supplied by an interpreter below 'Shikumi.Program.runProgram' — see
+-- "Shikumi.Routing"), 'render' cannot itself decide native-vs-fallback or build the
+-- final @responseFormat@. Instead, 'attachSchema' stamps the derived JSON schema
+-- under the reserved 'metaResponseSchemaKey' on @Options.metadata@, and
+-- 'stampTemperature' stamps a per-sample temperature under 'metaTemperatureKey';
+-- the router ("Shikumi.Routing".@routeLLM@) translates those into
+-- @responseFormat@\/@temperature@ against the real model and strips the keys before
+-- transport.
 module Shikumi.Adapter
   ( -- * Input rendering
     ToPrompt (..),
@@ -29,6 +35,11 @@ module Shikumi.Adapter
     fallbackAdapter,
     adapterFor,
     attachSchema,
+
+    -- * The private request-metadata channel (consumed by "Shikumi.Routing")
+    stampTemperature,
+    metaResponseSchemaKey,
+    metaTemperatureKey,
   )
 where
 
@@ -48,14 +59,13 @@ import Baikai
     _Options,
   )
 import Control.Lens ((&), (.~), (^.))
-import Data.Aeson (Object, Value (..), eitherDecodeStrict)
+import Data.Aeson (Object, Value (..), eitherDecodeStrict, toJSON)
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (encodeUtf8)
@@ -146,15 +156,40 @@ adapterFor m = case capabilityFor m of
   NativeSchema -> nativeAdapter
   PromptFallback -> fallbackAdapter
 
--- | Attach the derived JSON schema to a request. EP-2 is not yet merged into the
--- local baikai checkout, so @Options@ has no @responseFormat@ field: this is a
--- no-op for now. When EP-2 lands, set @#responseFormat .~ Just (JsonSchema …)@
--- here — this is the single place that touches the field.
-attachSchema :: Value -> Options -> Options
-attachSchema _schema opts = opts
+-- | The reserved 'Options.metadata' key under which 'attachSchema' stamps the
+-- derived JSON schema 'Value'. "Shikumi.Routing".@routeLLM@ reads it, turns it into
+-- @Options.responseFormat@ for native-capable models, and strips it before
+-- transport. Defined here (the lowest module both the adapter and the router share)
+-- so it is written and read against a single source of truth.
+metaResponseSchemaKey :: Text
+metaResponseSchemaKey = "shikumi.responseSchema"
 
--- | The native-schema adapter. @render@ attaches the derived schema (a no-op
--- until EP-2); @parse@ reads the structured JSON from the assistant text.
+-- | The reserved 'Options.metadata' key under which 'stampTemperature' stamps a
+-- per-sample temperature (a JSON number). The router reads it, sets
+-- @Options.temperature@, and strips it before transport.
+metaTemperatureKey :: Text
+metaTemperatureKey = "shikumi.temperature"
+
+-- | Stamp the derived JSON schema onto a request's private metadata channel. This
+-- is no longer a no-op: it records the schema under 'metaResponseSchemaKey' so the
+-- router can attach a real @responseFormat@ once the ambient model is known. (The
+-- router only honours it for native-capable models; for fallback models it is
+-- simply stripped.)
+attachSchema :: Value -> Options -> Options
+attachSchema schema opts =
+  opts & #metadata .~ Map.insert metaResponseSchemaKey schema (opts ^. #metadata)
+
+-- | Stamp a per-sample temperature onto a request's private metadata channel under
+-- 'metaTemperatureKey'. Used by 'Shikumi.Program.runProgram' to thread a
+-- 'Shikumi.Program.MajorityVote' sample's temperature down to its 'Predict' nodes;
+-- the router turns it into @Options.temperature@.
+stampTemperature :: Double -> Options -> Options
+stampTemperature t opts =
+  opts & #metadata .~ Map.insert metaTemperatureKey (toJSON t) (opts ^. #metadata)
+
+-- | The native-schema adapter. @render@ stamps the derived schema onto the request
+-- metadata channel (see 'attachSchema'); @parse@ reads the structured JSON from the
+-- assistant text.
 nativeAdapter ::
   forall i o.
   (ToSchema o, FromModel o, Validatable o, ToPrompt i, ToPrompt o) =>
