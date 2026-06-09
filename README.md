@@ -151,9 +151,9 @@ is still legible. The resilience interpreter knows which of these are *transient
 
 ## Motivating examples
 
-> The snippets below reflect the **shipped** surface. The only items not yet built are the
-> *persistent* cache backends (the in-memory cache ships; SQLite/Postgres/Redis are planned)
-> and the CLI's *live* OpenTelemetry export — see **[Implementation status](#implementation-status)**.
+> The snippets below reflect the **shipped** surface. The in-memory **and** persistent cache
+> backends (SQLite, Redis, Postgres) all ship; the one item not yet built is the CLI's *live*
+> OpenTelemetry export — see **[Implementation status](#implementation-status)**.
 
 Every snippet below has a **runnable, offline counterpart** in the
 [`shikumi-jitsurei`](shikumi-jitsurei) package (実例, *worked examples*). Each one runs against
@@ -311,7 +311,9 @@ writeTraceFile "run.json" tree
 ```
 
 The cache key is a BLAKE3 digest over the canonical request, so identical calls are served
-from the (in-memory) cache. Stored traces let you **replay** an entire run deterministically
+from the cache — in-memory by default, or persisted across runs by swapping in the SQLite,
+Redis, or Postgres backend (same `Cache` effect, different interpreter). Stored traces let
+you **replay** an entire run deterministically
 via `runLLMReplay` (fail-closed: an unrecorded request is an error, never a network call) —
 and the `shikumi` CLI exposes `eval`, `trace`, `optimize`, and `replay` over the same
 machinery.
@@ -383,15 +385,18 @@ its type tells you exactly what it can do.
 The framework was built as twelve ExecPlans across five phases (see
 [`docs/masterplans/1-shikumi-typed-lm-programming-framework.md`](docs/masterplans/1-shikumi-typed-lm-programming-framework.md)).
 All twelve are delivered; `cabal test all` is green across every package, hermetically.
+Since then, EP-6's persistent cache backends (SQLite, Redis, Postgres) landed, and an owned
+clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing.
 
 | Area | Package | Status |
 |---|---|---|
 | **Runtime substrate** — `LLM` effect over baikai, `ShikumiError`, retries / rate-limiting / budget | `shikumi` | ✅ Done |
+| **Clock effect** — owned `Time` effect (wall + monotonic clock); callers need only `Time :> es`, not `IOE` | `shikumi` | ✅ Done |
 | **Native structured output** — `response_format` / `output_config` (upstreamed to baikai) | *baikai* | ✅ Done |
 | **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam | `shikumi` | ✅ Done |
 | **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, parameter traversal & serialization | `shikumi` | ✅ Done |
 | **Combinators** — `>>>`, `mapP`, `parallel2`, `retry`, `validate`, `majorityVote`, `ensemble` | `shikumi` | ✅ Done |
-| **Caching** — content-addressed key, `Cache` effect, in-memory backend | `shikumi-cache` | ✅ Core done · 🔭 SQLite/Postgres/Redis planned |
+| **Caching** — content-addressed key, `Cache` effect, in-memory + persistent backends | `shikumi-cache`, `-redis`, `-postgres` | ✅ Done — in-memory & SQLite (`shikumi-cache`), Redis, Postgres |
 | **Hierarchical tracing, OTel, deterministic replay** | `shikumi-trace`(`-otel`) | ✅ Done |
 | **Evaluation** — `Dataset` / `Metric` / `evaluate` / `Report` | `shikumi-eval` | ✅ Done |
 | **Compiler** — zero-shot / few-shot / CoT / RAG | `shikumi-compile` | ✅ Done |
