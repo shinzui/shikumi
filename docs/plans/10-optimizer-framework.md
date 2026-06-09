@@ -88,9 +88,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (spike): `shikumi-optimize` package scaffolded; `Optimizer` type and the
-      `optimize` driver compile against stubbed sibling types; a no-op optimizer round-trips
-      a program through `optimize`.
+- [x] M0 (spike): `shikumi-optimize` package scaffolded; `Optimizer` type and the
+      `optimize` driver compile against the **real** sibling types; a no-op optimizer
+      round-trips a program through `optimize`. **Done (2026-06-09).** `cabal test
+      shikumi-optimize` green (1 test); `cabal build all` green.
 - [ ] M1: `labeledFewShot` implemented; candidate demo-set search; unit test shows the
       chosen demo set is the highest-scoring of those tried.
 - [ ] M2: trace-to-demo recovery implemented (read per-node input/output from the EP-7 trace
@@ -112,9 +113,25 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. Record here, with short test-output snippets, anything that surprises you — for
-example, if the stub LM's determinism interacts unexpectedly with the cache key, or if a
-metric's tie-breaking makes a search non-deterministic.)
+- **The delivered sibling APIs differ from this plan's pre-authoring sketch; adapted at
+  M0 (2026-06-09).** Three concrete divergences, all reconciled by adapting call sites while
+  keeping EP-10's public surface stable (as the plan's Interfaces section permits):
+  (a) **Node addressing is by integer index, not `NodePath`.** EP-4 ships no
+  `NodePath`/`programNodePaths`/`nodeParams`/`setNodeParams`/`nodeSignature`/`SomeSignature`.
+  The real parameter interface is `foldParams :: Program i o -> [Params]` and
+  `mapParamsAt :: Int -> (Params -> Params) -> Program i o -> Program i o` (plus `mapParams`
+  for "all nodes"). So a node is addressed by its 0-based index in `foldParams` order;
+  `instructionSearch`'s coordinate ascent iterates `[0 .. n-1]` where `n = length (foldParams
+  prog)`.
+  (b) **The `evaluate` effect row is wider than `(LLM :> es)`.** EP-8's
+  `evaluate`/`evaluatePure` require `(LLM, Concurrent, Error ShikumiError, IOE) :> es`, so
+  `Optimizer`'s rank-2 `runOptimizer`, `optimize`, and `scoreOn` all carry that exact row.
+  `reportScore` is spelled `aggregateScore :: Report -> Double`.
+  (c) **`CompiledProgram` is EP-9's `newtype`** with accessor `compiledProgram`; "freeze a
+  program" is just its constructor (`freezeProgram = CompiledProgram`). EP-9's `fewShotTyped
+  :: (ToJSON i, ToJSON o) => [(i, o)] -> Compiler` and `zeroShot` already do the
+  demo/instruction parameter writes the optimizers need, so demo construction requires
+  `(ToJSON i, ToJSON o)` on the demo-building optimizers.
 
 
 ## Decision Log
