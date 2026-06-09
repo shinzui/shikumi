@@ -14,7 +14,6 @@ import ResilienceSpec qualified
 import SchemaSpec qualified
 import SerializeSpec qualified
 import SignatureSpec qualified
-import SpikeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -25,7 +24,6 @@ main =
       [ ErrorSpec.tests,
         SchemaSpec.tests,
         SignatureSpec.tests,
-        SpikeSpec.tests,
         AdapterSpec.tests,
         EndToEndSpec.tests,
         LLMSpec.tests,

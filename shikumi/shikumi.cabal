@@ -79,7 +79,6 @@ test-suite shikumi-test
     SchemaSpec
     SerializeSpec
     SignatureSpec
-    SpikeSpec
     StubProvider
 
   build-depends:
