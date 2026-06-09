@@ -4,6 +4,7 @@
 -- documented-usage doctest. Every group is hermetic — no network, no API key.
 module Main (main) where
 
+import MetricSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import TypesSpec qualified
 
@@ -12,5 +13,6 @@ main =
   defaultMain $
     testGroup
       "shikumi-eval"
-      [ TypesSpec.tests
+      [ TypesSpec.tests,
+        MetricSpec.tests
       ]

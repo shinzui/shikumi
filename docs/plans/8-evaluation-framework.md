@@ -80,9 +80,10 @@ This section must always reflect the actual current state of the work.
       `cabal build shikumi-eval`. (2026-06-08)
 - [x] M1: Unit tests for the data model and `Score` arithmetic pass under
       `cabal test shikumi-eval` (5 tests). (2026-06-08)
-- [ ] M2: `Shikumi.Eval.Metric` provides `exactMatch`, `normalizedStringSimilarity`,
-      `customMetric`, and the combinators `weightedMean`/`threshold`; pure-metric tests
-      pass.
+- [x] M2: `Shikumi.Eval.Metric` provides `Metric`/`MetricM`/`liftMetric`, `exactMatch`,
+      `normalizedStringSimilarity` (token-set Jaccard + normalized Levenshtein),
+      `customMetric`, and the combinators `weightedMean`/`threshold`/`invert`; pure-metric
+      tests pass (16 tests total). (2026-06-08)
 - [ ] M3: `Shikumi.Eval.Report` defines `Report`, `ExampleResult`, `FailurePolicy`; the
       report aggregation (`mkReport`) is unit-tested with synthetic per-example results.
 - [ ] M4: `Shikumi.Eval.Evaluate.evaluate` runs a program over a dataset with bounded

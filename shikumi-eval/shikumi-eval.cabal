@@ -32,11 +32,16 @@ common common-options
 library
   import:          common-options
   hs-source-dirs:  src
-  exposed-modules: Shikumi.Eval.Types
+  exposed-modules:
+    Shikumi.Eval.Metric
+    Shikumi.Eval.Types
+
   build-depends:
     , aeson
-    , base   >=4.20 && <5
-    , text   ^>=2.1
+    , base        >=4.20 && <5
+    , containers
+    , effectful
+    , text        ^>=2.1
 
 test-suite shikumi-eval-test
   import:         common-options
@@ -44,7 +49,10 @@ test-suite shikumi-eval-test
   hs-source-dirs: test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
-  other-modules:  TypesSpec
+  other-modules:
+    MetricSpec
+    TypesSpec
+
   build-depends:
     , aeson
     , base
