@@ -5,6 +5,7 @@
 module Main (main) where
 
 import EvaluateSpec qualified
+import MetricLMSpec qualified
 import MetricSpec qualified
 import ReportSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -18,5 +19,6 @@ main =
       [ TypesSpec.tests,
         MetricSpec.tests,
         ReportSpec.tests,
-        EvaluateSpec.tests
+        EvaluateSpec.tests,
+        MetricLMSpec.tests
       ]

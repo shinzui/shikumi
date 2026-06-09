@@ -15,6 +15,7 @@ module EvalFixtures
 
     -- * Canned responses
     answerResponse,
+    markerResponse,
 
     -- * Mock LLM interpreters
     MockReply (..),
@@ -88,6 +89,11 @@ qaProg = predict qaSig
 -- @Answer t@.
 answerResponse :: Text -> Response
 answerResponse t = mkResponse (markerBody [("answer", t)])
+
+-- | An assistant 'Response' whose body decodes (via the fallback adapter) to a
+-- record with the given @(field, value)@ sections.
+markerResponse :: [(Text, Text)] -> Response
+markerResponse = mkResponse . markerBody
 
 -- | Build a fallback-style response body from @(field, value)@ sections.
 markerBody :: [(Text, Text)] -> Text

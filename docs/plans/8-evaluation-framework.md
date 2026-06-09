@@ -94,8 +94,10 @@ This section must always reflect the actual current state of the work.
       `LLM` effect. `EvaluateSpec` (mock LM, no network): four-of-five exact match →
       `aggregateScore 0.8`; a program error → `FailScore scoreZero` while the run completes;
       `FailAbort` surfaces a `Left`. 29 tests total. (2026-06-08)
-- [ ] M5: LM-backed metrics `semanticSimilarity` (embedding-based) and `modelJudge`
-      (LLM-as-grader) are implemented and tested against a mock LM.
+- [x] M5: LM-backed metrics `semanticSimilarity` (cosine over the new `Embedding` effect,
+      with a pure `runEmbedding` interpreter) and `modelJudge` (LLM-as-grader running a tiny
+      `JudgeInput -> Grade` predict program) are implemented and tested against mock
+      interpreters (34 tests total). (2026-06-08)
 - [ ] M6: `Shikumi.Eval.Golden.goldenProgram` produces a `tasty` `TestTree`; the
       fail-before/pass-after golden demonstration is recorded in this plan with transcript.
 - [ ] M7: README/usage doc-comment example compiles via a doctest-style test; master-plan
@@ -191,6 +193,19 @@ Record every decision made while working on the plan.
   (monotonic, `base`-only) around each example, rather than `Data.Time.Clock` wall time.
   Rationale: monotonic time is the correct primitive for elapsed-duration measurement and adds
   no dependency. Date: 2026-06-08.
+- Decision (M5): `modelJudge`'s signature gains an `Error ShikumiError :> es` constraint
+  beyond the plan's sketched `(LLM :> es)`, because it runs a real `JudgeInput -> Grade`
+  predict program through `runProgram`, which threads `Error ShikumiError` (EP-4's finding):
+  a decode failure of the grade throws a typed error that `evaluate`'s per-example boundary
+  turns into a `MetricError`. The judge uses plain (unwrapped) record fields so the rendered
+  prompt stays clean, and reuses EP-3's `Double` schema/decode support for the `grade` field.
+  Date: 2026-06-08.
+- Decision (M5): the `Embedding` effect (`embedText :: Text -> Eff es (Vector Double)`, with a
+  pure `runEmbedding :: (Text -> Vector Double) -> ...` interpreter) is defined locally in
+  `Shikumi.Eval.Metric` as the plan anticipated, since EP-1's `LLM` exposes no embedding
+  operation. `semanticSimilarity` maps cosine from `[-1,1]` into `[0,1]` and returns
+  `scoreZero` for a zero-norm vector. When a substrate embedding capability lands, the metric
+  can switch interpreters without changing its type. Date: 2026-06-08.
 - Decision (M4): `EvaluateSpec`'s aggregate-score case uses an **order-independent** mock (a
   constant LLM that always answers "yes", with a dataset of four "yes" + one "no" expecteds),
   so the 0.8 result holds under any concurrency; the failure-policy cases use a positional

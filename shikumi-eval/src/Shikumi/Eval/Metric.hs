@@ -1,3 +1,6 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
+
 -- | Metrics: functions that score how close a program's 'Prediction' is to the
 -- expected output. There are two type aliases — a /pure/ 'Metric' and an
 -- /effectful/ 'MetricM' (for metrics that must themselves call a model, e.g.
@@ -5,10 +8,11 @@
 -- into the latter so @evaluate@ (defined over 'MetricM') covers both.
 --
 -- This module ships the pure, offline, deterministic built-ins ('exactMatch',
--- 'normalizedStringSimilarity', the 'customMetric' escape hatch) and the
--- combinators ('weightedMean', 'threshold', 'invert'). The LM-backed metrics
--- ('Shikumi.Eval.Metric.semanticSimilarity' / @modelJudge@) live alongside these
--- once the LM milestone lands.
+-- 'normalizedStringSimilarity', the 'customMetric' escape hatch), the combinators
+-- ('weightedMean', 'threshold', 'invert'), and the two LM-backed metrics:
+-- 'semanticSimilarity' (cosine of embedding vectors, over the 'Embedding' effect)
+-- and 'modelJudge' (an LLM-as-grader that runs a tiny shikumi program returning a
+-- numeric grade).
 module Shikumi.Eval.Metric
   ( -- * Metric types
     Metric,
@@ -24,21 +28,43 @@ module Shikumi.Eval.Metric
     weightedMean,
     threshold,
     invert,
+
+    -- * The embedding capability (for 'semanticSimilarity')
+    Embedding (..),
+    embedText,
+    runEmbedding,
+
+    -- * LM-backed metrics
+    semanticSimilarity,
+    modelJudge,
   )
 where
 
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
-import Effectful (Eff)
+import Data.Vector (Vector)
+import Data.Vector qualified as V
+import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
+import Effectful.Dispatch.Dynamic (interpret, send)
+import Effectful.Error.Static (Error)
+import GHC.Generics (Generic)
+import Shikumi.Adapter (ToPrompt)
+import Shikumi.Error (ShikumiError)
 import Shikumi.Eval.Types
   ( Prediction,
     Score,
     boolScore,
     mkScore,
     predictionPrimary,
+    scoreZero,
     unScore,
   )
+import Shikumi.LLM (LLM)
+import Shikumi.Module (predict)
+import Shikumi.Program (Program, runProgram)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Signature (Signature, mkSignature)
 
 -- | A pure metric: the expected output, then the program's prediction, yields a
 -- score. Pure metrics are deterministic and offline — ideal for golden tests.
@@ -99,18 +125,21 @@ normalize = T.unwords . T.words . T.toCaseFold
 -- dynamic program, folded over the characters of @t@). Self-contained — no extra
 -- dependency.
 levenshtein :: Text -> Text -> Int
-levenshtein s t = last (foldl transform [0 .. length a] b)
+levenshtein s t = lastElem (foldl transform [0 .. length a] b)
   where
     a = T.unpack s
     b = T.unpack t
     -- Given the previous DP row and the next character of @t@, compute the next
     -- row. @diag@/@up@ are the previous row's cells to the upper-left and above
     -- the cell being filled; @left@ is the cell just produced.
-    transform prevRow charB =
-      scanl fill (head prevRow + 1) (zip3 a prevRow (tail prevRow))
+    transform prevRow charB = case prevRow of
+      (p0 : rest) -> scanl fill (p0 + 1) (zip3 a prevRow rest)
+      [] -> [] -- unreachable: the row always has length (length a + 1) >= 1
       where
         fill left (charA, diag, up) =
           minimum [left + 1, up + 1, diag + (if charA == charB then 0 else 1)]
+    -- The last cell of the final row (0 for an empty row, which cannot occur).
+    lastElem = foldl (\_ x -> x) 0
 
 -- | Combine several metrics by a weighted average of their scores. An empty list
 -- yields the constant zero metric.
@@ -129,3 +158,106 @@ threshold t m = \e p -> boolScore (unScore (m e p) >= t)
 -- | Invert a metric (@1 - s@), useful for "lower is better" wrapped metrics.
 invert :: Metric o -> Metric o
 invert m = \e p -> mkScore (1 - unScore (m e p))
+
+-- ---------------------------------------------------------------------------
+-- The embedding capability
+-- ---------------------------------------------------------------------------
+
+-- | A minimal embedding effect: turn text into a dense vector. EP-1's @LLM@
+-- effect exposes no embedding operation, so 'semanticSimilarity' is expressed
+-- over this capability; its interpreter is supplied by the caller (a real
+-- embedding backend, or 'runEmbedding' over a pure function for tests).
+data Embedding :: Effect where
+  EmbedText :: Text -> Embedding m (Vector Double)
+
+type instance DispatchOf Embedding = 'Dynamic
+
+-- | Embed a piece of text.
+embedText :: (Embedding :> es) => Text -> Eff es (Vector Double)
+embedText t = send (EmbedText t)
+
+-- | Interpret 'Embedding' with a pure function (deterministic; good for tests and
+-- for backends that precompute embeddings).
+runEmbedding :: (Text -> Vector Double) -> Eff (Embedding : es) a -> Eff es a
+runEmbedding f = interpret $ \_ -> \case
+  EmbedText t -> pure (f t)
+
+-- | Embedding-based semantic similarity: the cosine similarity of the embeddings
+-- of the projected expected and predicted text, mapped from @[-1, 1]@ into
+-- @[0, 1]@. A zero-norm vector yields 'scoreZero' (no signal).
+semanticSimilarity :: (Embedding :> es) => (o -> Text) -> MetricM es o
+semanticSimilarity proj expd predd = do
+  a <- embedText (proj expd)
+  b <- embedText (proj (predictionPrimary predd))
+  pure (cosineScore a b)
+
+-- | Map the cosine similarity of two vectors into a 'Score'.
+cosineScore :: Vector Double -> Vector Double -> Score
+cosineScore a b
+  | na == 0 || nb == 0 = scoreZero
+  | otherwise = mkScore ((dot / (na * nb) + 1) / 2)
+  where
+    dot = V.sum (V.zipWith (*) a b)
+    na = sqrt (V.sum (V.map (\x -> x * x) a))
+    nb = sqrt (V.sum (V.map (\x -> x * x) b))
+
+-- ---------------------------------------------------------------------------
+-- LLM-as-judge
+-- ---------------------------------------------------------------------------
+
+-- | The judge's input: the grading rubric plus the reference and candidate texts
+-- (plain fields so the rendered prompt stays clean).
+data JudgeInput = JudgeInput
+  { rubric :: Text,
+    reference :: Text,
+    candidate :: Text
+  }
+  deriving stock (Generic, Show)
+
+instance FromModel JudgeInput
+
+instance ToPrompt JudgeInput
+
+-- | The judge's output: a single numeric grade, intended to be in @[0, 1]@
+-- (clamped by 'mkScore' regardless).
+newtype Grade = Grade {grade :: Double}
+  deriving stock (Generic, Show)
+
+instance ToSchema Grade
+
+instance FromModel Grade
+
+instance ToPrompt Grade
+
+instance Validatable Grade
+
+-- | The judge program: a single structured-output predictor that returns a
+-- 'Grade'. The @rubricText@ becomes the signature instruction.
+judgeProgram :: Text -> Program JudgeInput Grade
+judgeProgram rubricText = predict (judgeSig rubricText)
+
+judgeSig :: Text -> Signature JudgeInput Grade
+judgeSig rubricText =
+  mkSignature $
+    rubricText
+      <> " Compare the candidate answer to the reference answer and return a single field"
+      <> " `grade`: a number in [0,1] where 1 means the candidate fully matches the"
+      <> " reference and 0 means it is entirely wrong."
+
+-- | LLM-as-judge: ask a model to grade the prediction against the expected
+-- output. The rubric is supplied as text; the model returns a numeric grade,
+-- decoded through the structured-output path. A decode failure surfaces as a
+-- 'ShikumiError' (the per-example boundary in @evaluate@ turns it into a
+-- 'Shikumi.Eval.Report.MetricError'). Threads @Error ShikumiError@ because
+-- 'runProgram' does (EP-4): decode failures throw typed errors.
+modelJudge ::
+  (LLM :> es, Error ShikumiError :> es) =>
+  -- | rubric / grading instruction
+  Text ->
+  -- | render an output as text for the judge to read
+  (o -> Text) ->
+  MetricM es o
+modelJudge rubricText render expd predd = do
+  let inp = JudgeInput rubricText (render expd) (render (predictionPrimary predd))
+  Grade g <- runProgram (judgeProgram rubricText) inp
+  pure (mkScore g)

@@ -48,6 +48,7 @@ library
     , lens          ^>=5.3
     , shikumi
     , text          ^>=2.1
+    , vector
 
 test-suite shikumi-eval-test
   import:         common-options
@@ -58,6 +59,7 @@ test-suite shikumi-eval-test
   other-modules:
     EvalFixtures
     EvaluateSpec
+    MetricLMSpec
     MetricSpec
     ReportSpec
     TypesSpec
