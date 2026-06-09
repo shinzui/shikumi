@@ -175,7 +175,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Complete |
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Complete |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Complete |
-| 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Not Started |
+| 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | Not Started |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Not Started |
 | 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Not Started |
@@ -339,7 +339,7 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-3: `Signature` + field metadata + the `Adapter` seam (native + fallback)
 - [x] EP-4: `Program i o` GADT, `runProgram`, and the parameter-traversal interface
 - [x] EP-4: `predict` and `chainOfThought`
-- [ ] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
+- [x] EP-5: `Retry`, `Validate`, `Pipeline`, `Map`, `Parallel`, `MajorityVote`, `Ensemble`
 - [ ] EP-6: Cache effect with memory + SQLite backends
 - [ ] EP-6: Postgres + Redis backends
 - [ ] EP-7: Hierarchical trace tree over baikai `TraceSink` + OTel spans
@@ -446,6 +446,34 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   still ships **no JSON-Schema validator** (out of scope); EP-3's decoding layer owns turning a
   syntactically-valid-but-shape-wrong body into a typed `ShikumiError`. The mapping functions
   `mapRequest` are now exported from both provider `Api` modules for testing.
+- **EP-5 delivered (2026-06-08).** The combinator/control-flow layer landed:
+  `Shikumi.Program` gained seven GADT constructors (`Map Int`, `Parallel`, `Retry`,
+  `RetryWhen`, `Validate`, `MajorityVote`, `Ensemble`) wired through `runProgram`,
+  `paramsTraversal`, `mapParamsAt`, `programShape`/`ProgramShape`, and `setProgramParams`; a new
+  additive concurrent executor `runProgramConc`; `TempSchedule`; and `Shikumi.Combinator` (the
+  ergonomic surface: `>>>`, `chain`, `mapP`/`mapSeqP`, `parallel2`/`parallelN`,
+  `retry`/`retryWhen`, `validate`/`validateRetry`, `majorityVote`/`majorityVoteBy`, `ensemble`).
+  `cabal test shikumi` green (78 tests; 24 new). Cross-plan facts for EP-9 (compiler), EP-11
+  (ReAct), and EP-8 (eval), which hard-depend on EP-5:
+  (a) **`runProgram`'s signature is unchanged** — still `(LLM :> es, Error ShikumiError :> es)
+  => Program i o -> i -> Eff es o`, so integration point #4 is intact and every consumer keeps
+  the same constraint. Concurrency is opt-in via `runProgramConc :: (LLM, Error ShikumiError,
+  Concurrent :> es) => …` (the plan's "add Concurrent to runProgram" primary was rejected
+  precisely to preserve #4 — see EP-5 Decision Log).
+  (b) **The parameter/serialization contract extends uniformly**: every new constructor recurses
+  in `paramsTraversal`/`foldParams` (a program's parameter count still equals its `Predict`-leaf
+  count, now reachable through arbitrary combinator nesting), and `programShape` grew matching
+  `Shape*` constructors. EP-9/EP-10 rewrite/optimize combinator programs through exactly the same
+  `foldParams`/`mapParamsAt`/`programParams`/`setProgramParams` surface — verified by M9 on a
+  deep `chain [retry (majorityVote …), validate …]`.
+  (c) **Combinators are GADT constructors, not opaque functions** — so optimizers reach
+  `Predict` leaves buried inside a `MajorityVote` inside a `Retry`. New constructors are still a
+  compile error until all five functions pattern-match them (the EP-4 rule); EP-11 should follow
+  the same "derive from existing constructors where possible" pattern (`parallelN`/`majorityVoteBy`
+  are derived from `Ensemble`; ReAct's loop will likely need its own constructor).
+  (d) **`TempSchedule` is carried + serialized but inert on the wire** (Predict's options are
+  adapter-fixed — the same unwired-routing limitation EP-4 noted); per-sample temperature awaits
+  real routing. EP-8/EP-12 supplying real model selection would also unblock this.
 - **EP-4 delivered (2026-06-08).** The keystone landed: `Shikumi.Program` (the `Program i o`
   GADT — `Predict`/`Compose`/`FMap` — `Params`/`Demo`, `pipeline`, `runProgram`, the
   `paramsTraversal`/`foldParams`/`mapParams`/`mapParamsAt` parameter interface, and

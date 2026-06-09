@@ -89,21 +89,39 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (prototype): confirm the EP-4 GADT and parameter-traversal interface are present
-      and stable; write a throwaway `Pipeline` + `Retry` against a hand-rolled mock LM to
-      validate that new constructors run, traverse, and serialize before committing the
-      full surface.
-- [ ] M1: `Shikumi.Combinator` module skeleton + the mock LM test harness
-      (`Shikumi.LLM.Mock`) and the `cabal test shikumi:combinators` target wired up.
-- [ ] M2: `Pipeline` — `>>>`, `pipeline`, run/traverse/serialize, type-threading test.
-- [ ] M3: `Map` — `mapP`, sequential and bounded-concurrent interpretation, list test.
-- [ ] M4: `Parallel` — `parallel2`, `parallelN`, concurrent run, tuple-collection test.
-- [ ] M5: `Retry` — `retry`, attempt counting, error integration, succeeds-on-2nd test.
-- [ ] M6: `Validate` — `validate`, `validateRetry`, validation-failure error, feedback test.
-- [ ] M7: `MajorityVote` — `majorityVote`, temperature schedule, modal aggregation test.
-- [ ] M8: `Ensemble` — `ensemble`, reducer fold, heterogeneous-program test.
-- [ ] M9: traversal/serialization round-trip test covering every new constructor; update
-      the MasterPlan Progress row for EP-5.
+- [x] M0 (prototype): confirmed the EP-4 GADT and parameter interface. **Done (2026-06-08):**
+      read the landed `Shikumi.Program` — the anticipated 3-constructor GADT (`Predict`,
+      `Compose`, `FMap`); `runProgram :: (LLM :> es, Error ShikumiError :> es) => Program i o
+      -> i -> Eff es o` (a *closed* constraint, no `Concurrent`); traversal =
+      `paramsTraversal`/`foldParams`/`mapParams`/`mapParamsAt`; serialization =
+      `programShape`/`programParams`/`setProgramParams` with `ProgramShape =
+      ShapePredict|ShapeCompose|ShapeFMap`; error channel = `Effectful.Error.Static`. The
+      throwaway prototype was folded into the real M2/M5 work (the analysis is the de-risking);
+      all findings + the resulting design calls are recorded in the Decision Log below.
+- [x] M1: combinator scaffolding. **Done:** `Shikumi.Combinator` (the ergonomic surface) and
+      the mock harness `Shikumi.LLM.Mock` (`MockReply = MockOk Response | MockFail
+      ShikumiError`, `runMockLLM`, `runMockLLMCounting`). The repo uses one unified tasty suite
+      (`shikumi-test`), not a separate `shikumi:combinators` target — added a `CombinatorSpec`
+      module instead (run with `cabal test shikumi`). Smoke test green.
+- [x] M2: `Pipeline` — `>>>` (= `Compose`, pure surface; no new constructor) + n-ary `chain`;
+      type-threading test (intermediate `Outline` absent from the composite `Topic -> Draft`).
+- [x] M3: `Map` — new `Map Int` constructor; `mapP` (width) / `mapSeqP` (width 1); sequential
+      order test + a `runProgramConc` count test.
+- [x] M4: `Parallel` — new `Parallel` constructor; `parallel2` (tuple) + `parallelN` (= an
+      `Ensemble` with `id`); tuple/list collection tests + a concurrent run.
+- [x] M5: `Retry` — new `Retry`/`RetryWhen` constructors; fail-then-succeed (2 attempts),
+      all-fail (n attempts), and `retryWhen` non-matching (1 attempt) tests via the counter.
+- [x] M6: `Validate` — new `Validate` constructor; reject→`ValidationFailure`, accept passthrough,
+      and `validateRetry` recovery tests.
+- [x] M7: `MajorityVote` — new `MajorityVote` constructor (modal, `Eq o`, first-seen tie-break);
+      `majorityVoteBy` (= `Ensemble` + reducer). Modal `A,B,A,A,B → A`, tie, and custom-reducer
+      tests. (Temperature schedule carried + serialized but inert on the wire — see Decision Log.)
+- [x] M8: `Ensemble` — new `Ensemble` constructor; reducer-fold test + traversal-reaches-members.
+- [x] M9: cross-cutting — traversal reaches all nested leaves; a sentinel written through the
+      traversal reaches the deepest leaf at run time; shape is parameter-independent and the
+      parameter vector round-trips; a length mismatch is a typed `ParamCountMismatch`; a
+      function-carrying node serializes its structure (closure omitted) without crashing.
+      `cabal test shikumi` green (78 tests, 24 new). MasterPlan EP-5 row updated.
 
 
 ## Surprises & Discoveries
@@ -111,7 +129,30 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The plan's primary concurrency design — "add `Concurrent :> es` to `runProgram`'s
+  constraint" — is **incompatible with the landed EP-4**, whose `runProgram` constraint is the
+  fixed `(LLM :> es, Error ShikumiError :> es)` that the MasterPlan pins as integration point #4
+  (every consumer, incl. EP-3's tests, inherits it). Changing it would break them. So the plan's
+  documented *fallback* was taken instead: `runProgram` stays sequential with its exact
+  signature, and a new additive `runProgramConc :: (LLM, Error ShikumiError, Concurrent :> es)
+  => …` provides the concurrent surface. Evidence: `Shikumi.Program.runProgram` source +
+  54 pre-existing tests stayed green after the change.
+- Almost every combinator needs a **new GADT constructor**, not a derived function. EP-4's
+  "prefer derived functions" steer holds only where the three base constructors already express
+  the behaviour — that is exactly Pipeline (= `Compose`). Map/Parallel/Retry/Validate/
+  MajorityVote/Ensemble each introduce runtime control flow (per-element iteration, fan-out,
+  error-catch loops, effectful rejection, replication, fold) that `Predict`/`Compose`/`FMap`
+  cannot encode, so they are constructors. `parallelN` and `majorityVoteBy` *are* derived
+  (from `Ensemble`).
+- The mock's counting variant can't return `(a, Int)`: a `MockFail` short-circuits the `Error`
+  channel, discarding the tuple on the all-fail path. Switched to a **caller-owned `IORef`
+  counter** (mutated before the throw, read after the run resolves) so attempt counts survive.
+- A truly-concurrent `Map` over a *shared* scripted reply queue races on pop order (results stay
+  positionally ordered, but which reply each element draws is nondeterministic). Order-sensitive
+  assertions therefore run under sequential `runProgram`; `runProgramConc` is tested with
+  identical replies.
+- `foldl'` and `Data.List` are no longer needed as an explicit import — base ≥4.20 (GHC 9.12)
+  re-exports `foldl'` from `Prelude`; importing it triggers `-Wunused-imports`.
 
 
 ## Decision Log
@@ -168,13 +209,95 @@ Record every decision made while working on the plan.
   rather than inventing its own.
   Date: 2026-06-07.
 
+- Decision (M0, 2026-06-08): **the concrete EP-4 surface this plan builds against.**
+  `Shikumi.Program` exports the GADT `Program (Predict, Compose, FMap)`;
+  `runProgram :: (LLM :> es, Error ShikumiError :> es) => Program i o -> i -> Eff es o`;
+  parameter interface `paramsTraversal` (a `Traversal'`-shaped function) +
+  `foldParams`/`mapParams`/`mapParamsAt`; serialization `programShape`/`programParams`/
+  `setProgramParams` with `ProgramShape = ShapePredict !Text | ShapeCompose .. | ShapeFMap ..`
+  and error `ProgramShapeError = ParamCountMismatch (Int,Int)`; error channel is
+  `Effectful.Error.Static`. New constructors must extend `runProgram`, `paramsTraversal`,
+  `mapParamsAt`, `programShape`, and `setProgramParams` (a compile error until all five match).
+
+- Decision (M0, 2026-06-08): **`runProgram` keeps its exact EP-4 signature; concurrency is an
+  additive opt-in executor `runProgramConc`.** The plan's primary "add `Concurrent :> es` to
+  `runProgram`" cannot be done without breaking integration point #4 (the fixed `(LLM, Error
+  ShikumiError)` constraint every consumer inherits). So `runProgram` interprets every new
+  constructor sequentially, and `runProgramConc :: (LLM, Error ShikumiError, Concurrent :> es)
+  => Program i o -> i -> Eff es o` interprets `Map` (bounded by its width via
+  `pooledMapConcurrentlyN`), `Parallel` (`concurrently`), `MajorityVote`, and `Ensemble`
+  (`mapConcurrently`) concurrently. Observable results are identical for a deterministic mock.
+  This is the plan's own documented fallback.
+
+- Decision (M0, 2026-06-08): **combinators are new GADT constructors except where the base set
+  already suffices.** Pipeline = `Compose` (surface only: `>>>`, `chain`). New constructors:
+  `Map Int`, `Parallel`, `Retry`, `RetryWhen`, `Validate`, `MajorityVote` (`Eq o`), `Ensemble`.
+  Derived from `Ensemble`: `parallelN = Ensemble ps id`, `majorityVoteBy k _ r p = Ensemble
+  (replicate k p) r`. `validateRetry = Retry n . validate`.
+
+- Decision (M0, 2026-06-08): **the mock scripts `Response` values, not raw `Value`.** The
+  plan's `MockOk Value` predated knowing the exercised path is EP-3's prompt-fallback adapter,
+  which parses `[[ ## field ## ]]`-marked assistant *text*, not JSON. So `MockReply = MockOk
+  Response | MockFail ShikumiError`, building responses with `ProgramFixtures.mkResponse` /
+  `markerBody`. The counting variant takes a caller-owned `IORef Int` (see Surprises) rather
+  than returning `(a, Int)`.
+
+- Decision (M0, 2026-06-08): **n-ary same-type composition is named `chain`, not `pipeline`.**
+  EP-4 already exports a *binary* `pipeline = Compose`; reusing the name for an n-ary
+  `[Program a a] -> Program a a` would clash. `chain` is restricted to one carried type and is
+  partial on the empty list (the GADT has no identity node to seed an empty fold).
+
+- Decision (M0, 2026-06-08): **`TempSchedule` is carried + serialized but inert on the wire.**
+  `runProgram`'s `Predict` path fixes model/options through the adapter with no temperature
+  hook (the same "real provider/model routing is unwired" limitation EP-4 records). So
+  `MajorityVote` samples `K` times without per-sample temperature variation for now; the
+  schedule is stored and inspectable, and wiring it awaits a real-routing mechanism. The M7
+  temperature-recording sub-test is therefore omitted; the modal headline test (ordered
+  scripted replies) stands.
+
+- Decision (M0, 2026-06-08): **function-carrying nodes serialize their structure with the
+  closure omitted — no function registry, no typed error.** EP-4's serialization never
+  serializes closures (it omits `FMap`'s function in the shape; `programParams`/
+  `setProgramParams` move only leaf `Params`, never functions, which are reintroduced by code
+  reconstruction). `RetryWhen`/`Validate`/`Ensemble` follow that exact pattern (their shapes
+  omit the predicate/validator/reducer). The plan's "typed opaque-function error" was written
+  against a registry mechanism EP-4 does not have; M9 instead asserts these shapes are produced
+  without crashing and the parameter round-trip holds.
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered in full (2026-06-08).** All seven combinator behaviors are demonstrable against a
+deterministic mock LM under `cabal test shikumi` (78 tests; 24 new in `CombinatorSpec`). The
+purpose is met: a user composes small typed `Program`s into larger ones with `>>>`, `chain`,
+`mapP`/`mapSeqP`, `parallel2`/`parallelN`, `retry`/`retryWhen`, `validate`/`validateRetry`,
+`majorityVote`/`majorityVoteBy`, and `ensemble`, and the compiler rejects mismatched
+assemblies. Every combinator is a GADT node (or pure surface over one), so all stay runnable,
+traversable by the optimizer, and serializable — integration point #4 holds, verified by the
+M9 deep-program traversal/serialization round-trip.
+
+What shipped:
+- `Shikumi.Program` gained seven constructors (`Map Int`, `Parallel`, `Retry`, `RetryWhen`,
+  `Validate`, `MajorityVote`, `Ensemble`) wired through `runProgram` (sequential), the new
+  `runProgramConc` (concurrent), `paramsTraversal`, `mapParamsAt`, `programShape`/`ProgramShape`,
+  and `setProgramParams`; plus `TempSchedule` and a `modal` helper.
+- `Shikumi.Combinator` — the ergonomic surface (operators + smart constructors).
+- `Shikumi.LLM.Mock` — the scripted/failing/counting mock harness (test tree).
+
+Deviations from the plan (all in the Decision Log, all forced by the *actual* EP-4 surface):
+concurrency is an opt-in `runProgramConc` rather than a constraint on `runProgram` (integration
+point #4); the n-ary helper is `chain` not `pipeline` (name clash); the mock scripts `Response`
+not `Value` (the fallback adapter parses marked text); `TempSchedule` is inert on the wire
+pending real routing; function-carrying nodes serialize structurally (closure omitted) — EP-4
+has no function registry, so there is no "typed opaque-function error" to raise.
+
+Gaps / future work: per-sample temperature for `MajorityVote` awaits the same real-model-routing
+work EP-4 deferred; `mapVecP` (a `Vector` variant) was dropped — the GADT has no input-side
+contramap to lift `V.toList`/`V.fromList` into a `Program`, so it would need a `Pure`/`Dimap`
+constructor outside this plan's budget. Lists cover the core behavior.
 
 
 ## Context and Orientation
