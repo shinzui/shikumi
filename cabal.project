@@ -1,0 +1,33 @@
+-- shikumi build descriptor.
+--
+-- shikumi depends on four sibling packages that live in the baikai repository
+-- (`/Users/shinzui/Keikaku/bokuno/baikai`): `baikai` (core transport), the two
+-- provider packages `baikai-claude` / `baikai-openai`, and `baikai-effectful`
+-- (the thin, policy-free `effectful` binding over baikai's transport — EP-1's
+-- `LLM` effect is built on top of its `Baikai` effect).
+--
+-- These are referenced by LOCAL PATH rather than the `source-repository-package`
+-- form the ExecPlan sketches. Two reasons make local paths the only reproducible
+-- option on this fleet today: (1) the baikai HEAD shikumi builds against is not
+-- pushed to GitHub, so a pinned `tag:` would not resolve for a fresh clone; and
+-- (2) `baikai-effectful` is unpublished (not on Hackage, not yet listed as its
+-- own mori package). The fleet co-develops sibling Haskell packages from local
+-- checkouts under `~/Keikaku/bokuno`. Revisit and switch to
+-- `source-repository-package` once baikai (with `baikai-effectful`) is published.
+--
+-- The GHC toolchain (9.12.4) + cabal come from the dev shell defined in
+-- ./flake.nix (`nix develop`), shared via the `shinzui/haskell-nix-dev` base
+-- flake. The system PATH ghc (9.10.3) is the WRONG compiler; build inside the
+-- dev shell.
+packages:
+  shikumi
+  /Users/shinzui/Keikaku/bokuno/baikai/baikai
+  /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
+  /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai
+  /Users/shinzui/Keikaku/bokuno/baikai/baikai-effectful
+
+test-show-details: direct
+tests: True
+
+-- Parallel module compilation
+jobs: $ncpus

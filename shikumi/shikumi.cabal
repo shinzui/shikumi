@@ -1,0 +1,82 @@
+cabal-version: 3.4
+name:          shikumi
+version:       0.1.0.0
+synopsis:      Typed, structured, evaluable LM programs over baikai
+description:
+  Shikumi is a Haskell-native framework for building typed language-model programs.
+  This package provides the runtime substrate: the LLM effect over baikai, the
+  shikumi error type, and resilience (retries, rate limiting, budget control).
+
+license:       BSD-3-Clause
+author:        Nadeem Bitar
+maintainer:    nadeem@gmail.com
+build-type:    Simple
+
+common common-options
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
+    -Wincomplete-record-updates -Wredundant-constraints
+    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wmissing-deriving-strategies
+
+  default-language:   GHC2024
+  default-extensions:
+    DeriveAnyClass
+    DuplicateRecordFields
+    OverloadedLabels
+    OverloadedStrings
+
+library
+  import:          common-options
+  hs-source-dirs:  src
+  exposed-modules:
+    Shikumi.Error
+    Shikumi.LLM
+    Shikumi.LLM.Budget
+    Shikumi.Prelude
+
+  build-depends:
+    , aeson
+    , baikai
+    , baikai-claude
+    , baikai-effectful
+    , baikai-openai
+    , base              >=4.20 && <5
+    , containers
+    , effectful
+    , generic-lens
+    , lens              ^>=5.3
+    , stm
+    , text              ^>=2.1
+    , vector
+
+test-suite shikumi-test
+  import:         common-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  ghc-options:    -threaded -with-rtsopts=-N
+  other-modules:
+    ErrorSpec
+    LiveSpec
+    LLMSpec
+    ResilienceSpec
+    StubProvider
+
+  build-depends:
+    , aeson
+    , baikai
+    , baikai-claude
+    , baikai-effectful
+    , baikai-openai
+    , base
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
+    , stm
+    , streamly-core
+    , tasty
+    , tasty-hunit
+    , text
+    , vector
