@@ -74,17 +74,32 @@ This section must always reflect the actual current state of the work.
   existential-`Compose` traversal typechecks and the instruction rewrite is observable in
   `runProgram` output. **Design promoted as-is** (see Decision Log). Spike is throwaway —
   removed after M1.
-- [ ] M1: commit the promoted `Shikumi.Program` module — the full `Program i o` GADT
-  (`Predict`, `Compose`, `FMap`), `Params`, and `runProgram`.
-- [ ] M2: commit the parameter interface — `paramsTraversal`, `foldParams`, `mapParams`,
-  and `mapParamsAt` — with documented semantics and unit tests.
-- [ ] M3: commit serialization — `ProgramShape` extraction, `programParams`/`setProgramParams`
-  (ordered parameter vector get/set), JSON round-trip of the parameter state, with tests.
-- [ ] M4: commit `Shikumi.Module` — `predict` and `chainOfThought` — with their types and
-  construction, and the chain-of-thought reasoning-field extension.
-- [ ] M5: commit the end-to-end acceptance example and tests (typed two-stage pipeline run
-  through the stub LLM; parameter rewrite observed both as data and in the captured prompt).
-- [ ] Decision Log, Surprises, and Outcomes kept current at each milestone.
+- [x] M1 — done 2026-06-08: `Shikumi.Program` (exposed in the cabal lib) — the full
+  `Program i o` GADT (`Predict` with existentially-captured adapter/decode constraints,
+  `Compose`, `FMap`), `Params`/`Demo`/`emptyParams`, `pipeline`, and `runProgram :: (LLM :>
+  es, Error ShikumiError :> es) => Program i o -> i -> Eff es o`. `runProgram`'s `Predict`
+  case overlays `Params` onto the signature and runs EP-3's `render → LLM.complete → parse`.
+  `ProgramSpec` "M1" runs a single node through a scripted fake `LLM` to a typed `Outline`.
+- [x] M2 — done 2026-06-08: the parameter interface — `paramsTraversal` (source of truth),
+  `foldParams`/`mapParams` (via `Const`/`Identity`), `mapParamsAt` (polymorphic-recursion
+  index walk). `ProgramSpec` proves stage-order folding, single-node edits, out-of-range
+  identity, and the **ordering law** as a QuickCheck property (`foldParams . mapParamsAt n f
+  == adjust n f . foldParams`, 100 cases green).
+- [x] M3 — done 2026-06-08: serialization — `ProgramShape` (closure-free; `Predict` labeled
+  by joined output-field names) with aeson instances, `programParams`/`setProgramParams`
+  (ordered get/set, `ParamCountMismatch` on length mismatch), JSON round-trip. `SerializeSpec`
+  covers the round-trip, re-apply, shape stability across param changes, and the reject case.
+- [x] M4 — done 2026-06-08: `Shikumi.Module` — `predict`, `chainOfThought`/`chainOfThoughtRaw`,
+  and `WithReasoning` with **hand-written** `ToSchema`/`FromModel`/`ToPrompt` (the polymorphic
+  `value :: o` field cannot go through the overlappable generic instances) and a local
+  `withReasoningField`. `ModuleSpec` runs a CoT node to a `WithReasoning` value and projects
+  the bare output; the CoT node's params are reachable via `mapParamsAt 0`.
+- [x] M5 — done 2026-06-08: `ProgramAcceptanceSpec` — Behavior 1 (typed `Topic→Outline→Draft`
+  pipeline returns a `Draft`), Behavior 2 as data (rewrite touches only node 0) and on the
+  wire (the recording fake `LLM` captures `"NEW INSTRUCTION"` in the first-stage prompt).
+  Full suite: **59 tests green** via `cabal test shikumi`.
+- [x] M0 spike removed after promotion (`refactor(program): remove promoted spike`).
+- [x] Decision Log, Surprises, and Outcomes kept current at each milestone.
 
 
 ## Surprises & Discoveries
@@ -99,6 +114,22 @@ implementation. Provide concise evidence.
   `base`, no `lens` needed for the impl). The rewrite is observable end-to-end: a stub
   "model" that echoes its effective instruction shows `"NEW INSTRUCTION"` in `runProgram`
   output after a traversal edit. No design change needed.
+- **M4 (2026-06-08): `WithReasoning o` cannot use the generic schema instances.** Its
+  `value :: o` field is polymorphic, and `Shikumi.Schema`'s per-field classes (`FieldSchema`,
+  `FieldDoc`) resolve their general case via an `{-# OVERLAPPABLE #-}` instance that GHC
+  refuses to commit to for an abstract `o` (a more specific instance — e.g. `Field d a` — might
+  exist). So `instance ToSchema o => ToSchema (WithReasoning o)` with the `Generic` default
+  fails with "Overlapping instances … the choice depends on the instantiation of `o`". Fix:
+  hand-write `ToSchema`/`FromModel`/`ToPrompt` for `WithReasoning` (a nested `{reasoning,
+  value}` object) and build the augmented signature's field metadata explicitly (reusing the
+  source signature's `inputFields`). Lesson for `docs/plans/5/11`: any wrapper that adds a
+  field around a polymorphic payload (retry envelopes, trajectory wrappers) must hand-roll its
+  schema instances, not derive them.
+- **M5 (2026-06-08): "invalid pipelines fail to compile" verified by construction.** Swapping
+  the stages — `pipeline (predict outlineToDraft) (predict topicToOutline)` — is a type error:
+  the first stage is `Program Outline Draft` (so `Compose`'s middle type is `Draft`) while the
+  second is `Program Topic Outline` (needing the middle type to be `Topic`); `Draft` and
+  `Topic` do not unify, so GHC rejects it. The headline guarantee holds.
 - **EP-3 interface divergences found while reading the delivered EP-3 (recorded for M1):**
   EP-3 does **not** expose the pinned `runSignature`, `signatureName`, or `withReasoningField`.
   Instead `Shikumi.Adapter` exposes `Adapter { render :: Signature i o -> i -> (Context,

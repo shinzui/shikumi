@@ -7,8 +7,12 @@ import EndToEndSpec qualified
 import ErrorSpec qualified
 import LLMSpec qualified
 import LiveSpec qualified
+import ModuleSpec qualified
+import ProgramAcceptanceSpec qualified
+import ProgramSpec qualified
 import ResilienceSpec qualified
 import SchemaSpec qualified
+import SerializeSpec qualified
 import SignatureSpec qualified
 import SpikeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -26,5 +30,9 @@ main =
         EndToEndSpec.tests,
         LLMSpec.tests,
         ResilienceSpec.tests,
+        ProgramSpec.tests,
+        SerializeSpec.tests,
+        ModuleSpec.tests,
+        ProgramAcceptanceSpec.tests,
         LiveSpec.tests
       ]

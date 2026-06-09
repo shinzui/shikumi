@@ -1,0 +1,84 @@
+-- | EP-4 M1 (run a node through the LLM effect) and M2 (the parameter interface:
+-- @foldParams@ / @mapParams@ / @mapParamsAt@ and the ordering law).
+module ProgramSpec (tests) where
+
+import Data.IORef (newIORef)
+import Data.List (foldl1')
+import Data.Text (Text)
+import Data.Text qualified as T
+import Effectful (runEff)
+import Effectful.Error.Static (runErrorNoCallStack)
+import ProgramFixtures
+  ( Cell (..),
+    Draft,
+    Outline (..),
+    Topic (..),
+    cellSig,
+    outlineResponse,
+    outlineToDraft,
+    runScriptedLLM,
+    topicToOutline,
+  )
+import Shikumi.Error (ShikumiError)
+import Shikumi.Program
+  ( Params (..),
+    Program (Compose, Predict),
+    emptyParams,
+    foldParams,
+    mapParams,
+    mapParamsAt,
+    pipeline,
+    runProgram,
+  )
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.QuickCheck (NonNegative (..), Positive (..), testProperty, (===))
+
+-- A two-stage program reused across the param tests.
+twoStage :: Program Topic Draft
+twoStage = pipeline (Predict topicToOutline emptyParams) (Predict outlineToDraft emptyParams)
+
+setInstr :: Text -> Params -> Params
+setInstr t p = p {instructionOverride = Just t}
+
+-- | A list update mirroring @mapParamsAt@'s contract, used to state the ordering
+-- law executably.
+adjust :: Int -> (a -> a) -> [a] -> [a]
+adjust n f xs = [if i == n then f x else x | (i, x) <- zip [0 ..] xs]
+
+-- | A pipeline of @k@ identical @Cell -> Cell@ predict nodes (k >= 1).
+cellPipeline :: Int -> Program Cell Cell
+cellPipeline k = foldl1' Compose (replicate k (Predict cellSig emptyParams))
+
+tests :: TestTree
+tests =
+  testGroup
+    "ProgramSpec"
+    [ testCase "M1: a single Predict node runs through the LLM effect to a typed output" $ do
+        ref <- newIORef [outlineResponse]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
+            runProgram (Predict topicToOutline emptyParams) (Topic "haskell")
+        out @?= Right (Outline {points = ["intro", "body", "end"]}),
+      testCase "M2: foldParams returns nodes in stage order" $
+        foldParams twoStage @?= [emptyParams, emptyParams],
+      testCase "M2: mapParams touches every node" $
+        foldParams (mapParams (setInstr "X") twoStage)
+          @?= [setInstr "X" emptyParams, setInstr "X" emptyParams],
+      testCase "M2: mapParamsAt 0 edits only the first node" $
+        foldParams (mapParamsAt 0 (setInstr "first") twoStage)
+          @?= [setInstr "first" emptyParams, emptyParams],
+      testCase "M2: mapParamsAt 1 edits only the second node" $
+        foldParams (mapParamsAt 1 (setInstr "second") twoStage)
+          @?= [emptyParams, setInstr "second" emptyParams],
+      testCase "M2: mapParamsAt with an out-of-range index is the identity" $
+        foldParams (mapParamsAt 7 (setInstr "nope") twoStage)
+          @?= [emptyParams, emptyParams],
+      testProperty "M2: ordering law — foldParams . mapParamsAt n f == adjust n f . foldParams" $
+        \(Positive k') (NonNegative seed) ->
+          let k = 1 + (k' `mod` 8)
+              n = seed `mod` k
+              f = setInstr ("node " <> T.pack (show n))
+              prog = cellPipeline k
+           in foldParams (mapParamsAt n f prog) === adjust n f (foldParams prog)
+    ]

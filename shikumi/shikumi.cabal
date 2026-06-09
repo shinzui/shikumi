@@ -34,7 +34,9 @@ library
     Shikumi.Error
     Shikumi.LLM
     Shikumi.LLM.Budget
+    Shikumi.Module
     Shikumi.Prelude
+    Shikumi.Program
     Shikumi.Schema
     Shikumi.Schema.Types
     Shikumi.Signature
@@ -69,8 +71,13 @@ test-suite shikumi-test
     Fixtures
     LiveSpec
     LLMSpec
+    ModuleSpec
+    ProgramAcceptanceSpec
+    ProgramFixtures
+    ProgramSpec
     ResilienceSpec
     SchemaSpec
+    SerializeSpec
     SignatureSpec
     SpikeSpec
     StubProvider
@@ -85,10 +92,12 @@ test-suite shikumi-test
     , effectful
     , generic-lens
     , lens
+    , QuickCheck
     , shikumi
     , stm
     , streamly-core
     , tasty
     , tasty-hunit
+    , tasty-quickcheck
     , text
     , vector
