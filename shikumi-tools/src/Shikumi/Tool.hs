@@ -76,9 +76,9 @@ import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, toSch
 -- provides, which is what lets a ReAct agent (built on the @Embed@ program node)
 -- execute its tools without widening that row.
 data Tool i o = Tool
-  { toolName :: !Text,
-    toolDescription :: !Text,
-    toolRun :: !(forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o)
+  { name :: !Text,
+    description :: !Text,
+    run :: !(forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o)
   }
 
 -- | Build a tool from a name, a description, and an effectful body. A pure tool is
@@ -100,8 +100,8 @@ toolSchemaOf _ = toSchema (Proxy @i)
 lowerTool :: forall i o. (ToSchema i) => Tool i o -> B.Tool
 lowerTool t =
   _Tool
-    & #name .~ toolName t
-    & #description .~ toolDescription t
+    & #name .~ name t
+    & #description .~ description t
     & #parameters .~ toolSchemaOf t
 
 -- ---------------------------------------------------------------------------
@@ -119,11 +119,11 @@ data SomeTool where
 
 -- | The name of an erased tool.
 someToolName :: SomeTool -> Text
-someToolName (SomeTool t) = toolName t
+someToolName (SomeTool t) = name t
 
 -- | The description of an erased tool.
 someToolDescription :: SomeTool -> Text
-someToolDescription (SomeTool t) = toolDescription t
+someToolDescription (SomeTool t) = description t
 
 -- | The derived input JSON Schema of an erased tool.
 someToolSchema :: SomeTool -> Value
@@ -144,10 +144,10 @@ runErased ::
   Eff es (Either ToolError Text)
 runErased (SomeTool t) args =
   case fromModelChecked args of
-    Left err -> pure (Left (ToolArgsInvalid (toolName t) (shikumiErrorText err)))
+    Left err -> pure (Left (ToolArgsInvalid (name t) (shikumiErrorText err)))
     Right i ->
-      (Right . encodeText <$> toolRun t i)
-        `catchError` \_cs e -> pure (Left (ToolRunFailed (toolName t) (shikumiErrorText e)))
+      (Right . encodeText <$> run t i)
+        `catchError` \_cs e -> pure (Left (ToolRunFailed (name t) (shikumiErrorText e)))
 
 -- | A heterogeneous tool set, keyed by tool name for O(log n) dispatch.
 newtype ToolRegistry = ToolRegistry (Map Text SomeTool)

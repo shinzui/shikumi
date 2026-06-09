@@ -67,7 +67,7 @@ formatPassages :: [Passage] -> Text
 formatPassages [] = ""
 formatPassages ps =
   "Use the following retrieved context to answer:\n"
-    <> T.unlines ["- " <> passageText p | p <- ps]
+    <> T.unlines ["- " <> text p | p <- ps]
 
 -- | Append the context block to every node's signature instruction, recursing
 -- through every composite/combinator node. A no-op when @ctx@ is empty.

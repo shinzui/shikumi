@@ -20,7 +20,7 @@ import Effectful (Eff)
 -- | A unit of retrievable text.
 data Passage = Passage
   { passageId :: !Text,
-    passageText :: !Text
+    text :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -41,7 +41,7 @@ newtype Retriever = Retriever
 inMemoryRetriever :: Int -> [Passage] -> Retriever
 inMemoryRetriever k corpus = Retriever $ \query ->
   let qWords = tokens query
-      score p = length (filter (`elem` qWords) (tokens (passageText p)))
+      score p = length (filter (`elem` qWords) (tokens (text p)))
    in pure (take k (sortOn (Down . score) corpus))
   where
     tokens = T.words . T.toLower

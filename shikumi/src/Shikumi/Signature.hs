@@ -27,8 +27,8 @@ import Shikumi.Schema.Types (FieldMeta)
 -- | A worked input -> output example shown to the model. Optimizers select and
 -- rewrite these.
 data Demo i o = Demo
-  { demoInput :: i,
-    demoOutput :: o
+  { input :: i,
+    output :: o
   }
   deriving stock (Generic, Show, Eq)
 

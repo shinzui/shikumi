@@ -3,7 +3,7 @@
 -- compiler of the plan.
 --
 -- The injected 'Demo's are stored as type-agnostic JSON (EP-4's
--- 'Shikumi.Program.Demo' carries @demoInput@/@demoOutput@ as aeson @Value@s), so a
+-- 'Shikumi.Program.Demo' carries @input@/@output@ as aeson @Value@s), so a
 -- single demo pool attaches uniformly to every node regardless of its signature.
 -- At run time each node's adapter (EP-3) renders the fields it recognizes; a demo
 -- authored for one node's shape simply renders what overlaps at a node with a
@@ -32,4 +32,4 @@ fewShot ds = Compiler $ mapParams (\ps -> ps {demos = ds})
 -- them precisely.
 fewShotTyped :: (ToJSON i, ToJSON o) => [(i, o)] -> Compiler
 fewShotTyped pairs =
-  fewShot [Demo {demoInput = toJSON i, demoOutput = toJSON o} | (i, o) <- pairs]
+  fewShot [Demo {input = toJSON i, output = toJSON o} | (i, o) <- pairs]

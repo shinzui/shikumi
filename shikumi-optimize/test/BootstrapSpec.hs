@@ -56,16 +56,16 @@ tests =
     "M2 bootstrap"
     [ testCase "recoverDemo produces a round-trippable typed demo" $ do
         let d = recoverDemo (Sentence "good film") (Label "positive")
-        (fromModel (demoInput d) :: Either ShikumiError Sentence) @?= Right (Sentence "good film")
-        (fromModel (demoOutput d) :: Either ShikumiError Label) @?= Right (Label "positive"),
+        (fromModel (input d) :: Either ShikumiError Sentence) @?= Right (Sentence "good film")
+        (fromModel (output d) :: Either ShikumiError Label) @?= Right (Label "positive"),
       testCase "bootstrap attaches demos only for metric-passing teacher runs" $ do
         res <- runStub (optimize (bootstrapFewShot teacher defaultBudget) trainset exactMatch sentimentProg)
         case res of
           Left e -> assertFailure ("unexpected error: " <> show e)
           Right cp -> do
             let ds = compiledDemos cp
-                ins = traverse (\d -> fromModel (demoInput d)) ds :: Either ShikumiError [Sentence]
-                outs = traverse (\d -> fromModel (demoOutput d)) ds :: Either ShikumiError [Label]
+                ins = traverse (\d -> fromModel (input d)) ds :: Either ShikumiError [Sentence]
+                outs = traverse (\d -> fromModel (output d)) ds :: Either ShikumiError [Label]
             length ds @?= 2
             ins @?= Right [Sentence "good film", Sentence "bad film"]
             outs @?= Right [Label "positive", Label "negative"]

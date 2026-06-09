@@ -47,8 +47,8 @@ essay = pipeline (predict topicToOutline) (predict outlineToDraft)
 sampleDemo :: Demo
 sampleDemo =
   Demo
-    { demoInput = topicJSON "demo topic",
-      demoOutput = outlineJSON ["alpha", "beta"]
+    { input = topicJSON "demo topic",
+      output = outlineJSON ["alpha", "beta"]
     }
 
 topicJSON :: Text -> Value

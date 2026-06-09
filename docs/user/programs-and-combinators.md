@@ -50,7 +50,7 @@ data Params = Params
   , demos               :: [Demo]       -- ordered few-shot demonstrations
   }
 
-data Demo = Demo { demoInput :: Value, demoOutput :: Value }   -- stored as JSON
+data Demo = Demo { input :: Value, output :: Value }   -- stored as JSON
 
 emptyParams :: Params                    -- no override, no demos
 ```

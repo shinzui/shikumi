@@ -11,9 +11,9 @@ composes, traces, caches, and optimizes like any other node.
 
 ```haskell
 data Tool i o = Tool
-  { toolName        :: Text
-  , toolDescription :: Text
-  , toolRun         :: forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o
+  { name        :: Text
+  , description :: Text
+  , run         :: forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o
   }
 
 mkTool :: Text -> Text -> (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Tool i o

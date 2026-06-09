@@ -38,8 +38,8 @@ labeledCandidateSets :: (ToJSON i, ToJSON o) => Int -> Dataset i o -> [[Demo]]
 labeledCandidateSets k train = combinations k allDemos
   where
     allDemos =
-      [ Demo {demoInput = toJSON (input ex), demoOutput = toJSON (expected ex)}
-      | ex <- datasetExamples train
+      [ Demo {input = toJSON i, output = toJSON o}
+      | Example i o <- datasetExamples train
       ]
 
 -- | Attach a demo set to every node, leaving each node's instruction untouched.

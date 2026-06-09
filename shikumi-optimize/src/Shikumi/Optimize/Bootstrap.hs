@@ -55,7 +55,7 @@ defaultBootstrapConfig = BootstrapConfig {passThreshold = 1.0, maxBootstrappedDe
 -- decodes back into the node's typed demo channel. (The JSON keys are the record
 -- field names, so @fromModel@ round-trips them — see the unit test.)
 recoverDemo :: (ToJSON i, ToJSON o) => i -> o -> Demo
-recoverDemo i o = Demo {demoInput = toJSON i, demoOutput = toJSON o}
+recoverDemo i o = Demo {input = toJSON i, output = toJSON o}
 
 -- | Bootstrap few-shot with the default configuration.
 bootstrapFewShot :: (ToJSON i, ToJSON o) => Program i o -> Budget -> Optimizer i o

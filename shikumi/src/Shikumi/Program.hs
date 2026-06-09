@@ -113,8 +113,8 @@ instance FromJSON Params
 -- @Sig.Demo i o@ and spliced into the prompt by EP-3's adapter; a demo whose JSON
 -- does not decode surfaces as a 'ShikumiError'.
 data Demo = Demo
-  { demoInput :: !Value,
-    demoOutput :: !Value
+  { input :: !Value,
+    output :: !Value
   }
   deriving stock (Eq, Show, Generic)
 
