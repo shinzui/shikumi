@@ -59,15 +59,22 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `exportTreeLive` (and a small `LiveExport` helper module) to `shikumi-trace-otel`
-      that builds a real OTLP `Tracer`, calls the existing `exportTree`, and flushes/shuts the
-      provider down. Hermetic recording-exporter test green.
-- [ ] M2: Wire the CLI so `shikumi trace <id> --otel` calls `exportTreeLive`; print a one-line
-      summary; keep the no-`--otel` path byte-for-byte unchanged. CLI test green.
-- [ ] M3: Carry EP-16's per-node `nodePath` (and any per-node attributes) into the exported
-      span attributes when the trace contains them; additive and a no-op on traces without them.
-- [ ] Update `docs/masterplans/2-shikumi-substrate-routing-completion.md` registry row 17 to
-      `Complete` and tick its Progress bullet.
+- [x] M1: Added `Shikumi.Trace.LiveExport` with `exportTreeWith` (factored on a **`SpanProcessor`**,
+      not a `SpanExporter` — see Surprises) and `exportTreeLive` (builds the OTLP/HTTP exporter from
+      the `OTEL_*` env vars, wraps it in a batch processor, exports, flushes on shutdown). Added
+      `hs-opentelemetry-sdk` and `hs-opentelemetry-exporter-otlp` to the library deps. Hermetic
+      recording-processor test green (`exportTreeWith (recording processor) …`).
+- [x] M2: Wired `runTraceCmd` so `shikumi trace <id> --otel` prints the tree (unchanged), then
+      calls `exportTreeLive "shikumi" tree` and prints a one-line `Exported N spans via OTLP to …`
+      summary. Added `shikumi-trace-otel` to the CLI library deps. The no-`--otel` path is
+      untouched (existing CLI golden tests still pass); smoke-tested `--otel` with no collector —
+      it prints, exports (silently dropped), and exits 0 without a crash.
+- [x] M3: EP-16 has landed, so this is the landed case: `attrsFor` now inserts
+      `shikumi.node_path` (rendered via `Shikumi.Trace.Node.renderNodePath`) on every span whose
+      source carries a `nodePath`. Hermetic test gives an LM-call fixture span a `nodePath` and
+      asserts the `shikumi.node_path` attribute is exported.
+- [x] Updated `docs/masterplans/2-shikumi-substrate-routing-completion.md` registry row 17 to
+      `Complete` and ticked its Progress bullet.
 
 
 ## Surprises & Discoveries
@@ -75,7 +82,23 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`exportTreeWith` is factored on `SpanProcessor`, not `SpanExporter`.** The plan assumed
+  `inMemoryListExporter` returns a `SpanExporter` (so the test and CLI could share a
+  `SpanExporter`-shaped boundary). On disk it actually returns
+  `(SpanProcessor, IORef [ImmutableSpan])`, while `otlpExporter` returns a `SpanExporter`. So the
+  shared boundary is one level up: `exportTreeWith :: SpanProcessor -> Text -> TraceTree -> m ()`.
+  The hermetic test passes `inMemoryListExporter`'s processor directly; `exportTreeLive` wraps the
+  OTLP exporter in `batchProcessor batchTimeoutConfig` to get a processor. The "one shared code
+  path" intent is preserved; only the factoring type changed.
+- **`SpanProcessor` is exported from `OpenTelemetry.Processor.Span`** (in `hs-opentelemetry-api`),
+  not from `OpenTelemetry.Trace`/`OpenTelemetry.Trace.Core` — the first import location the plan
+  implied does not export the type.
+- **M3 is the landed case, not a stub.** EP-16 shipped before EP-17, so `SpanAttrs.nodePath`
+  already exists and `Shikumi.Trace.Node.renderNodePath` is available; `attrsFor` exports
+  `shikumi.node_path` directly rather than leaving the documented stub the plan's "not yet landed"
+  branch described.
+- **`makeTracer` takes an `InstrumentationLibrary`**, satisfied here via its `IsString` instance
+  (`fromString (T.unpack name)`).
 
 
 ## Decision Log
@@ -107,6 +130,30 @@ Record every decision made while working on the plan.
   Rationale: the master plan marks EP-16 a *soft* dependency of EP-17; EP-17 must ship against
   today's `TraceTree` and merely export the richer attribute when it exists.
   Date: 2026-06-09.
+- Decision: Factor the shared export orchestration on a **`SpanProcessor`** boundary
+  (`exportTreeWith :: SpanProcessor -> Text -> TraceTree -> m ()`), not the `SpanExporter` the
+  plan sketched.
+  Rationale: `inMemoryListExporter` returns a `SpanProcessor` and `otlpExporter` returns a
+  `SpanExporter`; the only type both the hermetic test and the live path can share is the
+  processor (the live path lifts its exporter to a processor via `batchProcessor`). Recorded under
+  Surprises with the on-disk signatures.
+  Date: 2026-06-09.
+- Decision: M3 landed (not stubbed): EP-16 shipped first, so `attrsFor` exports
+  `shikumi.node_path` via `renderNodePath` whenever a span carries a `nodePath`.
+  Date: 2026-06-09.
+
+
+## Outcomes & Retrospective
+
+EP-17 delivered, all three milestones landed (M3 in its EP-16-landed form). `shikumi trace <id>
+--otel` now exports the recorded tree to a real OTLP collector (default `http://localhost:4318`,
+configured by the standard `OTEL_*` env vars), printing the unchanged tree plus a one-line export
+summary; with no collector it drops spans silently and exits cleanly. The live orchestration is a
+thin `exportTreeWith`/`exportTreeLive` wrapper around the unchanged `exportTree`, proven
+hermetically by an in-memory recording-processor test that drives the exact CLI code path
+(provider → batch processor → export → shutdown-flush), and LM-call spans now also carry
+`shikumi.node_path` from EP-16. The whole fleet (`cabal test all`) is green. The only non-CI proof
+is the documented manual collector demo (a network service CI cannot host).
 
 
 ## Context and Orientation

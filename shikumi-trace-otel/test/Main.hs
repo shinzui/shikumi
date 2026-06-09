@@ -24,12 +24,14 @@ import Shikumi.Trace
     TraceTree (..),
     emptyAttrs,
   )
+import Shikumi.Trace.LiveExport (exportTreeWith)
+import Shikumi.Trace.Node (NodePath (..), NodeStep (..))
 import Shikumi.Trace.OpenTelemetry (exportTree)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
 
 main :: IO ()
-main = defaultMain $ testGroup "shikumi-trace-otel" [nestingTest]
+main = defaultMain $ testGroup "shikumi-trace-otel" [nestingTest, liveExportInMemoryTest]
 
 nestingTest :: TestTree
 nestingTest =
@@ -63,6 +65,31 @@ nestingTest =
     assertBool
       "every parent is an emitted span"
       (all (`elem` emittedSpanIds) presentParents)
+
+-- | EP-17 M1+M3: the full live orchestration (provider + batch processor + export
+-- + shutdown-flush) driven through 'exportTreeWith' with the in-memory recording
+-- processor swapped in for the OTLP one — the exact code path the CLI calls, minus
+-- the network. Asserts one span per node, the GenAI attributes, and (EP-16 landed)
+-- the @shikumi.node_path@ attribute on the model-call spans.
+liveExportInMemoryTest :: TestTree
+liveExportInMemoryTest =
+  testCase "exportTreeWith (recording processor) preserves nesting and node attrs" $ do
+    (proc, spansRef :: IORef [Otel.ImmutableSpan]) <- inMemoryListExporter
+    exportTreeWith proc "shikumi-live-test" fixedTree
+    emitted <- reverse <$> readIORef spansRef
+    assertEqual "one OTel span per tree node" (Map.size (spans fixedTree)) (length emitted)
+    let llmSpans = [s | s <- emitted, Otel.spanKind s == Otel.Client]
+    assertEqual "two LM-call (Client) spans" 2 (length llmSpans)
+    modelled <- mapM (spanHasAttr "gen_ai.request.model") llmSpans
+    assertBool "every LM-call span has gen_ai.request.model" (and modelled)
+    tagged <- mapM (spanHasAttr "shikumi.node_path") llmSpans
+    assertBool "every LM-call span carries shikumi.node_path (EP-16 landed)" (and tagged)
+
+-- | Whether the recorded span's attribute map contains a key.
+spanHasAttr :: Text -> Otel.ImmutableSpan -> IO Bool
+spanHasAttr key s = do
+  hot <- readIORef (Otel.spanHot s)
+  pure (HashMap.member key (Attr.getAttributeMap (Otel.hotAttributes hot)))
 
 -- | The recorded parent span id of an immutable span, if it has a parent.
 parentSpanId :: Otel.ImmutableSpan -> IO (Maybe OtelId.SpanId)
@@ -117,7 +144,9 @@ llmAttrs =
       provider = Just "anthropic",
       inputTokens = Just 812,
       outputTokens = Just 143,
-      latencyMs = Just 205
+      latencyMs = Just 205,
+      -- EP-16 landed: model-call spans carry their issuing node's path.
+      nodePath = Just (NodePath [StepComposeL])
     }
 
 at :: Int -> UTCTime

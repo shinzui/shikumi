@@ -11,6 +11,7 @@ module Shikumi.Cli.Run
   )
 where
 
+import Control.Monad (when)
 import Data.Aeson (ToJSON, encode)
 import Data.ByteString.Lazy qualified as BL
 import Data.Map.Strict qualified as Map
@@ -31,9 +32,11 @@ import Shikumi.Cli.Runtime (recordTrace, runReplayProgram, runStubEval, runStubP
 import Shikumi.Compile (encodeCompiled)
 import Shikumi.Eval (evaluatePure, renderReportText)
 import Shikumi.Optimize (optimize)
-import Shikumi.Trace (renderTree)
+import Shikumi.Trace (TraceTree (..), renderTree)
+import Shikumi.Trace.LiveExport (exportTreeLive)
 import Shikumi.Trace.Store (readTraceFile, writeTraceFile)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath ((<.>), (</>))
 import System.IO (hPutStrLn, stderr)
@@ -60,7 +63,12 @@ runTraceCmd g (TraceOpts tid) = do
       e <- readTraceFile path
       case e of
         Left err -> die err
-        Right tree -> TIO.putStr ("Trace " <> tid <> "\n\n" <> renderTree tree)
+        Right tree -> do
+          TIO.putStr ("Trace " <> tid <> "\n\n" <> renderTree tree)
+          when (otel g) $ do
+            exportTreeLive "shikumi" tree
+            ep <- otlpEndpointForMessage
+            TIO.putStrLn ("\nExported " <> tshow (Map.size (spans tree)) <> " spans via OTLP to " <> ep)
 
 -- | @optimize@: run the named optimizer over the task and save the compiled program.
 runOptimizeCmd :: Registry -> GlobalOpts -> OptimizeOpts -> IO ()
@@ -154,6 +162,13 @@ encodeText = decodeUtf8 . BL.toStrict . encode
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
+
+-- | The OTLP endpoint to name in the export-summary line. Echoes the same standard
+-- variable the OTLP exporter itself reads ('OTEL_EXPORTER_OTLP_ENDPOINT'); the
+-- actual endpoint resolution lives in the exporter, this is purely cosmetic.
+otlpEndpointForMessage :: IO Text
+otlpEndpointForMessage =
+  maybe "http://localhost:4318 (default)" T.pack <$> lookupEnv "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 -- | Print a message to stderr and exit non-zero.
 die :: Text -> IO ()

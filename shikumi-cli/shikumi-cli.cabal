@@ -61,6 +61,7 @@ library
     , shikumi-eval
     , shikumi-optimize
     , shikumi-trace
+    , shikumi-trace-otel
     , text                  ^>=2.1
     , vector
 

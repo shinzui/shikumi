@@ -37,6 +37,7 @@ import OpenTelemetry.Context qualified as Context
 import OpenTelemetry.SemanticConventions qualified as SC
 import OpenTelemetry.Trace.Core qualified as Otel
 import Shikumi.Trace (Span, SpanAttrs, SpanKind (..), TraceTree, childrenOf)
+import Shikumi.Trace.Node (renderNodePath)
 
 -- | Export a finished trace tree to a tracer as a forest of nested spans. Pure
 -- structural ('ProgramSpan' / 'ModuleSpan' / 'CombinatorSpan') and LM-call
@@ -62,7 +63,11 @@ exportTree tracer tree = liftIO (go Context.empty (tree ^. #root))
           Otel.startTime = Just (utcToTimestamp (s ^. #startedAt))
         }
 
--- | The OTel attribute map for a span.
+-- | The OTel attribute map for a span. Every span carries @shikumi.span_kind@ and
+-- @shikumi.retries@, plus — when the source span was produced by
+-- @runProgramTraced@ (EP-16) — @shikumi.node_path@, the structural path of the
+-- @Program@ node that issued it. LM-call spans additionally carry the GenAI
+-- attributes.
 attrsFor :: Span -> HashMap Text Attr.Attribute
 attrsFor s =
   let a = s ^. #attrs
@@ -71,7 +76,12 @@ attrsFor s =
           [ ("shikumi.span_kind", Attr.toAttribute (kindText (s ^. #kind))),
             ("shikumi.retries", Attr.toAttribute (a ^. #retries))
           ]
-   in if (s ^. #kind) == LlmCallSpan then genAiAttrs a base else base
+      withNode =
+        maybe
+          id
+          (\p -> HashMap.insert "shikumi.node_path" (Attr.toAttribute (renderNodePath p)))
+          (a ^. #nodePath)
+   in withNode (if (s ^. #kind) == LlmCallSpan then genAiAttrs a base else base)
 
 -- | Overlay the GenAI semantic-convention attributes (plus shikumi cost/latency)
 -- for an LM-call span.
