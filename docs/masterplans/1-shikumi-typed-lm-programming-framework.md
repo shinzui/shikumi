@@ -178,7 +178,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 | 5  | Module combinators and control flow | docs/plans/5-module-combinators-and-control-flow.md | EP-4 | None | 10 | Complete |
 | 6  | Caching subsystem | docs/plans/6-caching-subsystem.md | EP-1 | None | 9 | In Progress |
 | 7  | Hierarchical tracing observability and replay | docs/plans/7-hierarchical-tracing-observability-and-replay.md | EP-1 | EP-6 | 6 | Complete |
-| 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | In Progress |
+| 8  | Evaluation framework | docs/plans/8-evaluation-framework.md | EP-4 | EP-5 | 7 | Complete |
 | 9  | Compiler layer | docs/plans/9-compiler-layer.md | EP-4 | EP-5 | 8 | Not Started |
 | 10 | Optimizer framework | docs/plans/10-optimizer-framework.md | EP-8, EP-9 | None | 6 | Not Started |
 | 11 | Typed tools and ReAct agents | docs/plans/11-typed-tools-and-react-agents.md | EP-4, EP-5 | EP-2 | 5 | Not Started |
@@ -345,7 +345,8 @@ milestones; updated as they complete. (No child plans authored yet — see Decis
 - [x] EP-7: Hierarchical trace tree (over the `LLM` effect via `interpose`, not baikai's
   `TraceSink`) + nested OTel spans (`shikumi-trace-otel`)
 - [x] EP-7: Deterministic replay from stored traces
-- [ ] EP-8: `Dataset`/`Metric`/`evaluate`/`Report` + built-in metrics + golden tests
+- [x] EP-8: `Dataset`/`Metric`/`evaluate`/`Report` + built-in metrics + golden tests
+  (new `shikumi-eval` package; 36 hermetic tests)
 - [ ] EP-9: Zero-shot, few-shot, chain-of-thought, and retrieval-augmented compilers
 - [ ] EP-10: Demo selection, bootstrap few-shot, instruction search, ensemble search
 - [ ] EP-11: `Tool i o` lowering + ReAct loop + multi-step programs
@@ -548,6 +549,32 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   the neutral `_Model` (→ prompt-fallback adapter, the MasterPlan's "exercised path" until
   EP-2). EP-8 (eval) and EP-12 (CLI) — or a future `Reader Model` effect — must supply real
   model selection before running against a live provider. See EP-4's Decision Log / Outcomes.
+- **EP-8 delivered (2026-06-08).** The evaluation framework landed in the new `shikumi-eval`
+  package; `cabal test shikumi-eval` is green (36 hermetic tests). Cross-plan facts that
+  **fix integration point #5** for EP-10 (optimizer) and EP-12 (CLI):
+  (a) **`Shikumi.Eval` is the single owned surface.** It re-exports `Score`/`Example`/
+  `Dataset`/`Prediction`/`Metric`/`MetricM`/`Report` (plus `EvalConfig`, `FailurePolicy`,
+  `FailureReason`, `UsageTotals`, `ExampleResult`, `renderReportText`). EP-10 consumes
+  `Dataset` + `Metric`/`MetricM` as search inputs and `Report.aggregateScore :: Double` as the
+  objective; EP-12's `eval` subcommand renders a `Report` with `renderReportText` (a
+  deterministic, fixed-format string — safe to snapshot). Neither plan redefines these types.
+  (b) **`evaluate`'s constraint is `(LLM, Concurrent, Error ShikumiError, IOE) :> es`** — one
+  more (`IOE`) than the plan's sketch, for monotonic per-example latency; `Concurrent` drives
+  `pooledForConcurrentlyN` (order-preserving, bounded by `EvalConfig.concurrency`). EP-10's
+  search loop and EP-12's `eval` command inherit exactly this row when they call `evaluate`.
+  (c) **`MetricM es o` is the effectful metric** an optimizer can pass directly (e.g.
+  `modelJudge`/`semanticSimilarity`); pure metrics lift via `liftMetric`. A failing example
+  does not abort the run by default (`FailScore scoreZero`), so an optimizer scoring many
+  candidate programs measures robustness rather than crashing on the first bad case.
+  (d) **Usage/cost accounting reuses the `interpose`-on-`LLM` seam** (the EP-6/EP-7 pattern):
+  `Shikumi.Eval.Usage.withUsageTotals` reads `Usage`/`Cost` off each `Response`, so a `Report`
+  carries real token/cost totals when run against a real interpreter — no substrate hook
+  required. (e) **Golden tests** (`goldenProgram`/`goldenReport`) take a caller-supplied
+  rank-2 `forall a. Eff es a -> IO a` runner, so EP-12 can wire them to EP-7's replay
+  interpreter for offline CI without `shikumi-eval` depending on the trace package. (f) The
+  multi-sample path and `semanticSimilarity`'s embedding backend remain inert pending real
+  per-call model routing (EP-4's unwired-`_Model` limitation) and a substrate embedding op —
+  neither blocks EP-10/EP-12. See EP-8's Outcomes & Retrospective.
 
 
 ## Decision Log

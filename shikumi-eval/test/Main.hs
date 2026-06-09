@@ -4,6 +4,7 @@
 -- documented-usage doctest. Every group is hermetic — no network, no API key.
 module Main (main) where
 
+import DocSpec qualified
 import EvaluateSpec qualified
 import GoldenSpec qualified
 import MetricLMSpec qualified
@@ -22,5 +23,6 @@ main =
         ReportSpec.tests,
         EvaluateSpec.tests,
         MetricLMSpec.tests,
-        GoldenSpec.tests
+        GoldenSpec.tests,
+        DocSpec.tests
       ]

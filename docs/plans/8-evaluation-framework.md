@@ -102,8 +102,9 @@ This section must always reflect the actual current state of the work.
       (built on `tasty-golden`'s `goldenVsString`, run under a caller-supplied rank-2 offline
       runner); the committed `shikumi-eval/test/golden/qa-program.golden` pins the transcript;
       the fail-before/pass-after demonstration is recorded below (35 tests total). (2026-06-08)
-- [ ] M7: README/usage doc-comment example compiles via a doctest-style test; master-plan
-      Progress row for EP-8 ticked.
+- [x] M7: `Shikumi.Eval` re-export module (one-import public surface) with a worked
+      module-header example, backed by the `Doc` test group that runs the exact snippet under a
+      mock; master-plan Progress row + registry for EP-8 ticked. 36 tests total. (2026-06-08)
 
 
 ## Surprises & Discoveries
@@ -218,10 +219,40 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+**Delivered (2026-06-08).** All seven milestones landed in the new `shikumi-eval` package;
+`cabal test shikumi-eval` is green at **36 tests**, every group hermetic (no network, no API
+key). Against the original purpose: a developer can now declare a `Dataset i o` of typed
+`Example`s, pick or write a `Metric`/`MetricM`, call `evaluate`/`evaluatePure`/`evaluateWith`,
+and read a `Report` carrying the aggregate score, per-example breakdown (with typed failure
+reasons), token usage, dollar cost, and latency — exactly the Purpose-section behaviour.
+Golden testing pins program behaviour deterministically under a mock/replay runner, with the
+fail-before/pass-after acceptance demonstrated above.
 
-(To be filled during and after implementation.)
+**Integration point #5 is fixed.** `Shikumi.Eval` owns and exports `Score`, `Example`,
+`Dataset`, `Prediction`, `Metric`/`MetricM`, and `Report` (plus `EvalConfig`,
+`FailurePolicy`, `FailureReason`, `UsageTotals`, `ExampleResult`). The optimizer
+(`docs/plans/10-optimizer-framework.md`) consumes `Dataset` + `Metric`/`MetricM` as search
+inputs and `Report.aggregateScore` as its objective; the CLI
+(`docs/plans/12-cli-and-developer-experience.md`) consumes `renderReportText` for the `eval`
+subcommand. Neither should redefine these types — import them from `Shikumi.Eval`.
+
+**Notable deviations from the sketch (all recorded in the Decision Log):**
+- `evaluate` requires `IOE :> es` (beyond the sketched `LLM`/`Concurrent`/`Error`) because it
+  measures per-example latency with a monotonic clock; this matches EP-4's finding that
+  running programs already threads `Error ShikumiError`.
+- Usage accounting is a local `interpose` on `LLM` (no substrate hook was needed, since
+  `LLM.complete` returns the full `Response` with `Usage`/`Cost`), accumulated with
+  `atomicModifyIORef'` so it is correct under the bounded-concurrency pool.
+- `modelJudge` threads `Error ShikumiError` (it runs a real `JudgeInput -> Grade` predict
+  program); the `Embedding` capability is a small local effect with a pure interpreter.
+
+**Gaps / future work.** (a) Multi-sample evaluation (`numSamples > 1`) re-runs `runProgram`
+n times; with the current adapter-fixed routing (EP-4's unwired-model limitation) and a
+deterministic mock, the samples are identical — real sampling diversity awaits per-call
+temperature/model routing. (b) `semanticSimilarity`'s `Embedding` interpreter is
+caller-supplied; a real embedding backend lands when the substrate grows one. (c) The
+`UsageTotals` cost is `Rational` end-to-end here, but a `Response`'s `Cost` is itself lossy
+(`Rational→Scientific`) upstream — harmless for aggregate reporting.
 
 
 ## Context and Orientation

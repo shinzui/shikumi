@@ -33,6 +33,7 @@ library
   import:          common-options
   hs-source-dirs:  src
   exposed-modules:
+    Shikumi.Eval
     Shikumi.Eval.Evaluate
     Shikumi.Eval.Golden
     Shikumi.Eval.Metric
@@ -61,6 +62,7 @@ test-suite shikumi-eval-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    DocSpec
     EvalFixtures
     EvaluateSpec
     GoldenSpec
