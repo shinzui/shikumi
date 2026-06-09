@@ -6,6 +6,7 @@
 module Main (main) where
 
 import BootstrapSpec qualified
+import EnsembleSpec qualified
 import InstructionSpec qualified
 import LabeledFewShotSpec qualified
 import OptimizeSpec qualified
@@ -19,5 +20,6 @@ main =
       [ OptimizeSpec.tests,
         LabeledFewShotSpec.tests,
         BootstrapSpec.tests,
-        InstructionSpec.tests
+        InstructionSpec.tests,
+        EnsembleSpec.tests
       ]

@@ -40,6 +40,7 @@ library
   exposed-modules:
     Shikumi.Optimize
     Shikumi.Optimize.Bootstrap
+    Shikumi.Optimize.Ensemble
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.LabeledFewShot
     Shikumi.Optimize.Search
@@ -54,6 +55,7 @@ library
     , shikumi-compile
     , shikumi-eval
     , text             ^>=2.1
+    , vector
 
 test-suite shikumi-optimize-test
   import:         common-options
@@ -63,6 +65,7 @@ test-suite shikumi-optimize-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     BootstrapSpec
+    EnsembleSpec
     InstructionSpec
     LabeledFewShotSpec
     OptimizeSpec

@@ -108,8 +108,10 @@ This section must always reflect the actual current state of the work.
       show the best-scoring proposed instruction is selected per node and the raw-LM-call
       budget bound is respected (counting stub). **Done (2026-06-09).** `fieldSummary` is
       static (EP-4 exposes no per-node signature accessor).
-- [ ] M4: `ensembleSearch` implemented over the `Ensemble` combinator; test shows the
-      ensemble scores at least as high as its best member.
+- [x] M4: `ensembleSearch` implemented over EP-5's `ensemble` combinator with a
+      `majorityReducer` vote, fed deterministic bootstrap resamples; tests show the majority
+      vote (1.0) strictly beats its best member (0.75) on a held-out set, and that
+      `ensembleSearch n` produces an `n`-member `ShapeEnsemble`. **Done (2026-06-09).**
 - [ ] M5 (acceptance): end-to-end test optimizes a deliberately-underspecified program on a
       tiny dataset and asserts the returned `CompiledProgram` scores **strictly higher** on a
       held-out set than the input program; runs fully offline against the stub LM.
