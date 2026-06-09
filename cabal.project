@@ -24,6 +24,7 @@ packages:
   shikumi-cache
   shikumi-compile
   shikumi-eval
+  shikumi-optimize
   shikumi-trace
   shikumi-trace-otel
   /Users/shinzui/Keikaku/bokuno/baikai/baikai
