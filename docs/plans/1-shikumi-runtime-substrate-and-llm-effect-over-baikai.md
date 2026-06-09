@@ -80,23 +80,28 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Scaffold the cabal project — root `cabal.project` with a `source-repository-package`
-      stanza for baikai/baikai-claude/baikai-openai, the `shikumi` package with
-      `shikumi.cabal`, an empty-but-compiling `Shikumi.Prelude`, and `mori.dhall` confirmed
-      to mirror baikai. `cabal build all` succeeds.
-- [ ] M2: `Shikumi.Error` — the `ShikumiError` enumerated type and `fromBaikaiError`
-      mapping. Unit test asserts each `BaikaiError` constructor maps to the intended
-      `ShikumiError`.
-- [ ] M3: `Shikumi.LLM` core — the `LLM` effect, the `complete`/`stream` smart
-      constructors, and a bare interpreter `runLLM` over `IOE` that calls baikai. A test
-      drives a **stub provider** end-to-end through `Eff` and asserts returned text.
-- [ ] M4: Resilience layer — `LLMConfig` (retry policy, rate limit, budget), the
-      `runLLMResilient` interpreter, and `Shikumi.LLM.Budget`. Tests: retry recovers after
-      N transient failures; budget refuses the call that would cross the ceiling
-      (`BudgetExceeded`); timeout surfaces as `Timeout`.
-- [ ] M5: Live end-to-end demo gated by `SHIKUMI_LIVE=1` — an executable/test that, when
-      the env var and an API key are present, runs a real provider call through `LLM` and
-      prints model text; otherwise skips cleanly. Document the transcript.
+- [x] M1: Scaffold the cabal project — root `cabal.project` (LOCAL-PATH form, not
+      `source-repository-package`; see Decision Log), the `shikumi` package with
+      `shikumi.cabal`, a compiling `Shikumi.Prelude`, and `mori.dhall` confirmed to mirror
+      baikai. Also added the Nix toolchain (`flake.nix` + `nix/*`, ghc-9.12.4 via the
+      fleet's `haskell-nix-dev`) and a `fourmolu.yaml`, both required and not anticipated
+      by the plan. `cabal build all` succeeds **inside `nix develop`**.
+- [x] M2: `Shikumi.Error` — `ShikumiError`, `fromBaikaiError`, `isTransient`. `ErrorSpec`
+      pins all four mappings + the transient classification (and is shown to bite by
+      temporarily mis-mapping `DecodeError`).
+- [x] M3: `Shikumi.LLM` core — the `LLM` effect (`Complete`/`Stream`), `complete`/`stream`,
+      and bare interpreters `runLLM`/`runLLMWith` built **on the `Baikai` transport effect**
+      (per the cascade), not raw `IO`. `LLMSpec` drives a stub provider end-to-end
+      (`Right "hello from stub"`) and asserts an unregistered tag → `Left (ProviderFailure …)`.
+- [x] M4: Resilience layer — `LLMConfig` (retry policy, rate limit, budget),
+      `runLLMResilient`, and `Shikumi.LLM.Budget`. `ResilienceSpec`: retry recovers after 2
+      transient failures (3 attempts); retry exhausts at `maxAttempts`; non-transient not
+      retried (1 attempt); budget refuses the second call (`BudgetExceeded`); rate limit
+      caps observed concurrency at 1. (Timeout: relies on baikai's `timeoutMs`, surfaced via
+      `fromBaikaiError`; no explicit `System.Timeout` wrapper — see Decision Log.)
+- [x] M5: `LiveSpec` gated by `SHIKUMI_LIVE=1` — registers the OpenAI provider and runs a
+      real `complete` through `runLLMResilient`; without the env var it prints the skip line
+      and stays green. Hermetic `cabal test shikumi-test` reports **All 13 tests passed**.
 
 
 ## Surprises & Discoveries
@@ -104,7 +109,36 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Usage IS on the blocking `Response` (resolves the M4 Usage-access note).** Contrary to
+  the plan's warning, `Baikai.Response.Response` carries `Usage` via
+  `message :: AssistantPayload`, whose `usage :: Usage` has `cost :: Cost` with
+  `usd :: Rational`. So the budget charge reads `resp ^. #message . #usage . #cost . #usd`
+  directly — no need to drive the streaming path for the blocking budget. Evidence:
+  `baikai/src/Baikai/Response.hs` (`_Response` sets `message = AssistantPayload { … usage = _Usage … }`)
+  and `Baikai/Message.hs` (`AssistantPayload { …, usage :: !Usage, … }`). The streaming path
+  still reads `Usage` from the terminal `EventDone`/`EventError` `TerminalPayload.message`.
+- **Toolchain gap (not anticipated by the plan).** shikumi's deps build only under
+  **ghc-9.12.4**, supplied by the fleet's shared `shinzui/haskell-nix-dev` flake; the system
+  PATH ghc is 9.10.3 (wrong compiler). baikai's `dist-newstyle` shows `ghc-9.12.*` only. So
+  M1 had to add a `flake.nix` + `nix/*` (mirroring baikai, reusing its `flake.lock` verbatim
+  so the same cached compiler is used with no network locking) and a `fourmolu.yaml`. All
+  builds run inside `nix develop .#ghc9124`.
+- **baikai HEAD is not pushed.** `git -C …/baikai branch -r --contains <HEAD>` is empty, and
+  `baikai-effectful` is unpublished, so the committed `cabal.project` uses LOCAL PATHS, not
+  the plan's `source-repository-package` form (see Decision Log).
+- **`Streamly.Data.Stream` lives in `streamly-core`, not `streamly`.** The test stub
+  (`ApiProvider.stream` field) needs `Stream.fromList`; the test suite depends on
+  `streamly-core`.
+- **fourmolu maps files to cabal components for their extensions.** With a *minimal* cabal
+  that doesn't list a module, fourmolu can't see its `default-language: GHC2024` and fails to
+  parse postpositive `import … qualified`. Listing every module in the cabal (and adding
+  `fourmolu.yaml`) fixes formatting.
+- **The cascade is applied, not pending.** EP-1's interpreters are built on
+  `Baikai.Effectful` (the delivered `baikai-effectful`): the `LLM` handler dispatches through
+  `BE.complete` / `BE.streamCollect` and discharges the `Baikai` effect with
+  `reinterpret_ (runBaikaiWith reg) …`, so shikumi framework code never carries `IOE` — only
+  the bottom `Baikai` interpreter does. `BE.complete` throws `BaikaiError`, caught with
+  `Effectful.Exception.try @BaikaiError` and remapped via `fromBaikaiError`.
 
 
 ## Decision Log
@@ -154,24 +188,44 @@ Record every decision made while working on the plan.
   hermetic tests are required for CI; the live path proves the real integration without
   making it mandatory. Date: 2026-06-08.
 
-- Decision (pending cascade): EP-1's `LLM` effect will be implemented **on top of the
-  `Baikai` transport effect** from the new `baikai-effectful` package, rather than calling
-  baikai's `IO` functions (`completeRequestWith`/`streamRequestWith`) directly. That package
-  is a thin, policy-free `effectful` binding authored in the baikai repo at
-  `/Users/shinzui/Keikaku/bokuno/baikai/docs/plans/23-baikai-effectful-effectful-transport-binding.md`
-  (a dynamic `Baikai` effect with operations `Complete`/`StreamCollect`/`StreamEach` and
-  interpreters `runBaikai`/`runBaikaiWith :: ProviderRegistry -> ...`). After it lands, this
-  plan's interpreters `runLLM`/`runLLMWith`/`runLLMResilient` should require `Baikai :> es`
-  (and keep `Error ShikumiError :> es`) and obtain transport via `complete`/`streamCollect`
-  rather than `liftIO (Baikai.completeRequestWith ...)`; `runLLMWith reg` becomes
-  `… . runBaikaiWith reg`, and the resilience/error-mapping/budget logic stays exactly as
-  specified here, just wrapping the `Baikai` operations instead of raw `IO`. The Milestone 3
-  code blocks that show `liftIO (try (Baikai.completeRequestWith ...))` are to be rewritten
-  in that follow-up; the stub-provider test approach is unchanged (stubs register into a
-  `ProviderRegistry` either way). Rationale: keeps shikumi framework code off `IOE`/baikai
-  directly, per the MasterPlan decision dated 2026-06-08 and integration point #1.
-  `baikai-effectful` carries its own intention `intention_01ktmqmrjre89r3c3qq6fj3j5h` and is
-  a hard dependency of this plan. Date: 2026-06-08.
+- Decision (cascade — **applied 2026-06-08**): EP-1's `LLM` effect is implemented **on top
+  of the `Baikai` transport effect** from `baikai-effectful`, not by calling baikai's `IO`
+  functions directly. Concretely, `runLLM`/`runLLMWith`/`runLLMResilient` are
+  `reinterpret_ (runBaikai | runBaikaiWith reg) handler`: the handler runs in the
+  `Baikai : es` stack and obtains transport via `Baikai.Effectful.complete` /
+  `Baikai.Effectful.streamCollect`, and the bottom `runBaikaiWith`/`runBaikai` discharges
+  `Baikai` (it alone needs `IOE`). `BE.complete` throws `BaikaiError`; we catch it with
+  `Effectful.Exception.try @BaikaiError` and remap via `fromBaikaiError`. All
+  resilience/error-mapping/budget logic is exactly as specified, wrapping the `Baikai`
+  operations instead of raw `IO`. Net effect: shikumi framework code never carries `IOE`,
+  per the MasterPlan decision and integration point #1. `baikai-effectful` (intention
+  `intention_01ktmqmrjre89r3c3qq6fj3j5h`) is a hard dependency and is satisfied. Date: 2026-06-08.
+
+- Decision: the committed `cabal.project` references baikai/baikai-claude/baikai-openai/**
+  baikai-effectful** by **LOCAL PATH**, not the `source-repository-package` form the plan
+  sketches. Reasons: (1) baikai HEAD is not pushed to GitHub (`git branch -r --contains` is
+  empty), so a pinned `tag:` would not resolve for a fresh clone; (2) `baikai-effectful` is
+  unpublished. Local paths are the only reproducible option on this fleet today, consistent
+  with how sibling Haskell packages are co-developed under `~/Keikaku/bokuno`. Revisit once
+  baikai (incl. `baikai-effectful`) is published. Date: 2026-06-08.
+
+- Decision: add a Nix toolchain to shikumi (`flake.nix` + `nix/haskell.nix`/`treefmt.nix`/
+  `pre-commit.nix`, plus `fourmolu.yaml`), mirroring baikai and reusing baikai's `flake.lock`
+  verbatim. The plan assumed `cabal build all` "just works", but shikumi's dependencies build
+  only under ghc-9.12.4, which the fleet supplies via `shinzui/haskell-nix-dev`'s
+  `mkDevShell`. All builds/tests run inside `nix develop .#ghc9124`. Date: 2026-06-08.
+
+- Decision: rate limiting is a `TVar Int` permit counter (`RateLimiter`, built once via
+  `newRateLimiter` and stored on `LLMConfig`), acquired/released with
+  `Effectful.Exception.bracket_` so a permit is always returned (even on a thrown
+  `ShikumiError`). The `Budget` ceiling is enforced *before* the call (`tryReserve`) and
+  charged *after* success (`recordCost`), reading `Usage.cost.usd` off the response.
+  Date: 2026-06-08.
+
+- Decision: do not add an explicit `System.Timeout.timeout` wrapper in M4. shikumi relies on
+  baikai's own `Options.timeoutMs`, whose breach surfaces as a `ProviderError`/`ProcessError`
+  already mapped by `fromBaikaiError`. The `Timeout` constructor remains in the vocabulary
+  for higher layers; revisit if a wall-clock beyond baikai's is needed. Date: 2026-06-08.
 
 
 ## Outcomes & Retrospective
@@ -179,7 +233,31 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-08): EP-1 complete.** All five milestones land and the original purpose
+holds: shikumi is now a buildable multi-package cabal project whose core library exposes the
+provider-neutral `LLM` effect, the enumerated `ShikumiError`, and a resilient interpreter,
+all over baikai through `effectful`. `cabal build all` builds `shikumi` plus the four baikai
+libraries; the hermetic `cabal test shikumi-test` reports **All 13 tests passed** with no
+network — the decisive behaviors (stub end-to-end `Right "hello from stub"`; unregistered tag
+→ `ProviderFailure`; retry recovers in exactly 3 attempts; non-transient tried once; budget
+refuses the second call; rate limit caps concurrency at 1) all pass, and the error test was
+shown to bite. Integration point #1 (`LLM`, `complete`/`stream`, `ShikumiError`) is defined
+and stable for EP-3/EP-6/EP-7/EP-11 to consume.
+
+**Deviations from the written plan** (all in the Decision Log): (1) `cabal.project` uses
+local paths, not `source-repository-package`, because baikai HEAD is unpushed and
+`baikai-effectful` is unpublished; (2) a Nix toolchain (`flake.nix`/`nix/*`/`fourmolu.yaml`)
+was required to obtain ghc-9.12.4 — the plan assumed a working `cabal`; (3) the M3/M4 code is
+built on the `Baikai` transport effect (the "pending cascade", now applied), so the plan's
+`liftIO (try (Baikai.completeRequestWith …))` snippets were realized as
+`reinterpret_ (runBaikaiWith reg) …` + `try @BaikaiError (BE.complete …)`; (4) no explicit
+`System.Timeout` wrapper (baikai's `timeoutMs` is relied upon).
+
+**Surprise that simplified M4:** the blocking `Response` already carries `Usage`
+(`message.usage.cost.usd`), so the budget never needs the streaming path. **Gaps / future
+work:** the live `SHIKUMI_LIVE=1` path is implemented but was not exercised against a real key
+in this session (the hermetic suite skips it cleanly); `mori.dhall` already mirrored baikai
+and needed no change.
 
 
 ## Context and Orientation

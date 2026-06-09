@@ -171,7 +171,7 @@ milestone counts (from each plan's Progress section) are noted for at-a-glance s
 
 | #  | Title | Path | Hard Deps | Soft Deps | Milestones | Status |
 |----|-------|------|-----------|-----------|------------|--------|
-| 1  | Shikumi runtime substrate and LLM effect over baikai | docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md | None | None | 5 | Not Started |
+| 1  | Shikumi runtime substrate and LLM effect over baikai | docs/plans/1-shikumi-runtime-substrate-and-llm-effect-over-baikai.md | None | None | 5 | Complete |
 | 2  | Baikai native structured output extension | docs/plans/2-baikai-native-structured-output-extension.md | None | None | 4 | Not Started |
 | 3  | Generic-derived signatures and structured IO | docs/plans/3-generic-derived-signatures-and-structured-io.md | EP-1 | EP-2 | 7 | Not Started |
 | 4  | Typed program representation and core modules | docs/plans/4-typed-program-representation-and-core-modules.md | EP-3 | None | 6 | Not Started |
@@ -331,8 +331,8 @@ plan (responsible for defining the artifact) and how consumers use it.
 Milestone-level progress across all child plans. Populated as each plan defines its
 milestones; updated as they complete. (No child plans authored yet — see Decision Log.)
 
-- [ ] EP-1: LLM effect over baikai with a working end-to-end call through `Eff`
-- [ ] EP-1: Retries, backoff, rate limiting, and budget controls
+- [x] EP-1: LLM effect over baikai with a working end-to-end call through `Eff`
+- [x] EP-1: Retries, backoff, rate limiting, and budget controls
 - [ ] EP-2: `response_format` / JSON schema field on baikai `Options`
 - [ ] EP-2: Anthropic and OpenAI provider mappings emit/parse native structured output
 - [ ] EP-3: Generic-derived JSON schema + decode from record types
@@ -389,6 +389,19 @@ Cross-plan insights, dependency changes, scope adjustments, or unexpected intera
   `IORef` registry and the `Stream IO`/`Fold IO` layer for no capability gain. The
   `baikai-effectful` plan lives in the baikai repo with its own intention; EP-1 gains it as a
   hard, cross-repo dependency. See Decision Log (2026-06-08).
+- **EP-1 delivered (2026-06-08).** The runtime substrate landed: `shikumi` is now a buildable
+  multi-package cabal project whose library exposes the `LLM` effect, `ShikumiError`, and the
+  resilient interpreter, all over baikai via `effectful`; hermetic `cabal test` is green (13
+  tests). Cross-plan facts for downstream EPs: (a) **the cascade is applied** — `LLM` is built
+  on `baikai-effectful`'s `Baikai` effect via `reinterpret_ (runBaikaiWith reg)`, so consumers
+  (EP-3/6/7/11) interpret `LLM` *above* `runLLMResilient` and never see `IOE`/`Baikai`. (b)
+  **The blocking `Response` already carries `Usage`** (`message.usage.cost.usd`), so EP-6's
+  cache-key field set and EP-8's cost accounting can read cost off a `Response` without the
+  streaming path. (c) **A Nix toolchain is now required** — every shikumi build/test runs
+  inside `nix develop .#ghc9124` (ghc-9.12.4 from `shinzui/haskell-nix-dev`); the system ghc
+  (9.10.3) is the wrong compiler. (d) **`cabal.project` uses local paths** to the baikai repo
+  (HEAD unpushed, `baikai-effectful` unpublished), and there is a fleet `fourmolu.yaml`
+  (2-space) the formatter enforces via pre-commit. See EP-1's Decision Log.
 - `baikai-effectful` **shipped (2026-06-08)** — all four of its milestones are complete: the
   package builds, hermetic `CompleteSpec`/`StreamSpec` pass, a gated live call succeeded
   (`LIVE: Sure!` via `openai_gpt_4o_mini`), and `mori show --full` lists it. EP-1's only
