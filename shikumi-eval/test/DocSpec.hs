@@ -6,6 +6,7 @@ module DocSpec (tests) where
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Prim (runPrim)
 import EvalFixtures (Answer (..), Question (..), answerResponse, qaProg, runConstLLM)
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
@@ -26,7 +27,7 @@ tests =
                   example (Question "Capital of France?") (Answer "Paris")
                 ]
         result <-
-          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runConstLLM (answerResponse "4") $
               evaluatePure qaData exactMatch qaProg
         case result of

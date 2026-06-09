@@ -21,10 +21,11 @@ where
 import Control.Monad (replicateM)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text qualified as T
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Concurrent.Async (pooledForConcurrentlyN)
 import Effectful.Error.Static (Error, catchError, throwError)
+import Effectful.Prim (Prim)
 import Shikumi.Effect.Time (Time, getMonotonicTimeNSec)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval.Metric (Metric, MetricM, liftMetric)
@@ -52,7 +53,7 @@ import Shikumi.Program (Program, runProgram)
 -- | Evaluate a program over a dataset with an effectful metric, using the
 -- default configuration.
 evaluate ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   Dataset i o ->
   MetricM es o ->
   Program i o ->
@@ -61,7 +62,7 @@ evaluate = evaluateWith defaultEvalConfig
 
 -- | Convenience for a pure metric.
 evaluatePure ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   Dataset i o ->
   Metric o ->
   Program i o ->
@@ -70,7 +71,7 @@ evaluatePure ds m = evaluate ds (liftMetric m)
 
 -- | Evaluate with an explicit configuration.
 evaluateWith ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   EvalConfig ->
   Dataset i o ->
   MetricM es o ->

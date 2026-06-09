@@ -15,8 +15,10 @@ import Data.Text qualified as T
 import Data.Time.Clock (UTCTime, addUTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, runEff, type (:>))
+import Effectful.Prim (runPrim)
 import Shikumi.Cache.Key (CacheKey (..))
 import Shikumi.Cache.Key qualified as Key
+import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Trace
   ( Span (..),
@@ -164,7 +166,7 @@ replayTests =
           calls <- newIORef (0 :: Int)
           -- (1) live: run the pipeline, count provider calls, capture the tree.
           (live, tree) <-
-            runEff . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
+            runEff . runPrim . runTime . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
               twoStage "the article"
           liveCalls <- readIORef calls
           liveCalls @?= 2
@@ -184,7 +186,7 @@ replayTests =
         withSystemTempDirectory "shikumi-trace" $ \dir -> do
           calls <- newIORef (0 :: Int)
           (_, tree) <-
-            runEff . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
+            runEff . runPrim . runTime . runTrace . runKeyedCountingLLM calls responder . tracedLLM $
               twoStage "the article"
           let p = dir <> "/trace.json"
           writeTraceFile p tree
@@ -214,7 +216,7 @@ e2eTests =
           calls <- newIORef (0 :: Int)
           -- live run of the demo pipeline; capture the tree, count provider calls.
           (liveFinal, tree) <-
-            runEff . runTrace . runKeyedCountingLLM calls demoResponder . tracedLLM $
+            runEff . runPrim . runTime . runTrace . runKeyedCountingLLM calls demoResponder . tracedLLM $
               demoPipeline demoArticle
           liveCalls <- readIORef calls
           liveCalls @?= 2
@@ -224,7 +226,7 @@ e2eTests =
           Right tree' <- readTraceFile p
           let idx = replayIndex tree'
           writeIORef calls 0
-          (replayFinal, _) <- runEff . runTrace . runLLMReplay idx $ demoPipeline demoArticle
+          (replayFinal, _) <- runEff . runPrim . runTime . runTrace . runLLMReplay idx $ demoPipeline demoArticle
           replayCalls <- readIORef calls
           replayFinal @?= liveFinal
           replayCalls @?= 0
@@ -276,7 +278,7 @@ buildTree :: IO TraceTree
 buildTree = do
   let resp = mkResponse "ok"
   ((), tree) <-
-    runEff . runTrace . runFixedLLM resp . tracedLLM $
+    runEff . runPrim . runTime . runTrace . runFixedLLM resp . tracedLLM $
       withSpan ProgramSpan "summarize-and-critique" $ do
         _ <- withSpan ModuleSpan "predict:Draft" (complete stubModel (ctxFor "draft this") optsFor)
         _ <- withSpan ModuleSpan "predict:Critique" (complete stubModel (ctxFor "critique that") optsFor)

@@ -14,9 +14,10 @@ module Shikumi.Optimize.Search
   )
 where
 
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
+import Effectful.Prim (Prim)
 import Shikumi.Compile.Types (CompiledProgram (..))
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
@@ -52,7 +53,7 @@ selectBest budget scorer cands = do
 -- @evaluate@ and take the aggregate. One call scores one program over the whole
 -- dataset (one LM call per example).
 scoreOn ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   Dataset i o ->
   Metric o ->
   Program i o ->

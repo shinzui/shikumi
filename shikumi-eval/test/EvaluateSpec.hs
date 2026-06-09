@@ -7,6 +7,7 @@ module EvaluateSpec (tests) where
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Prim (runPrim)
 import EvalFixtures
   ( Answer (..),
     MockReply (..),
@@ -52,7 +53,7 @@ tests =
     [ testCase "four-of-five exact match -> aggregateScore 0.8" $ do
         let ds = dataset [example q a | (q, a) <- aggregateData]
         report <-
-          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runConstLLM (answerResponse "yes") $
               evaluatePure ds exactMatch qaProg
         case report of
@@ -73,7 +74,7 @@ tests =
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
             cfg = defaultEvalConfig {concurrency = 1}
         report <-
-          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $
               evaluateWith cfg ds (liftMetric exactMatch) qaProg
         case report of
@@ -94,7 +95,7 @@ tests =
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
             cfg = defaultEvalConfig {concurrency = 1, failurePolicy = FailAbort}
         report <-
-          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $
               evaluateWith cfg ds (liftMetric exactMatch) qaProg
         case report of

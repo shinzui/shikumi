@@ -17,27 +17,27 @@ where
 
 import Control.Lens ((^.))
 import Data.Generics.Labels ()
-import Data.IORef (atomicModifyIORef', newIORef, readIORef)
-import Effectful (Eff, IOE, liftIO, (:>))
+import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpose)
+import Effectful.Prim.IORef (Prim, atomicModifyIORef', newIORef, readIORef)
 import Shikumi.Eval.Report (UsageTotals (..), emptyUsageTotals)
 import Shikumi.LLM (LLM (..), Response, complete, stream)
 
 -- | Run @act@, accumulating every @LLM@ call's usage/cost into a 'UsageTotals'.
-withUsageTotals :: (LLM :> es, IOE :> es) => Eff es a -> Eff es (a, UsageTotals)
+withUsageTotals :: (LLM :> es, Prim :> es) => Eff es a -> Eff es (a, UsageTotals)
 withUsageTotals act = do
-  ref <- liftIO (newIORef emptyUsageTotals)
+  ref <- newIORef emptyUsageTotals
   result <-
     interpose
       ( \_ -> \case
           Complete m c o -> do
             resp <- complete m c o
-            liftIO (atomicModifyIORef' ref (\u -> (u <> usageOf resp, ())))
+            atomicModifyIORef' ref (\u -> (u <> usageOf resp, ()))
             pure resp
           Stream m c o -> stream m c o
       )
       act
-  totals <- liftIO (readIORef ref)
+  totals <- readIORef ref
   pure (result, totals)
 
 -- | Project a response's token usage and cost into a 'UsageTotals'.

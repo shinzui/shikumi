@@ -58,13 +58,6 @@ import Baikai
 import Control.Lens ((^.))
 import Data.Aeson (FromJSON, FromJSONKey, ToJSON, ToJSONKey, Value, toJSON)
 import Data.Generics.Labels ()
-import Data.IORef
-  ( IORef,
-    atomicModifyIORef',
-    modifyIORef',
-    newIORef,
-    readIORef,
-  )
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -72,15 +65,24 @@ import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Time.Clock (UTCTime, diffUTCTime)
 import Data.Vector qualified as V
-import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
+import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, localSeqUnlift, send)
 import Effectful.Exception (bracket)
+import Effectful.Prim (Prim)
+import Effectful.Prim.IORef
+  ( IORef,
+    atomicModifyIORef',
+    modifyIORef',
+    newIORef,
+    readIORef,
+  )
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Shikumi.Cache.Key (CacheKey (..), requestToCanonicalValue)
 import Shikumi.Cache.Key qualified as Key
+import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.Trace.ResponseJSON ()
 
@@ -227,34 +229,39 @@ data TraceState = TraceState
   }
 
 -- | Run a traced computation, returning its result and the finished tree.
-runTrace :: (IOE :> es) => Eff (Trace : es) a -> Eff es (a, TraceTree)
+--
+-- The building state lives in 'IORef's reached through the 'Prim' effect (so no
+-- open-ended @IOE@ is needed here — only in-process mutation), and span
+-- timestamps come from shikumi's own 'Time' effect. Both are discharged at the
+-- program edge by 'runPrim' and 'runTime'.
+runTrace :: (Prim :> es, Time :> es) => Eff (Trace : es) a -> Eff es (a, TraceTree)
 runTrace act = do
-  st <- liftIO newTraceState
+  st <- newTraceState
   a <-
     interpret
       ( \env -> \case
-          CurrentSpanId -> liftIO (safeHead <$> readIORef (tsStack st))
-          BumpRetry -> liftIO (modifyActive st (\a' -> a' {retries = retries a' + 1}))
-          RecordToolCall tc -> liftIO (modifyActive st (\a' -> a' {toolCalls = toolCalls a' ++ [tc]}))
-          AnnotateSpan f -> liftIO (modifyActive st f)
+          CurrentSpanId -> safeHead <$> readIORef (tsStack st)
+          BumpRetry -> modifyActive st (\a' -> a' {retries = retries a' + 1})
+          RecordToolCall tc -> modifyActive st (\a' -> a' {toolCalls = toolCalls a' ++ [tc]})
+          AnnotateSpan f -> modifyActive st f
           WithSpan k lbl inner ->
             bracket
-              (liftIO (openSpan st k lbl))
-              (liftIO . closeSpan st)
+              (openSpan st k lbl)
+              (closeSpan st)
               (\_ -> localSeqUnlift env (\unlift -> unlift inner))
       )
       act
-  tree <- liftIO (freezeTree st)
+  tree <- freezeTree st
   pure (a, tree)
 
-newTraceState :: IO TraceState
+newTraceState :: (Prim :> es) => Eff es TraceState
 newTraceState =
   TraceState <$> newIORef 0 <*> newIORef [] <*> newIORef Map.empty <*> newIORef Nothing
 
 -- | Allocate a fresh span as a child of the current top-of-stack, insert it
 -- (open, 'endedAt' = 'Nothing'), push it, and record it as the root if it is the
 -- first parentless span.
-openSpan :: TraceState -> SpanKind -> Text -> IO SpanId
+openSpan :: (Prim :> es, Time :> es) => TraceState -> SpanKind -> Text -> Eff es SpanId
 openSpan st k lbl = do
   n <- atomicModifyIORef' (tsCounter st) (\i -> (i + 1, i + 1))
   let sid = SpanId ("span-" <> T.pack (show n))
@@ -269,14 +276,14 @@ openSpan st k lbl = do
   pure sid
 
 -- | Close a span: stamp its 'endedAt' and pop it off the stack.
-closeSpan :: TraceState -> SpanId -> IO ()
+closeSpan :: (Prim :> es, Time :> es) => TraceState -> SpanId -> Eff es ()
 closeSpan st sid = do
   now <- getCurrentTime
   modifyIORef' (tsSpans st) (Map.adjust (\s -> s {endedAt = Just now}) sid)
   modifyIORef' (tsStack st) (drop 1)
 
 -- | Apply a function to the active span's attributes (a no-op with no active span).
-modifyActive :: TraceState -> (SpanAttrs -> SpanAttrs) -> IO ()
+modifyActive :: (Prim :> es) => TraceState -> (SpanAttrs -> SpanAttrs) -> Eff es ()
 modifyActive st f = do
   stk <- readIORef (tsStack st)
   case stk of
@@ -284,7 +291,7 @@ modifyActive st f = do
     [] -> pure ()
 
 -- | Freeze the building state into an immutable 'TraceTree'.
-freezeTree :: TraceState -> IO TraceTree
+freezeTree :: (Prim :> es) => TraceState -> Eff es TraceTree
 freezeTree st = do
   sp <- readIORef (tsSpans st)
   r <- readIORef (tsRoot st)

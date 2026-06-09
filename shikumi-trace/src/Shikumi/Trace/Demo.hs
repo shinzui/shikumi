@@ -50,6 +50,8 @@ import Data.Text.IO qualified as TIO
 import Data.Vector qualified as V
 import Effectful (Eff, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Prim (runPrim)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import Shikumi.Trace
   ( SpanKind (ModuleSpan, ProgramSpan),
@@ -119,7 +121,7 @@ demoMain args = case args of
 liveMode :: IO ()
 liveMode = do
   (critique, tree) <-
-    runEff . runTrace . runStubLLM . tracedLLM $ demoPipeline demoArticle
+    runEff . runPrim . runTime . runTrace . runStubLLM . tracedLLM $ demoPipeline demoArticle
   TIO.putStr (renderTree tree)
   writeTraceFile "trace.json" tree
   TIO.putStrLn ("FINAL: " <> critique)
@@ -132,7 +134,7 @@ replayMode path = do
     Left err -> TIO.putStrLn ("trace load error: " <> err)
     Right tree -> do
       let idx = replayIndex tree
-      (critique, _) <- runEff . runTrace . runLLMReplay idx $ demoPipeline demoArticle
+      (critique, _) <- runEff . runPrim . runTime . runTrace . runLLMReplay idx $ demoPipeline demoArticle
       TIO.putStrLn ("FINAL: " <> critique)
       TIO.putStrLn "provider calls: 0"
 

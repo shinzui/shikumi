@@ -34,6 +34,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful.Prim (Prim, runPrim)
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
@@ -55,10 +56,10 @@ runStubLLM responder = interpret $ \_ -> \case
 -- ('Shikumi.Effect.Time'), discharged by 'runTime' against the real system clock.
 runStubEval ::
   (Context -> Response) ->
-  Eff '[LLM, Concurrent, Error ShikumiError, Time, IOE] a ->
+  Eff '[LLM, Concurrent, Error ShikumiError, Time, Prim, IOE] a ->
   IO (Either ShikumiError a)
 runStubEval responder =
-  runEff . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
+  runEff . runPrim . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
 
 -- | Run a single program against the stub LM (the reference "recorded run" used by
 -- @replay@'s identity check).
@@ -92,7 +93,7 @@ recordTrace ::
   i ->
   IO (Either ShikumiError (), TraceTree)
 recordTrace responder name prog input =
-  runEff . runTrace . runStubLLM responder . tracedLLM $
+  runEff . runPrim . runTime . runTrace . runStubLLM responder . tracedLLM $
     runErrorNoCallStack (withSpan ProgramSpan name (void (runProgram prog input)))
 
 -- | Build a stub 'Response' as the prompt-fallback adapter's @[[ ## field ## ]]@

@@ -98,10 +98,26 @@ This section must always reflect the actual current state of the work.
       (no warnings); `cabal test all` green — all 16 suites pass. Acceptance grep
       confirms no `liftIO getCurrentTime`/`liftIO getMonotonicTimeNSec` remain in the
       migrated modules. (2026-06-09)
-- [ ] M2: Migrate IORef sites to `Prim`: `withUsageTotals`
-      (`shikumi-eval/src/Shikumi/Eval/Usage.hs`), `runTrace`
-      (`shikumi-trace/src/Shikumi/Trace.hs`), and the test/stub fixtures that hold
-      `IORef`s. Add `runPrim` at discharge sites. Build + test green.
+- [x] M2: Migrated the production IORef sites to `Prim`: `withUsageTotals`
+      (`shikumi-eval/src/Shikumi/Eval/Usage.hs`) and `runTrace`
+      (`shikumi-trace/src/Shikumi/Trace.hs`, Approach A — its helpers `newTraceState`/
+      `openSpan`/`closeSpan`/`modifyActive`/`freezeTree` were lifted from raw `IO` into
+      `Eff` using `Effectful.Prim.IORef` and `Shikumi.Effect.Time.getCurrentTime`, so
+      `runTrace :: (Prim :> es, Time :> es)`). Because `-Wredundant-constraints` is on, the
+      `evaluate` family and its transitive consumers (`goldenReport`, `optimize`,
+      `scoreOn`, `runOptimizer`) **dropped `IOE`** here too (gaining `Prim`) — this pulls
+      M4's eval-harvest forward. Added `runPrim` (and `runTime` for the trace sites) at
+      every discharge point: both `runStubEval` copies and the six optimize `runStub`
+      helpers (closed rows gained `Prim`), the eval specs, and the eight `runTrace` chains
+      in `Trace/Demo.hs`, `shikumi-trace/test/Main.hs`, `TraceReplay.hs`, and the CLI
+      runtime. `cabal build all` clean (no warnings); all 16 suites green. (2026-06-09)
+- [ ] M2 (deferred, low-value): the **test-only** IORef LLM fixtures (`runCountingLLM`,
+      `runKeyedCountingLLM`, `runStubLMCounting`, `runScriptLLM`, `runMockLLM`,
+      `ProgramFixtures`, `Shikumi/LLM/Mock.hs`, `Trace/Internal/Spike.hs`) still carry
+      `(IOE :> es)`. Their `IOE` is genuinely used (`liftIO` over a `Data.IORef` queue) so
+      `-Wredundant-constraints` does not flag them, and they run under `runEff` which
+      supplies `IOE`. Migrating them to `Prim` is pure churn with no constraint-honesty
+      gain for scaffolding — see Decision Log. Left as-is.
 - [ ] M3: Migrate STM/MVar/threadDelay helpers to `Concurrent`: `runCacheMemory`
       (`shikumi-cache/src/Shikumi/Cache/Backend/Memory.hs`), and the resilience helpers
       `withRateLimit`/`retrying` in `shikumi/src/Shikumi/LLM.hs`. Build + test green.
@@ -182,6 +198,18 @@ Record every decision made while working on the plan.
   without new inter-package dependencies. (Verify the dependency direction during M0;
   if any consumer does not depend on core `shikumi`, add the dep in that package's
   `.cabal` `build-depends` for `shikumi`.)
+  Date: 2026-06-09
+
+- Decision: Pull M4's "drop redundant `IOE` from the `evaluate` family and consumers"
+  forward into M2, and do NOT migrate the test-only IORef LLM fixtures to `Prim`.
+  Rationale: `-Wredundant-constraints` is enabled project-wide, so the moment
+  `withUsageTotals` became `Prim` and `evalOne` became `Time`, keeping `IOE` on
+  `evaluate`/`evaluatePure`/`evaluateWith`/`goldenReport`/`optimize`/`scoreOn`/
+  `runOptimizer` would emit warnings — so they had to drop `IOE` in the same change that
+  introduced `Prim`. Conversely, the test fixtures' `IOE` is *not* redundant (they call
+  `liftIO` over a `Data.IORef` queue), so the guard does not force them, and they always
+  run under `runEff` (which supplies `IOE`). Migrating scaffolding to `Prim` would be
+  churn with no honesty benefit — the goal is honest constraints on production code.
   Date: 2026-06-09
 
 - Decision: Do NOT attempt to remove `IOE` from the SQLite, Postgres, and Redis cache

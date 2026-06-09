@@ -25,9 +25,10 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
+import Effectful.Prim (Prim)
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval.Evaluate (evaluate)
@@ -64,7 +65,7 @@ goldenProgram name path runner ds prog render =
 -- | Like 'goldenProgram' but compares the rendered 'Report' produced by
 -- 'evaluate' with the given metric, rather than a raw transcript.
 goldenReport ::
-  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, IOE :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   TestName ->
   FilePath ->
   (forall a. Eff es a -> IO a) ->

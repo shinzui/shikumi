@@ -54,6 +54,7 @@ import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful.Prim (Prim, runPrim)
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
@@ -119,10 +120,10 @@ runStub responder prog input =
 -- timing reads it.
 runStubEval ::
   (Context -> Response) ->
-  Eff '[LLM, Concurrent, Error ShikumiError, Time, IOE] a ->
+  Eff '[LLM, Concurrent, Error ShikumiError, Time, Prim, IOE] a ->
   IO (Either ShikumiError a)
 runStubEval responder =
-  runEff . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
+  runEff . runPrim . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
 
 -- ---------------------------------------------------------------------------
 -- Running an agent against a scripted LM

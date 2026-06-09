@@ -18,6 +18,7 @@ import Data.Text.IO qualified as TIO
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Prim (runPrim)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Cache (cachedLLM)
@@ -77,7 +78,7 @@ main = withSystemTempDirectory "shikumi-jitsurei" $ \dir -> do
 
   -- (2) Tracing: capture, render, and persist a hierarchical span tree.
   (traced, tree) <-
-    runEff . runTrace . runStubLLM responder . tracedLLM $
+    runEff . runPrim . runTime . runTrace . runStubLLM responder . tracedLLM $
       runErrorNoCallStack @ShikumiError (withSpan ProgramSpan "qa" (runProgram qa input))
   putStrLn "\n[trace]  span tree:"
   TIO.putStr (renderTree tree)

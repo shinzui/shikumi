@@ -12,6 +12,7 @@ import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful.Prim (Prim, runPrim)
 import Shikumi.Compile.Types (compiledProgram)
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
@@ -23,8 +24,8 @@ import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, runStubLMC
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, IOE] a -> IO (Either ShikumiError a)
-runStub act = runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
+runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (Either ShikumiError a)
+runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 trainset :: Dataset Sentence Label
 trainset =
@@ -48,7 +49,7 @@ tests =
         ref <- newIORef (0 :: Int)
         let budget = Budget {maxLmCalls = 6, maxCandidates = 32}
         res <-
-          runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runStubLMCounting ref (optimize (instructionSearch 3 budget) trainset exactMatch sentimentProg)
         case res of
           Left e -> assertFailure ("unexpected error: " <> show e)

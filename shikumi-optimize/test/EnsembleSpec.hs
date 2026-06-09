@@ -14,6 +14,7 @@ import Data.Text (Text)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful.Prim (Prim, runPrim)
 import Shikumi.Combinator (ensemble)
 import Shikumi.Compile.Types (compiledProgram)
 import Shikumi.Effect.Time (Time, runTime)
@@ -26,8 +27,8 @@ import StubLM (Label (..), Sentence (..), runStubLM, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
-runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, IOE] a -> IO (Either ShikumiError a)
-runStub act = runEff . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
+runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (Either ShikumiError a)
+runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 -- | The held-out set: two positives (@good@) and two negatives (@bad@), across two
 -- topics, so a member can be fooled on exactly one item by a poisoned demo.
