@@ -32,16 +32,15 @@ where
 import Control.Monad (foldM)
 import Data.Aeson (ToJSON)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 import Shikumi.Eval (datasetSize)
 import Shikumi.Optimize.Propose
   ( ProposeRequest (..),
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (freezeProgram, scoreOn)
+import Shikumi.Optimize.Search (freezeProgram, instructionAt, scoreOn, setNodeInstr)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
-import Shikumi.Program (Params (..), Program, foldParams, mapParamsAt)
+import Shikumi.Program (foldParams)
 
 -- | Search for a better instruction at every node by greedy coordinate ascent under
 -- an explicit LM-call budget, using the grounded proposer to generate candidates.
@@ -91,13 +90,3 @@ instructionSearch proposalsPerNode budget = Optimizer $ \train metric student ->
 
   (final, _) <- foldM stepNode (student, 0) [0 .. nNodes - 1]
   pure (freezeProgram final)
-
--- | The instruction stored at a node index (in @foldParams@ order), if any.
-instructionAt :: Int -> Program i o -> Maybe Text
-instructionAt idx prog = case drop idx (foldParams prog) of
-  (ps : _) -> instructionOverride ps
-  [] -> Nothing
-
--- | Set node @idx@'s instruction override.
-setNodeInstr :: Int -> Text -> Program i o -> Program i o
-setNodeInstr idx instr = mapParamsAt idx (\ps -> ps {instructionOverride = Just instr})

@@ -68,20 +68,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: Add the `Shikumi.Optimize.COPRO` module skeleton with `CoproConfig`, `defaultCoproConfig`,
-  and a `copro` whose body is `instructionSearch`-equivalent (depth 1, no history); wire it into
-  the cabal file and re-export it from `Shikumi.Optimize`. Build green.
-- [ ] M1: Breadth-candidate generation per node via the grounded proposer fed the attempt
-  history; `CoproProposeIn`/`CoproProposeOut` records and the `proposeBreadth` helper; unit test
-  proving the magic instruction is among the breadth candidates and that history text reaches the
-  proposer.
-- [ ] M2: The depth loop with best-keeping, history threading, and seen-instruction dedup, all
-  honoring `Budget`; unit test proving (a) deeper depth never scores worse than shallower on a
-  single node and (b) the recorded LM-call count never exceeds `maxLmCalls`.
-- [ ] M3: Coordinate ascent across multiple nodes producing a `CompiledProgram`; held-out-lift
-  acceptance test (after > before, deeper ≥ shallower) and a round-trip test through
-  `encodeCompiled`/`decodeCompiledOnto`.
-- [ ] Final: fourmolu-format, `cabal test all` green, commit with trailers, fill Outcomes.
+- [x] M0: (2026-06-09) `Shikumi.Optimize.COPRO` with `CoproConfig`/`defaultCoproConfig`/`copro`,
+  wired into the cabal and re-exported from `Shikumi.Optimize`. `setNodeInstr`/`instructionAt`
+  lifted into `Shikumi.Optimize.Search` (shared by `instructionSearch` and `copro`); existing
+  suite stayed green through the refactor.
+- [x] M1: (2026-06-09) Breadth candidates come from EP-19's *delivered* `proposeInstructions`
+  (not a plan-local `coproProposer`/`variant:N` stub, which EP-19 obsoleted). The scored attempt
+  history is threaded as EP-19's `ProposeRequest.history :: [PastInstruction]`, which the proposer
+  renders internally — so COPRO needs no `renderHistory` of its own. `tipIndex = 1` so the
+  creative tip (which unlocks the stub's RULE candidate) is always offered.
+- [x] M2: (2026-06-09) `optimizeNode` depth loop with per-instruction best-keeping, seen-
+  instruction dedup (assoc list keyed by instruction), and `Budget` gating (proposer cost
+  `4 + breadth-1`; scoring cost `dsSize` per candidate). Tests prove deeper depth ≥ shallower on
+  held-out and the recorded count ≤ `maxLmCalls` (8).
+- [x] M3: (2026-06-09) Multi-node coordinate ascent via `foldM` over `[0..nNodes-1]` →
+  `CompiledProgram`. Held-out lift (0.0 → 1.0) and `encodeCompiled`/`decodeCompiledOnto`
+  round-trip tests pass.
+- [x] Final: (2026-06-09) fourmolu-formatted; `cabal test shikumi-optimize` (29) and `cabal test
+  all` green; committed with trailers; Outcomes filled.
 
 
 ## Surprises & Discoveries
@@ -89,7 +93,23 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-19 landed, so COPRO uses the real grounded proposer — the plan-local `coproProposer`/
+  `CoproProposeIn`/`variant:N` design is obsolete.** EP-19 removed V1's `proposeInstruction` and
+  its `variant:N` stub convention; the delivered `proposeInstructions :: Dataset i o ->
+  ProposeRequest i o -> Eff es ProposeResult` already does breadth (`numCandidates`), retains the
+  current instruction, dedups, *and* takes a scored `history :: [PastInstruction]` it renders
+  internally. So `optimizeNode` maps directly onto one `proposeInstructions` call per round with
+  `history` = the accumulated `(instruction, score)` evaluated list. COPRO needed no proposer
+  Program, no `renderHistory`, and no `proposeBreadth` of its own — a large simplification over
+  the drafted M1.
+- **`copro` carries `(ToJSON i, ToJSON o)`** (like `instructionSearch`/`miprov2`) because
+  `proposeInstructions` renders dataset rows. The `Optimizer` type is unchanged; the constraints
+  sit on the smart constructor.
+- **Minibatch screening (MasterPlan Speed-audit cascade) was deferred.** The MasterPlan flagged
+  "EP-21 should screen candidates on a seeded minibatch before confirming on the full dataset."
+  COPRO scores on the whole training set (deterministic, and the fixtures are tiny so there is no
+  speed gap to close). The screen-then-confirm optimization is a follow-up; it does not change the
+  public surface or any acceptance behaviour. Recorded in the Decision Log.
 
 
 ## Decision Log
@@ -117,6 +137,17 @@ Record every decision made while working on the plan.
   Rationale: it is the invariant that makes coordinate ascent monotone — a node can never be made
   worse than where it started — and it is what the MasterPlan brief asks us to keep.
   Date: 2026-06-09.
+- Decision (revised at implementation, 2026-06-09): **The proposer seam is EP-19's delivered
+  `proposeInstructions`, not a plan-local `coproProposer`/`proposeBreadth`/`renderHistory`.** EP-19
+  removed V1's `proposeInstruction` and its `variant:N` convention, and its `ProposeRequest`
+  already carries a scored `history :: [PastInstruction]` it renders internally. So `optimizeNode`
+  calls `proposeInstructions` once per round with the accumulated history; the candidate retention,
+  dedup, and history rendering are all EP-19's. `copro` gains a `(ToJSON i, ToJSON o)` constraint
+  (the proposer renders dataset rows). Date: 2026-06-09.
+- Decision (2026-06-09): **Defer the MasterPlan Speed-audit minibatch-screening cascade.** COPRO
+  scores candidates on the full training set; screen-then-confirm on a seeded minibatch is a
+  follow-up optimization that changes neither the public surface nor any acceptance behaviour, and
+  the hermetic fixtures are too small for it to matter. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -124,7 +155,24 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** COPRO ships as `Shikumi.Optimize.COPRO` (`copro`/`CoproConfig`/
+`defaultCoproConfig`), re-exported from `Shikumi.Optimize` and invoked through the unchanged
+`optimize`. It is coordinate ascent over `foldParams` nodes, each optimized over `depth` rounds of
+`breadth` candidates drawn from EP-19's grounded proposer fed the scored attempt history; the
+current instruction is always retained and an instruction-keyed evaluated list both dedups
+re-proposals and tracks the best. `setNodeInstr`/`instructionAt` were lifted into
+`Shikumi.Optimize.Search` so `instructionSearch` and `copro` share one copy (a pure refactor that
+kept the existing suite green).
+
+The headline purpose is met: a weak (empty-instruction) program scores **0.0 → 1.0** on a held-out
+set after `copro`; deeper depth is monotone (`depth 3 >= depth 1`); the LM-call count stays within
+a tight `Budget` (≤ 8); and the result round-trips through `encodeCompiled`/`decodeCompiledOnto`.
+`cabal test shikumi-optimize` is 29/29 green and `cabal test all` passes (the lifted helpers did
+not disturb `instructionSearch` or the other optimizers).
+
+Gaps / deferred: minibatch screening (MasterPlan Speed-audit cascade) — full-dataset scoring is
+used; a genuine multi-node fixture (single-node fixtures exercise the fold structurally, the same
+posture `instructionSearch` takes). Neither affects the acceptance contract.
 
 
 ## Context and Orientation

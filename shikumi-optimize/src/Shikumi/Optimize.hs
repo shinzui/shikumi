@@ -20,6 +20,7 @@ module Shikumi.Optimize
     module Shikumi.Optimize.LabeledFewShot,
     module Shikumi.Optimize.Bootstrap,
     module Shikumi.Optimize.Instruction,
+    module Shikumi.Optimize.COPRO,
     module Shikumi.Optimize.MIPRO,
     module Shikumi.Optimize.Ensemble,
   )
@@ -35,6 +36,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize.Bootstrap
+import Shikumi.Optimize.COPRO
 import Shikumi.Optimize.Ensemble
 import Shikumi.Optimize.Instruction
 import Shikumi.Optimize.LabeledFewShot

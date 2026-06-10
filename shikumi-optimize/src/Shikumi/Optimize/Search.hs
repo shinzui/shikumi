@@ -11,9 +11,12 @@ module Shikumi.Optimize.Search
   ( selectBest,
     scoreOn,
     freezeProgram,
+    setNodeInstr,
+    instructionAt,
   )
 where
 
+import Data.Text (Text)
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
@@ -24,7 +27,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric, Report (aggregateScore), evaluatePure)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize.Types (Budget (..), Scored (..))
-import Shikumi.Program (Program)
+import Shikumi.Program (Params (..), Program, foldParams, mapParamsAt)
 
 -- | Score every candidate (left to right), stopping once the candidate budget is
 -- hit, and return the best by score (ties: earliest wins). The scorer is the
@@ -66,3 +69,14 @@ scoreOn ds m p = aggregateScore <$> evaluatePure ds m p
 -- freeze on the side.
 freezeProgram :: Program i o -> CompiledProgram i o
 freezeProgram = CompiledProgram
+
+-- | Set node @idx@'s instruction override (in @foldParams@ order). Shared by
+-- @instructionSearch@ and @copro@.
+setNodeInstr :: Int -> Text -> Program i o -> Program i o
+setNodeInstr idx instr = mapParamsAt idx (\ps -> ps {instructionOverride = Just instr})
+
+-- | The instruction override stored at node @idx@ (in @foldParams@ order), if any.
+instructionAt :: Int -> Program i o -> Maybe Text
+instructionAt idx prog = case drop idx (foldParams prog) of
+  (ps : _) -> instructionOverride ps
+  [] -> Nothing

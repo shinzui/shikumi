@@ -40,6 +40,7 @@ library
   exposed-modules:
     Shikumi.Optimize
     Shikumi.Optimize.Bootstrap
+    Shikumi.Optimize.COPRO
     Shikumi.Optimize.Ensemble
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.LabeledFewShot
@@ -72,6 +73,7 @@ test-suite shikumi-optimize-test
   other-modules:
     AcceptanceSpec
     BootstrapSpec
+    CoproSpec
     EnsembleSpec
     InstructionSpec
     LabeledFewShotSpec

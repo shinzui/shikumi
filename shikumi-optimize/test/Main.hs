@@ -7,6 +7,7 @@ module Main (main) where
 
 import AcceptanceSpec qualified
 import BootstrapSpec qualified
+import CoproSpec qualified
 import EnsembleSpec qualified
 import InstructionSpec qualified
 import LabeledFewShotSpec qualified
@@ -27,5 +28,6 @@ main =
         EnsembleSpec.tests,
         ProposeSpec.tests,
         Miprov2Spec.tests,
+        CoproSpec.tests,
         AcceptanceSpec.tests
       ]
