@@ -47,8 +47,22 @@ A `Metric o` scores a prediction against the expected output. Built-ins and comb
 
 LM-backed metrics live behind their own effects: `semanticSimilarity` (cosine over an
 `Embedding` effect) and `modelJudge instruction (o -> Text)` (LLM-as-judge, needs `LLM` +
-`Error`). The `Embedding` effect is interpreted with a pure `Text -> Vector Double` via
-`runEmbedding`.
+`Error`). The `Embedding` effect has two kinds of interpreter:
+
+```haskell
+-- Pure (deterministic; good for tests): supply a Text -> Vector Double table.
+runEmbedding     :: (Text -> Vector Double) -> Eff (Embedding : es) a -> Eff es a
+
+-- Real backend (Shikumi.Eval.Embedding): an OpenAI-compatible /v1/embeddings endpoint.
+runEmbeddingLLM  :: (IOE :> es, Error ShikumiError :> es) => Eff (Embedding : es) a -> Eff es a
+runEmbeddingWith :: (IOE :> es, Error ShikumiError :> es) => EmbeddingModel -> Eff (Embedding : es) a -> Eff es a
+```
+
+`runEmbeddingLLM` defaults to OpenAI's `text-embedding-3-small`; `runEmbeddingWith` takes an
+explicit `Baikai.Embedding.EmbeddingModel` (a bare model-id string + base URL + key source, no
+chat-catalog entry). So `semanticSimilarity` runs end-to-end against a real provider — two
+meaning-close strings score higher than two distant ones — while a pure `runEmbedding` table
+keeps unit tests hermetic. A transport failure surfaces as a typed `ProviderFailure`.
 
 ### Running an evaluation
 

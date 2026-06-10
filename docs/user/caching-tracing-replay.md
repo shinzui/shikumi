@@ -161,8 +161,49 @@ writeTraceFile "run.json" tree
 walks a finished tree and creates nested OTel spans preserving parent/child nesting (via
 explicit context, so it works post-hoc). Structural nodes map to `Internal` spans; LM-call
 nodes map to `Client` spans and carry GenAI semantic-convention attributes
-(`gen_ai.request.model`, `gen_ai.usage.input_tokens`, cost, latency, …). *(The CLI's live OTel
-export is the one piece still planned — see the [README status table](../../README.md#implementation-status).)*
+(`gen_ai.request.model`, `gen_ai.usage.input_tokens`, cost, latency, …) plus — when the tree was
+produced by `runProgramTraced` (below) — `shikumi.node_path`.
+
+For a **live** collector, `Shikumi.Trace.LiveExport` wraps the same `exportTree`:
+
+```haskell
+exportTreeWith :: MonadIO m => SpanProcessor -> Text -> TraceTree -> m ()  -- factored seam
+exportTreeLive :: MonadIO m => Text -> TraceTree -> m ()                   -- OTLP/HTTP
+```
+
+`exportTreeLive name tree` builds the OTLP/HTTP exporter from the standard OTel environment
+variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, default `http://localhost:4318`), wraps it in a batch
+processor, exports, and flushes on shutdown. This is what `shikumi trace <id> --otel` calls (see
+the [CLI guide](./cli.md)); start any OTLP collector on `:4318` and the recorded program shows up
+as a nested span tree.
+
+### Node-correlated tracing & the feedback channel
+
+`runProgram`'s spans tell you *that* an LM call happened, not *which* program node issued it.
+`runProgramTraced` (in `Shikumi.Trace.Program`) is an additive entry point — same semantics as
+`runProgram`, but it opens a span per node and tags each LM-call span with a `NodePath`:
+
+```haskell
+runProgramTraced :: (LLM :> es, Trace :> es, CurrentNode :> es, Error ShikumiError :> es)
+                 => Program i o -> i -> Eff es o
+```
+
+A `NodePath` (from `Shikumi.Trace.Node`) is a node's structural position, enumerated by
+`programNodePaths` in the *same* order as `foldParams`/`mapParamsAt` — so the node a path points
+at is the node a parameter edit `n` touches. `nodeFields :: Program i o -> [(NodePath, NodeFields)]`
+recovers each node's input/output field names. Stack it like `tracedLLM`, but use the node-aware
+capture and add `runCurrentNode`:
+
+```haskell
+runEff . runPrim . runTime . runTrace . runCurrentNode
+  . runLLMResilient cfg . tracedNodeLLM
+  $ runProgramTraced program input
+```
+
+A sibling `Shikumi.Trace.Feedback` lets a metric or judge attach a short textual critique to a
+node (`attachFeedback path text`, kept *out* of the serialized trace) and an optimizer read it
+back (`feedbackFor path log`), keyed by the same `NodePath`. (Adding the optional `nodePath` span
+attribute bumped the trace `formatVersion` to 2.)
 
 ---
 

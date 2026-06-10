@@ -178,10 +178,14 @@ data TempSchedule = TempFixed [Double] | TempSpread Double Double
 frequent under `Eq`, ties broken by first appearance). `majorityVoteBy` folds the `k` outputs
 with a custom reducer, for outputs that are not usefully `Eq`.
 
-> **`TempSchedule` is carried but not yet applied to the wire.** The schedule participates in
-> the node's structural shape and is serialized, but per-sample temperature is not yet threaded
-> onto the request (it awaits real provider/model routing). Today every sample dispatches with
-> the same options; the schedule is inspectable but inert at run time.
+> **`TempSchedule` is live on the wire** (since the ambient-routing work). Each of the `k`
+> samples is run with its scheduled temperature: `TempFixed xs` cycles `xs` to length `k`,
+> `TempSpread base spread` fans `k` values evenly across `[base-spread, base+spread]`. The
+> temperature is threaded down to the sample's `Predict` nodes and applied by `routeLLM` (so a
+> router must be installed — the hermetic stub path and the live path both install one; an
+> un-routed run leaves the schedule inert). `runProgram` and `runProgramConc` produce the same
+> set of per-sample temperatures. See
+> [Effects & the runtime → Ambient model routing](./effects-and-runtime.md#ambient-model-routing).
 
 ### Ensemble
 

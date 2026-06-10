@@ -63,6 +63,15 @@ shikumi replay   sentiment --store-dir .shikumi            # → identical outpu
 
 Global options: `--store-dir` (default `.shikumi`) and `--otel`.
 
+With `--otel`, `shikumi trace <id> --otel` also exports the loaded tree to a live OpenTelemetry
+collector over OTLP/HTTP (in addition to printing it), then prints an
+`Exported N spans via OTLP to <endpoint>` line. The endpoint comes from the standard OTel
+environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, default `http://localhost:4318`); each
+LM-call span carries its model/provider/tokens/cost and — for traces produced by
+`runProgramTraced` — its `shikumi.node_path`. With no collector reachable the spans are dropped
+and the command still exits cleanly (the non-`--otel` output is byte-for-byte unchanged). See
+[tracing → OpenTelemetry export](./caching-tracing-replay.md#opentelemetry-export).
+
 ---
 
 ## How "offline" is wired (`Shikumi.Cli.Runtime`)

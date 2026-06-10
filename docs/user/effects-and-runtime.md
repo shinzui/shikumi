@@ -142,6 +142,53 @@ resilience/transport ever run; a miss falls through. The details are in
 
 ---
 
+## Ambient model routing
+
+`runProgram` is **model-agnostic**: notice its row is just `(LLM, Error ShikumiError)` — there is
+no `Model` argument and no `Model` constraint. That pinned signature never changes (every
+consumer — eval, optimize, tools, the CLI — inherits it). So *which* real model each `Predict`
+node dispatches against is supplied the same way `LLM` and `Error` are: by an interpreter lower
+in the stack. That interpreter is `Shikumi.Routing`:
+
+```haskell
+data Routing :: Effect where
+  CurrentModel :: Routing m Model
+
+runRouting :: Model -> Eff (Routing : es) a -> Eff es a              -- supply the ambient model
+routeLLM   :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a     -- rewrite outgoing LLM calls
+```
+
+Pick a model **by name** from baikai's generated catalog and install the pair below `runProgram`
+(`runRouting` *outer* of the real `LLM` interpreter, which is outer of `routeLLM` — the same
+shape as `runTrace . runLLM… . tracedLLM`):
+
+```haskell
+import Baikai.Models.Generated (openai_gpt_4o_mini)
+
+runEff . runErrorNoCallStack @ShikumiError . runConcurrent
+  . runRouting openai_gpt_4o_mini   -- the ambient model
+  . runLLMResilient cfg             -- the real LLM interpreter (or a stub)
+  . routeLLM                        -- rewrites each Complete onto the ambient model
+  $ runProgram summarize article
+```
+
+How it works: `runProgram` renders each node against an inert placeholder model and stamps its
+*intentions* — the derived JSON schema, and any `MajorityVote` per-sample temperature — onto a
+private `Options.metadata` channel. `routeLLM` reads the ambient model, overwrites the
+placeholder with it, and translates those metadata keys into real wire options: for
+native-capable providers (OpenAI `response_format`, Anthropic `output_config`) it sets
+`Options.responseFormat = Just (JsonSchema …)` so the provider *enforces* the schema; it sets
+`Options.temperature` per sample; and it strips the private keys before transport. Fallback
+models simply get no `responseFormat`. Without a router installed (the offline stub path), runs
+use the neutral model and the prompt-based fallback adapter — which is why the hermetic tests
+and the CLI still work with no routing at all.
+
+This is what makes
+[`MajorityVote`'s `TempSchedule`](./programs-and-combinators.md#majority-vote-self-consistency)
+live and native structured output actually enforced on the wire.
+
+---
+
 ## Effects as a capability ledger
 
 Here is the design principle that the whole runtime turns on.

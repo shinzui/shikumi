@@ -152,8 +152,9 @@ is still legible. The resilience interpreter knows which of these are *transient
 ## Motivating examples
 
 > The snippets below reflect the **shipped** surface. The in-memory **and** persistent cache
-> backends (SQLite, Redis, Postgres) all ship; the one item not yet built is the CLI's *live*
-> OpenTelemetry export — see **[Implementation status](#implementation-status)**.
+> backends (SQLite, Redis, Postgres), ambient model routing, the embeddings backend,
+> node-correlated tracing, and the CLI's live OpenTelemetry export all ship — see
+> **[Implementation status](#implementation-status)**.
 
 Every snippet below has a **runnable, offline counterpart** in the
 [`shikumi-jitsurei`](shikumi-jitsurei) package (実例, *worked examples*). Each one runs against
@@ -402,14 +403,18 @@ clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing.
 | **Compiler** — zero-shot / few-shot / CoT / RAG | `shikumi-compile` | ✅ Done |
 | **Optimizer** — demo selection, bootstrap few-shot, instruction & ensemble search | `shikumi-optimize` | ✅ Done |
 | **Typed tools + ReAct agents** | `shikumi-tools` | ✅ Done |
-| **`shikumi` CLI** — `eval`, `trace`, `optimize`, `replay` | `shikumi-cli` | ✅ Done · 🔭 live OTel export planned |
+| **Ambient model routing** — pick a real model by name; live native `responseFormat` + per-sample temperature | `shikumi` (`Shikumi.Routing`) | ✅ Done |
+| **Embeddings backend** — OpenAI-compatible `/v1/embeddings`; `semanticSimilarity` runs end-to-end | *baikai*, `shikumi-eval` | ✅ Done |
+| **Node-correlated tracing** — `runProgramTraced`, `NodePath` per LM-call span, per-node feedback channel | `shikumi-trace` | ✅ Done |
+| **`shikumi` CLI** — `eval`, `trace`, `optimize`, `replay`, with live OTel export | `shikumi-cli` | ✅ Done |
 | **Worked examples (実例)** — runnable, offline counterparts to every motivating example | `shikumi-jitsurei` | ✅ Done |
 
-> Note: today `runProgram` dispatches every node against a provider-neutral model (the
-> prompt-fallback adapter is the exercised path; the native-schema path is wired and verified
-> for OpenAI). Real per-call provider/model routing — which also unblocks per-sample
-> temperature and the multi-sample eval path — awaits an ambient-model mechanism (e.g. a
-> `Reader Model` effect); the offline CLI drives runs through a deterministic stub LM.
+> Note: `runProgram` is model-agnostic — install an ambient model below the stack with
+> `runRouting`/`routeLLM` (from `Shikumi.Routing`) and every `Predict` node dispatches against
+> that named model, with the derived JSON schema enforced via `responseFormat` for
+> native-capable providers and `MajorityVote`'s per-sample temperature applied on the wire. The
+> offline CLI and tests drive runs through a deterministic stub LM instead. See
+> [Effects & the runtime](docs/user/effects-and-runtime.md#ambient-model-routing).
 
 ---
 
