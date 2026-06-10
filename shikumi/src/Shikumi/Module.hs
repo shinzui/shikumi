@@ -23,19 +23,27 @@ module Shikumi.Module
   ( predict,
     chainOfThought,
     chainOfThoughtRaw,
+    twoStep,
     WithReasoning (..),
   )
 where
 
+import Baikai (user, _Context, _Model, _Options)
+import Control.Lens ((&), (.~))
 import Data.Aeson (Object, Value (Object))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.Generics.Labels ()
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Vector qualified as V
+import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (ToPrompt (..))
+import Shikumi.Adapter (Adapter (..), ToPrompt (..), fallbackAdapter, responseText)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Program (Program (FMap, Predict), emptyParams)
+import Shikumi.LLM (complete)
+import Shikumi.Program (Program (FMap, Predict), embed, emptyParams)
 import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable)
 import Shikumi.Schema.Types
   ( FieldMeta (..),
@@ -133,4 +141,76 @@ withReasoningField sig =
         [ FieldMeta {fieldName = "reasoning", fieldDesc = Just "step-by-step reasoning"},
           FieldMeta {fieldName = "value", fieldDesc = Nothing}
         ]
+    }
+
+-- ---------------------------------------------------------------------------
+-- Two-step extraction (EP-26)
+-- ---------------------------------------------------------------------------
+
+-- | A tiny internal input record holding a free-form answer, fed to the
+-- extraction call. Not exported.
+newtype ExtractIn = ExtractIn {text :: Text}
+  deriving stock (Generic, Show)
+
+instance ToPrompt ExtractIn
+
+-- | A two-call adapter expressed as a program combinator: ask the main model for a
+-- free-form answer (plain prose, no JSON/marker shape requested), then ask an
+-- extraction model to coerce that prose into the typed output @o@. Useful for
+-- strong reasoners that are weak at structured output.
+--
+-- It is an 'Shikumi.Program.embed' node, not an @Adapter@ value: an @Adapter@'s
+-- @parse@ is pure (@Response -> Either ShikumiError o@) and cannot issue the second
+-- model call, whereas an embedded body runs in 'Shikumi.Program.runProgram'\'s
+-- effect row and can. Because it carries no 'Shikumi.Program.Params', the
+-- parameter-count invariant (count == number of 'Predict' nodes) holds and the
+-- serializers/compilers pass it through unchanged.
+--
+-- Known limitation (matching DSPy's @TwoStepAdapter@): both calls go to the same
+-- ambient model under 'Shikumi.Program.runProgram'. A separate, smaller extraction
+-- model would be wired by running the extraction under a different interpreter;
+-- that is out of scope here.
+twoStep ::
+  (FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
+  Signature i o ->
+  Program i o
+twoStep sig = embed $ \i -> do
+  -- 1. Free-form call: plain prose, no structured shape requested.
+  let ffCtx =
+        _Context
+          & #systemPrompt .~ Just (freeFormSystem sig)
+          & #messages .~ V.fromList [user (toPrompt i)]
+  ffResp <- complete _Model ffCtx _Options
+  -- 2. Extraction call: coerce the prose into the typed output via the marker
+  --    fallback adapter (a robust extraction target that already round-trips).
+  let exSig = extractSig sig
+      (exCtx, exOpts) = render fallbackAdapter exSig (ExtractIn (responseText ffResp))
+  exResp <- complete _Model exCtx exOpts
+  either throwError pure (parse fallbackAdapter exSig exResp)
+
+-- | The plain-prose system prompt for the free-form call (mirrors DSPy's
+-- @TwoStepAdapter.format_task_description@): the instruction, the input/output
+-- fields named in words, and a request to answer in detail.
+freeFormSystem :: Signature i o -> Text
+freeFormSystem sig =
+  "You are a helpful assistant. "
+    <> getInstruction sig
+    <> "\n\nAs input you will be provided with: "
+    <> namesOf (inputFields sig)
+    <> ".\nYour answer must contain: "
+    <> namesOf (outputFields sig)
+    <> ".\nLay out your answer in detail, in plain prose."
+  where
+    namesOf = T.intercalate ", " . map fieldName
+
+-- | The extraction signature @ExtractIn -> o@: a single @text@ input holding the
+-- free-form answer, reusing the original signature's output-field metadata (so it
+-- needs no @GFieldMetas (Rep o)@ constraint).
+extractSig :: Signature i o -> Signature ExtractIn o
+extractSig sig =
+  Signature
+    { instruction = "The text below contains the answer. Extract these fields verbatim.",
+      demos = [],
+      inputFields = [FieldMeta {fieldName = "text", fieldDesc = Nothing}],
+      outputFields = outputFields sig
     }

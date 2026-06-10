@@ -36,6 +36,7 @@ module Shikumi.Adapter
     xmlAdapter,
     adapterFor,
     attachSchema,
+    responseText,
 
     -- * The private request-metadata channel (consumed by "Shikumi.Routing")
     stampTemperature,

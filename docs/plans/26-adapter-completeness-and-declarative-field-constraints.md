@@ -84,10 +84,10 @@ state of the work.
       check enforces them after decode. New `ConstraintSpec` proves the schema
       `Value` carries the keyword AND that an out-of-bounds decode fails while an
       in-bounds decode passes.
-- [ ] M3: `twoStepAdapter` exists as a small program combinator (`twoStep`) that
+- [x] M3: `twoStepAdapter` exists as a small program combinator (`twoStep`) that
       issues a free-form call then an extraction call. New `TwoStepSpec` drives it
       against a two-call stub LM and asserts the final typed `o`.
-- [ ] M4: `AdapterSpec`, `SchemaSpec`, `EndToEndSpec` still pass unchanged (the
+- [x] M4: `AdapterSpec`, `SchemaSpec`, `EndToEndSpec` still pass unchanged (the
       existing text-field path is untouched); the new specs are wired into
       `shikumi/test/Main.hs`; `cabal test shikumi` is green.
 
@@ -132,6 +132,21 @@ implementation. Provide concise evidence.
   100 violated`. The schema keyword, by contrast, uses the parsed `Scientific`
   (`Number 100`), and `Scientific`'s normalized `Eq` makes `Number 100 == Number
   100.0`, so the schema assertions are representation-independent.
+- **M3: `twoStep` needs neither `FromModel i` nor `defaultModel`.** The plan's
+  signature listed `FromModel i`, but the embedded body only renders the input
+  (`ToPrompt i`) for the free-form call and builds the extraction signature
+  `ExtractIn -> o` from `outputFields sig` — so `twoStep`'s constraints are
+  `(FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)`; including
+  `FromModel i` would trip `-Wredundant-constraints`. Both `complete` calls pass
+  `_Model` (the same placeholder `runProgram` uses), which `adapterFor` maps to the
+  fallback adapter — exactly the marker target the extraction step parses.
+- **M3: reused `ProgramFixtures.runScriptedLLM` instead of a new scripted stub.**
+  The plan sketched a fresh `runScriptedLLM :: IORef [Response] -> …`, but
+  `ProgramFixtures` already exports an identical one that pops responses from a
+  caller-owned `IORef` (so the test can `readIORef` afterward to prove the script
+  drained — the "two calls happened" observable). The extraction signature is built
+  by hand (`ExtractIn -> o` reusing `outputFields sig`) so no `GFieldMetas (Rep o)`
+  constraint is needed on `twoStep`.
 
 
 ## Decision Log
@@ -167,6 +182,16 @@ Record every decision made while working on the plan.
   wrapper is additive. The two wrappers compose: `Field "desc" (Constrained
   '[MinLen 10] Text)` carries both.
   Date: 2026-06-09.
+- Decision: `twoStep`'s extraction call reuses the *same ambient model* as the
+  free-form call (both `complete _Model …` under `runProgram`), rather than wiring
+  a separate, smaller extraction model.
+  Rationale: both calls share the one `LLM` effect, so under `runProgram` they hit
+  the same ambient model; targeting a distinct extraction model would require
+  running the extraction sub-program under a different interpreter, which is out of
+  scope here. This matches DSPy's own "the extraction model is fixed at
+  construction" limitation. The headline capability — two calls, free-form then
+  structured — is delivered; a future plan can thread a second interpreter.
+  Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -174,7 +199,43 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at
 completion. Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** All four milestones complete; `cabal test shikumi`
+green (112 tests) and `cabal test all` green. Against the original Purpose:
+
+- **Two new adapters/combinators are selectable.** `xmlAdapter` is a third
+  `Adapter i o` value (XML-tagged wire format) a caller picks explicitly;
+  `twoStep` is a `Program i o` combinator that makes two model calls (free-form
+  prose, then marker-fallback extraction). `XmlAdapterSpec` (3 tests) proves the
+  XML render→parse round-trip and located missing-tag error; `TwoStepSpec` (2
+  tests) proves the free-form-then-extract value and that *both* scripted calls are
+  consumed.
+- **Declarative field constraints flow into both schema and validation.** A
+  `Constrained '[…] a` field emits `minLength`/`maxLength`/`minimum`/`maximum`/
+  `enum` into the derived JSON Schema *and* is enforced after decode as a located
+  `ValidationFailure`, both driven from the one type-level declaration.
+  `ConstraintSpec` (6 tests) proves the schema keywords, the violating/conforming
+  decodes, and that the same record without the constraint accepts the violating
+  value.
+- **The existing text-field path is untouched.** `AdapterSpec`, `SchemaSpec`,
+  `EndToEndSpec` pass with no assertion edits; the additions are new instances on
+  the disjoint `Constrained`/`xmlAdapter`/`twoStep` heads and never alter the
+  `Field`/bare-`Text` instances (integration point #1 honored). EP-24's
+  multimodal specs also still pass.
+
+**Gaps / known limitations (carried forward, by design):**
+
+- `twoStep`'s two calls go to the same ambient model; a distinct smaller extraction
+  model is out of scope (matches DSPy's "extraction model fixed at construction").
+- The constraint vocabulary is a closed five-constructor set over `Text` and the
+  numeric leaves (`Int`/`Integer`/`Double`); it is not an open extension point.
+- `xmlAdapter`/`twoStep` are opt-in: `adapterFor`/`capabilityFor` are unchanged, so
+  the framework never auto-selects them (XML and two-step are caller choices, not
+  detectable model capabilities).
+
+**Lessons.** The only friction was M2's `ReflectConstraints` ambiguity (the
+schema-emitting method does not mention the class's value parameter `a`), resolved
+with explicit type applications rather than a class split — keeping the public
+`ReflectConstraints` surface exactly as planned. See Surprises & Discoveries.
 
 
 ## Context and Orientation

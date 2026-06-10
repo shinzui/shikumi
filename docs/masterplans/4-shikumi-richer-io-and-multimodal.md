@@ -97,7 +97,7 @@ because it is real DSPy surface, but ordered and scoped so it never blocks the p
 |---|-------|------|-----------|-----------|--------|
 | 24 | Multimodal field types | docs/plans/24-multimodal-field-types.md | None | None | Complete |
 | 25 | Program-level streaming and status messages | docs/plans/25-program-level-streaming-and-status-messages.md | None | EP-14 (MP-2) | Not Started |
-| 26 | Adapter completeness and declarative field constraints | docs/plans/26-adapter-completeness-and-declarative-field-constraints.md | None | EP-24 | In Progress |
+| 26 | Adapter completeness and declarative field constraints | docs/plans/26-adapter-completeness-and-declarative-field-constraints.md | None | EP-24 | Complete |
 | 27 | Code-execution modules ProgramOfThought and CodeAct | docs/plans/27-code-execution-modules-programofthought-and-codeact.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -175,8 +175,8 @@ current signatures it builds on (from the integration dossier) so it stands alon
 - [x] EP-24: Round-trip through `ToSchema`/`FromModel`/`ToPrompt` for a media-bearing signature
 - [ ] EP-25: Program-level streaming entry point surfacing field chunks via `StreamEach`
 - [ ] EP-25: Status messages (LM start/end, tool start/end) surfaced to the caller
-- [ ] EP-26: `XMLAdapter` and `TwoStepAdapter` selectable alongside native/fallback
-- [ ] EP-26: Declarative field constraints flow into JSON schema and `Validatable`
+- [x] EP-26: `XMLAdapter` and `TwoStepAdapter` selectable alongside native/fallback
+- [x] EP-26: Declarative field constraints flow into JSON schema and `Validatable`
 - [ ] EP-27: `programOfThought`/`codeAct` run model-emitted code in a sandbox and feed results back
 
 
@@ -222,6 +222,21 @@ they refine the integration contracts above.
   `user (toPrompt i)` whenever `imageFields i == []`). Integration point #1's text-field path is
   intact and the schema layer (`ToSchema`/`FromModel`) was not touched by EP-24, so EP-26's
   constraint mechanism is free of EP-24 collisions.
+- **EP-26 delivered: the EP-24 `ToPrompt` coexistence held with zero friction.**
+  (Discovered during EP-26 implementation, 2026-06-09.) EP-24's integration note warned
+  that any EP-26 hand-written `ToPrompt` instance on a non-`Generic`/polymorphic-field
+  type must add `imageFields _ = []` / `imageFieldNames _ = []`. EP-26's only new
+  `ToPrompt` instance is the internal `ExtractIn` (a plain `Generic` newtype), which gets
+  the generic defaults for free — no manual override needed. The schema layer
+  (`ToSchema`/`FromModel`) that EP-26's `Constrained` mechanism extends was untouched by
+  EP-24, so the two mechanisms compose on disjoint instance heads exactly as predicted:
+  `Constrained`, `xmlAdapter`, and `twoStep` are all-new surface, the `Field`/bare-`Text`
+  path is unaltered, and all EP-24 multimodal specs still pass. **One typeclass wrinkle
+  for any future schema-layer plan:** `ReflectConstraints`' schema-emitting method does not
+  mention its value-type parameter `a`, so recursive calls need explicit type applications
+  (`constraintSchema @cs @a Proxy`); see EP-26's Surprises. **`twoStep` is an `Embed`
+  node** (per the pre-authoring Surprise above), confirmed to carry no `Params` and pass
+  through the serializers unchanged.
 - **Field-level streaming is honestly scoped.** EP-25 delivers field chunks for a single
   `Predict` (and chains) on the `[[ ## field ## ]]` fallback/raw-text path — the exercised path
   since `defaultModel` maps to `PromptFallback` and `attachSchema` is a no-op; native whole-JSON

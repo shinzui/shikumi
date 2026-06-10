@@ -99,6 +99,7 @@ test-suite shikumi-test
     Shikumi.LLM.Mock
     SignatureSpec
     StubProvider
+    TwoStepSpec
     XmlAdapterSpec
 
   build-depends:
