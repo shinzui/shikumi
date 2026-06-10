@@ -95,7 +95,7 @@ because it is real DSPy surface, but ordered and scoped so it never blocks the p
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 24 | Multimodal field types | docs/plans/24-multimodal-field-types.md | None | None | Not Started |
+| 24 | Multimodal field types | docs/plans/24-multimodal-field-types.md | None | None | Complete |
 | 25 | Program-level streaming and status messages | docs/plans/25-program-level-streaming-and-status-messages.md | None | EP-14 (MP-2) | Not Started |
 | 26 | Adapter completeness and declarative field constraints | docs/plans/26-adapter-completeness-and-declarative-field-constraints.md | None | EP-24 | Not Started |
 | 27 | Code-execution modules ProgramOfThought and CodeAct | docs/plans/27-code-execution-modules-programofthought-and-codeact.md | None | None | Not Started |
@@ -171,8 +171,8 @@ current signatures it builds on (from the integration dossier) so it stands alon
 
 ## Progress
 
-- [ ] EP-24: Image (and other feasible media) field types lower to baikai `Content`; model sees the image
-- [ ] EP-24: Round-trip through `ToSchema`/`FromModel`/`ToPrompt` for a media-bearing signature
+- [x] EP-24: Image (and other feasible media) field types lower to baikai `Content`; model sees the image
+- [x] EP-24: Round-trip through `ToSchema`/`FromModel`/`ToPrompt` for a media-bearing signature
 - [ ] EP-25: Program-level streaming entry point surfacing field chunks via `StreamEach`
 - [ ] EP-25: Status messages (LM start/end, tool start/end) surfaced to the caller
 - [ ] EP-26: `XMLAdapter` and `TwoStepAdapter` selectable alongside native/fallback
@@ -204,6 +204,24 @@ they refine the integration contracts above.
   exactly how `react` captures its `ToolRegistry`. The hermetic restricted interpreter fits
   inside `Embed`; the real subprocess interpreter needs `IOE` and is offered only through a
   separate gated, non-CI entry point. (Same pattern recorded in MasterPlan 3's Surprises.)
+- **EP-24 implemented: image discovery lives on `ToPrompt`, not a separate class — affects EP-26.**
+  (Discovered during EP-24 M2 implementation, 2026-06-09.) The authored EP-24 plan put image
+  collection in a standalone `ImageFields` class with a blanket `OVERLAPPABLE` instance. That design
+  is unbuildable: the overlappable blanket poisons given-resolution (GHC-39999 — a given
+  `ImageFields i` is not used to discharge `adapterFor`'s wanted one), and polymorphic-field Predict
+  inputs (`MultiChainInput`, `WithReasoning`) cannot be walked generically so they need a manual
+  instance that *requires* the poisoning overlap. **Delivered mechanism:** `imageFields` and
+  `imageFieldNames` are methods on the existing `Shikumi.Adapter.ToPrompt` class (generic defaults
+  backed by `GImageFields`/`GImageFieldNames` in `Shikumi.Multimodal`); `render`'s `userTurn` lowers
+  the first image field. This reused the `ToPrompt i` constraint already threaded through
+  `predict`/`Predict`/`adapterFor`, so **no new constraint and zero fixture churn** workspace-wide.
+  *Integration note for EP-26* (`docs/plans/26-adapter-completeness-and-declarative-field-constraints.md`):
+  `ToPrompt` now carries two extra methods with generic defaults; an EP-26 hand-written `ToPrompt`
+  instance on a type with polymorphic/non-`Generic` fields must add `imageFields _ = []` and
+  `imageFieldNames _ = []` (the all-text path is unaffected — `userTurn` falls back to
+  `user (toPrompt i)` whenever `imageFields i == []`). Integration point #1's text-field path is
+  intact and the schema layer (`ToSchema`/`FromModel`) was not touched by EP-24, so EP-26's
+  constraint mechanism is free of EP-24 collisions.
 - **Field-level streaming is honestly scoped.** EP-25 delivers field chunks for a single
   `Predict` (and chains) on the `[[ ## field ## ]]` fallback/raw-text path — the exercised path
   since `defaultModel` maps to `PromptFallback` and `attachSchema` is a no-op; native whole-JSON

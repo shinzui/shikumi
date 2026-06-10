@@ -89,11 +89,13 @@ This section must always reflect the actual current state of the work.
       `GImageFieldNames` in `Shikumi.Multimodal`); `userTurn` in `Shikumi.Adapter` lowers the first
       image to `userImage`; `MultimodalAdapterSpec` passes (3/3). Whole workspace (`cabal build all`)
       builds with **zero** fixture changes.
-- [ ] M3: End-to-end stub test — `Describe { image, question } -> Answer { ... }` runs under a
+- [x] M3: End-to-end stub test — `Describe { image, question } -> Answer { ... }` runs under a
       stub LM that captures and asserts the image block, then decodes the structured `Answer`;
-      regression test that the all-text path's `Context` is unchanged.
-- [ ] Docs: "Audio and document: upstream-gated future work" section kept accurate; MasterPlan
-      registry row for EP-24 flipped to Complete on completion.
+      regression test that the all-text path's `Context` is unchanged. Done:
+      `MultimodalEndToEndSpec` passes (2/2). Full `shikumi` suite green (101 tests); workspace gate
+      `cabal test all` green (every package + baikai siblings).
+- [x] Docs: "Audio and document: upstream-gated future work" section kept accurate (unchanged —
+      still image-only at delivery); MasterPlan registry row for EP-24 flipped to Complete.
 
 
 ## Surprises & Discoveries
@@ -184,7 +186,31 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-09): delivered, all three observable goals met.** A Shikumi signature input can
+now carry a typed `Image` field that the model genuinely sees:
+
+1. *Round-trip (M1).* `imageFromFile`/`imageFromBase64` produce an `ImageContent` with the exact
+   decoded bytes (never base64) and correct MIME — `MultimodalSpec` (2/2).
+2. *Lowering into the request (M2).* `render` on an image-bearing signature builds a `Context` whose
+   user message holds a `UserImage` block with those bytes alongside the text fields, with the image
+   field name absent from the prose — `MultimodalAdapterSpec` (3/3).
+3. *End-to-end + regression (M3).* A `Describe -> Answer` program under a capturing stub shows the
+   model received the image and the canned `Answer` decodes; an image-free input renders a `Context`
+   identical to the prior text-only output — `MultimodalEndToEndSpec` (2/2).
+
+**Versus the plan.** Scope held exactly: image-only at delivery, audio/document documented as
+upstream-gated, image fields input-only (no `ToSchema Image`, so "image in output" stays a compile
+error). One mechanism deviation, recorded in the Decision Log and Surprises: image collection is
+exposed as `ToPrompt` methods (`imageFields`/`imageFieldNames`) rather than a separate `ImageFields`
+class, because the separate-class design required a blanket `OVERLAPPABLE` instance that poisons
+given-resolution (GHC-39999) and still could not cover polymorphic-field Predict inputs. The folded
+design needed **zero** new constraints and **zero** fixture changes across the whole workspace while
+preserving the byte-for-byte text-path regression invariant.
+
+**Gaps / future work.** (a) One image per input (the first image field); a multi-image input would
+assemble the `UserPayload` content vector by hand — noted in `userTurn`. (b) Audio/document remain
+upstream-gated on a new `Baikai.Content` constructor — see the section below. Neither blocks the
+headline deliverable.
 
 
 ## Context and Orientation
