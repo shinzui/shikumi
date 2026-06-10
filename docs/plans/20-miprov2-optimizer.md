@@ -69,25 +69,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: New module `Shikumi.Optimize.MIPRO` created in `shikumi-optimize/src/`, registered in
-      the cabal file, re-exported from `Shikumi.Optimize`; `Miprov2Config`, the auto presets
-      (`Miprov2Light`/`Medium`/`Heavy`), and a stub `miprov2` that type-checks and returns
-      `freezeProgram student` unchanged (so the package builds before any phase logic exists).
-- [ ] M1: Candidate generation — the bootstrap stage (per-node demo sets, via EP-16's
-      `runProgramTraced` with the program-level fallback) and the propose stage (per-node
-      instruction candidates, via EP-19's `proposeInstructions`). A unit test proving each node
-      receives a non-trivial list of demo-set candidates and instruction candidates including the
-      node's current instruction at index 0.
-- [ ] M2: The minibatch trial search loop — the chosen surrogate (greedy-coordinate-with-
-      minibatch-pruning, defined below) over the per-node `(instruction × demoset)` grid, honoring
-      `Budget {maxLmCalls, maxCandidates}`. A unit test proving the loop stops before the budget is
-      exceeded (call counter via `runStubLMCounting`) and that minibatch trials select the
-      better-scoring parameter combination.
-- [ ] M3: Full-eval selection → `CompiledProgram`; the held-out-lift acceptance test
-      (`miprov2` lifts held-out score above before *and* above `instructionSearch`); the
-      `encodeCompiled`/`decodeCompiledOnto` round-trip test.
-- [ ] Final: `cabal test shikumi-optimize` and `cabal test all` green inside
-      `nix develop .#ghc9124`; fourmolu-formatted; living sections updated; commit carries
+- [x] M0: (2026-06-09) `Shikumi.Optimize.MIPRO` created, registered in the cabal, re-exported from
+      `Shikumi.Optimize`; `Miprov2Auto`/`Miprov2Config`, the presets, `miprov2`/`miprov2With`.
+- [x] M1: (2026-06-09) Candidate generation — `bootstrapDemoCandidates` (program-level demo
+      recovery: teacher-passing runs + labelled training pairs; per-node EP-16 trace recovery
+      deferred, identical for single-node programs) and `proposeInstructionCandidates` (via EP-19's
+      *delivered* `proposeInstructions`, `tipIndex = 1` so the creative tip is always offered). The
+      `candidates` group proves each node gets candidates with the current instruction at index 0
+      (and a RULE candidate), and demo-set candidates with the empty set at index 0 and a non-empty
+      labelled set.
+- [x] M2: (2026-06-09) `searchJoint` — greedy coordinate descent with minibatch screening over the
+      joint `(instruction × demoset)` grid, honoring `Budget`. The `search` group proves the loop
+      stops within `maxLmCalls` (≤ 8, via `runJointStubLMCounting`) and that joint selection scores
+      1.0 on held-out vs 0.5 for the rule-only single axis.
+- [x] M3: (2026-06-09) Real `miprov2With` pipeline → `CompiledProgram`; the `acceptance` group
+      (before 0.0 → afterInstr 0.5 → afterMipro 1.0, so `afterMipro > afterInstr`) and the
+      `serialize` group (`encodeCompiled`/`decodeCompiledOnto` round-trip identical held-out score).
+      The joint-win fixture lives additively in `StubLM` (`runJointStubLM`).
+- [x] Final: (2026-06-09) `cabal test shikumi-optimize` (24) and `cabal test all` green inside
+      `nix develop .#ghc9124`; fourmolu-formatted; living sections updated; committed with
       MasterPlan/ExecPlan/Intention trailers.
 
 
@@ -96,7 +96,33 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-19 landed first, with a different proposer interface than this plan assumed — and it
+  *removed* the V1 fallback proposer.** This plan's Context section sketched
+  `proposeInstructions :: ProposeSignals i o -> Int -> Int -> Eff es [Text]` plus a
+  `fallbackProposeInstructions` reusing V1's `proposeInstruction`. The *delivered* EP-19
+  (`Shikumi.Optimize.Propose`) is `proposeInstructions :: (ToJSON i, ToJSON o, LLM, Error) =>
+  Dataset i o -> ProposeRequest i o -> Eff es ProposeResult`, and it **deleted**
+  `ProposeIn`/`ProposeOut`/`proposeInstruction`. Consequence: the `useGroundedProposer` flag is
+  obsolete (there is no V1 fallback to fall back to), so MIPROv2 always uses the grounded proposer
+  and the flag was dropped from `Miprov2Config`. `proposeInstructionCandidates` calls the real
+  interface with `tipIndex = 1` so the creative tip (which unlocks the stub's RULE candidate) is
+  always among the proposals even at the Light preset's `numInstructCandidates = 2`.
+- **The teacher-bootstrap circularity forced including labelled demos as candidates.** For the
+  joint-win fixture the default teacher (the underspecified student) solves *nothing*, so pure
+  teacher-bootstrap recovers zero demos and MIPROv2 could not cover region B. The fix (a real
+  MIPROv2 feature — `max_labeled_demos`): `bootstrapDemoCandidates` builds candidate sets from the
+  labelled `(input, expected)` training pairs *as well as* teacher-passing runs. This always
+  yields a covering demo set, so the joint search can reach 1.0.
+- **`usePerNodeDemos`/per-node EP-16 trace recovery is deferred.** The acceptance fixtures are
+  single-node, where program-level and per-node demo recovery coincide, so the flag and the
+  trace-reading path were dropped from `Miprov2Config` to avoid dead config. Recorded in the
+  Decision Log; a follow-up can add per-node recovery for multi-node programs without changing the
+  public surface.
+- **`fullEvalEvery` is retained for config compatibility but the loop full-evaluates each trial's
+  single proposal** to gate acceptance (minibatch screens the neighbourhood, full-eval confirms).
+  This makes coordinate descent reach the joint optimum within a few trials (the Light preset's 6
+  trials comfortably cover the 2 moves the fixture needs), rather than committing only once per
+  `fullEvalEvery` trials.
 
 
 ## Decision Log
@@ -146,6 +172,16 @@ Record every decision made while working on the plan.
   *beats* `instructionSearch` uses the same proposer both sides, so the win comes from the joint
   search, not from a richer proposer.
   Date: 2026-06-09.
+- Decision (revised at implementation, 2026-06-09): **Drop the `usePerNodeDemos` and
+  `useGroundedProposer` config flags.** EP-19 landed and removed V1's `proposeInstruction`, so
+  there is no fallback proposer to toggle — MIPROv2 always uses the grounded `proposeInstructions`.
+  Per-node EP-16 trace recovery is deferred (single-node acceptance fixtures make it moot), so its
+  flag would be dead config. `bootstrapDemoCandidates` recovers demos at the program-I/O level and
+  *also* includes labelled training pairs as candidate sets (MIPROv2's `max_labeled_demos`), which
+  is what makes the joint-win fixture reachable when the default teacher solves nothing. Both
+  `instructionSearch` and `miprov2` use the same grounded proposer in the acceptance test, so the
+  win is from the joint search.
+  Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -153,7 +189,26 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** MIPROv2 ships as `Shikumi.Optimize.MIPRO`
+(`miprov2`/`miprov2With`/`Miprov2Config`/`Miprov2Auto`), re-exported from `Shikumi.Optimize` and
+invoked through the unchanged `optimize`. The three phases — `bootstrapDemoCandidates` (labelled +
+teacher-bootstrapped demo sets), `proposeInstructionCandidates` (EP-19's grounded proposer), and
+`searchJoint` (greedy coordinate descent with minibatch screening over the joint grid) — compose
+into a `CompiledProgram` that serializes through V1's `encodeCompiled`/`decodeCompiledOnto`
+unchanged.
+
+The headline purpose is met on a hermetic joint-win fixture (`runJointStubLM`): a deliberately-weak
+program scores **0.0 held-out → 1.0 after `miprov2`**, strictly above the **0.5** ceiling that
+single-axis `instructionSearch` reaches (region A needs the RULE instruction, region B needs a
+covering demo; only the *joint* choice gets both). `cabal test shikumi-optimize` is 24/24 green
+(including the unchanged optimizer groups, proving the additive change and the `StubLM` refactor
+regressed nothing) and `cabal test all` passes.
+
+Gaps / deferred (documented above): per-node EP-16 trace-based demo recovery (single-node fixtures
+make it moot today); a TPE-lite sampler to replace greedy coordinate descent's neighbour selection
+(the public surface is stable for that swap); wiring evaluation through the `shikumi-cache` family
+(the MasterPlan Speed-audit lever). The shared `searchJoint`/candidate-generation surface is
+available to COPRO (EP-21) and GEPA (EP-22) as reference, though each has its own search loop.
 
 
 ## Context and Orientation

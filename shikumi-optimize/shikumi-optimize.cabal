@@ -43,6 +43,7 @@ library
     Shikumi.Optimize.Ensemble
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.LabeledFewShot
+    Shikumi.Optimize.MIPRO
     Shikumi.Optimize.Propose
     Shikumi.Optimize.Propose.Grounded
     Shikumi.Optimize.Propose.Summarize
@@ -74,6 +75,7 @@ test-suite shikumi-optimize-test
     EnsembleSpec
     InstructionSpec
     LabeledFewShotSpec
+    Miprov2Spec
     OptimizeSpec
     ProposeSpec
     StubLM

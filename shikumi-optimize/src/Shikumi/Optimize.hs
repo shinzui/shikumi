@@ -20,6 +20,7 @@ module Shikumi.Optimize
     module Shikumi.Optimize.LabeledFewShot,
     module Shikumi.Optimize.Bootstrap,
     module Shikumi.Optimize.Instruction,
+    module Shikumi.Optimize.MIPRO,
     module Shikumi.Optimize.Ensemble,
   )
 where
@@ -37,6 +38,7 @@ import Shikumi.Optimize.Bootstrap
 import Shikumi.Optimize.Ensemble
 import Shikumi.Optimize.Instruction
 import Shikumi.Optimize.LabeledFewShot
+import Shikumi.Optimize.MIPRO
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Types
 import Shikumi.Program (Program)

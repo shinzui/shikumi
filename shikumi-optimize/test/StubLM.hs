@@ -49,6 +49,10 @@ module StubLM
     runStubLM,
     runStubLMCounting,
     runStubLMCapturing,
+
+    -- * The joint instruction×demo task (EP-20)
+    runJointStubLM,
+    runJointStubLMCounting,
   )
 where
 
@@ -177,6 +181,39 @@ runStubLMCapturing ref = interpret $ \_ -> \case
     pure (mkResponse (respondTo ctx))
   Stream {} -> pure []
 
+-- | The joint instruction×demo task (EP-20). The held-out score is a strictly
+-- increasing function of getting /both/ axes right: "region A" sentences (those with
+-- @good@/@bad@) are answered correctly only when a @RULE@ instruction is present, and
+-- "region B" sentences (e.g. @great@/@terrible@) only when a covering demo is present.
+-- A @RULE@-only program (what instruction search reaches) scores 0.5; a joint program
+-- (instruction + demos, what MIPROv2 reaches) scores 1.0.
+runJointStubLM :: Eff (LLM : es) a -> Eff es a
+runJointStubLM = interpret $ \_ -> \case
+  Complete _ ctx _ -> pure (mkResponse (respondWith answerJoint ctx))
+  Stream {} -> pure []
+
+-- | Like 'runJointStubLM' but counts completions, for the budget test.
+runJointStubLMCounting :: (IOE :> es) => IORef Int -> Eff (LLM : es) a -> Eff es a
+runJointStubLMCounting ref = interpret $ \_ -> \case
+  Complete _ ctx _ -> do
+    liftIO (modifyIORef' ref (+ 1))
+    pure (mkResponse (respondWith answerJoint ctx))
+  Stream {} -> pure []
+
+-- | The joint task's classification rule (see 'runJointStubLM').
+answerJoint :: Context -> Text
+answerJoint ctx
+  | "good" `elem` ws || "bad" `elem` ws =
+      -- region A: correct only with a RULE instruction
+      if instructionHasRule ctx then goldLabel s else "neutral"
+  | otherwise =
+      -- region B: correct only with a covering demo
+      let demos = demoPairs (V.toList (ctx ^. #messages))
+       in if any (\(ds, _) -> overlap s ds > 0) demos then nnLabel s demos else "neutral"
+  where
+    s = parseSentence (lastUserText ctx)
+    ws = T.words (T.toLower s)
+
 -- | The full rendered request: system prompt followed by every user message's text.
 fullRequestText :: Context -> Text
 fullRequestText ctx =
@@ -186,11 +223,12 @@ fullRequestText ctx =
 allUserText :: Context -> [Text]
 allUserText ctx = [userPayloadText u | UserMessage u <- V.toList (ctx ^. #messages)]
 
--- | Decide the response body for a request from its rendered context. The grounded
--- proposer (EP-19) issues several distinct sub-program requests; each is recognised
--- by the output-field marker its guide carries in the system prompt (@[[ ## name ## ]]@).
-respondTo :: Context -> Text
-respondTo ctx
+-- | Decide the response body for a request, with a pluggable sentiment-answer rule.
+-- The grounded proposer (EP-19) issues several distinct sub-program requests; each is
+-- recognised by the output-field marker its guide carries in the system prompt
+-- (@[[ ## name ## ]]@). The @answerFn@ supplies the task-specific classification.
+respondWith :: (Context -> Text) -> Context -> Text
+respondWith answerFn ctx
   | sysMarker "programDescription" =
       markerBody [("programDescription", "This program classifies the sentiment of a sentence.")]
   | sysMarker "observations" =
@@ -201,9 +239,13 @@ respondTo ctx
       markerBody [("moduleDescription", "This module assigns a sentiment label to the input sentence.")]
   | sysMarker "proposedInstruction" =
       markerBody [("proposedInstruction", groundedInstruction ctx)]
-  | otherwise = markerBody [("sentiment", answerSentiment ctx)]
+  | otherwise = markerBody [("sentiment", answerFn ctx)]
   where
     sysMarker name = maybe False (T.isInfixOf ("## " <> name <> " ##")) (ctx ^. #systemPrompt)
+
+-- | The default sentiment task's response decision.
+respondTo :: Context -> Text
+respondTo = respondWith answerSentiment
 
 -- | The grounded proposer's instruction choice: the "magic" @RULE@-bearing
 -- instruction when the request carries the /creative/ tip (so exactly one candidate

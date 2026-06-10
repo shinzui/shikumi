@@ -10,6 +10,7 @@ import BootstrapSpec qualified
 import EnsembleSpec qualified
 import InstructionSpec qualified
 import LabeledFewShotSpec qualified
+import Miprov2Spec qualified
 import OptimizeSpec qualified
 import ProposeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
@@ -25,5 +26,6 @@ main =
         InstructionSpec.tests,
         EnsembleSpec.tests,
         ProposeSpec.tests,
+        Miprov2Spec.tests,
         AcceptanceSpec.tests
       ]

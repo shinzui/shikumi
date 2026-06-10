@@ -95,7 +95,7 @@ rejected: COPRO consumes the same proposer; defining it once as its own plan pre
 |---|-------|------|-----------|-----------|--------|
 | 18 | Reward-driven self-refinement modules | docs/plans/18-reward-driven-self-refinement-modules.md | EP-14 (MP-2) | None | Complete |
 | 19 | Grounded instruction proposer | docs/plans/19-grounded-instruction-proposer.md | None | EP-16 (MP-2) | Complete |
-| 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Not Started |
+| 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Complete |
 | 21 | COPRO instruction optimizer | docs/plans/21-copro-instruction-optimizer.md | EP-19 | None | Not Started |
 | 22 | GEPA reflective optimizer | docs/plans/22-gepa-reflective-optimizer.md | EP-16 (MP-2), EP-19 | EP-18 | Not Started |
 | 23 | KNN few-shot and bootstrap random search | docs/plans/23-knn-few-shot-and-bootstrap-random-search.md | EP-15 (MP-2) | None | Not Started |
@@ -190,8 +190,8 @@ inherits from MasterPlan 2. Each child plan embeds the exact current signatures 
 - [x] EP-18: Reward-driven retry demonstrably improves a deliberately-weak program's score (2026-06-09)
 - [x] EP-19: Grounded proposer — dataset/program/module summarizers as typed Programs (2026-06-09)
 - [x] EP-19: Per-node field-metadata accessor; proposer consumes real field names + tips + history (2026-06-09)
-- [ ] EP-20: MIPROv2 joint instruction×demo search with minibatch evaluation
-- [ ] EP-20: Held-out score lift over the V1 instruction search baseline on a fixture task
+- [x] EP-20: MIPROv2 joint instruction×demo search with minibatch evaluation (2026-06-09)
+- [x] EP-20: Held-out score lift over the V1 instruction search baseline on a fixture task (2026-06-09)
 - [ ] EP-21: COPRO coordinate-ascent instruction optimizer with breadth/depth control
 - [ ] EP-22: GEPA reflective evolution with per-node feedback and a Pareto frontier
 - [ ] EP-23: KNNFewShot (embedding-similarity demos) + BootstrapFewShotWithRandomSearch
@@ -337,6 +337,20 @@ they refine the integration contracts above.
   guards `calls + (4+n) <= maxLmCalls` before calling it (as the re-pointed `instructionSearch`
   does); (b) `renderProgramPseudo` and `datasetSummary` are exported for GEPA (EP-22) reflection
   context. The blind V1 `ProposeIn`/`ProposeOut`/`proposeInstruction` is removed.
+
+- **EP-20 landed (2026-06-09); two child-plan assumptions were corrected against the *delivered*
+  EP-19.** (a) EP-19's real proposer interface is `proposeInstructions :: (ToJSON i, ToJSON o, LLM,
+  Error) => Dataset i o -> ProposeRequest i o -> Eff es ProposeResult` (not the `ProposeSignals ->
+  Int -> Int` sketch in EP-20's draft), and EP-19 **removed** V1's `ProposeIn`/`ProposeOut`/
+  `proposeInstruction`. So EP-20 dropped its obsolete `useGroundedProposer` fallback flag (and the
+  deferred per-node `usePerNodeDemos` flag) and always uses the grounded proposer — **EP-21 (COPRO)
+  must do the same**: there is no V1 fallback proposer; call `proposeInstructions` with a
+  `ProposeRequest`. (b) The teacher-bootstrap circularity (a weak default teacher recovers no
+  demos) means an optimizer that needs demos should include **labelled training pairs** as demo
+  candidates (`recoverDemo input expected`), not only teacher-passing runs — EP-20's
+  `bootstrapDemoCandidates` does this and the pattern is reusable. The `searchJoint` greedy-
+  coordinate-descent-with-minibatch-screening surrogate and the joint-win `runJointStubLM` fixture
+  in `StubLM` are available as reference for EP-21/EP-22.
 
 ## Decision Log
 
