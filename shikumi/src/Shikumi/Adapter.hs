@@ -76,7 +76,7 @@ import GHC.Generics
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Multimodal (GImageFieldNames (..), GImageFields (..), Image, imageToContent)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModelChecked)
-import Shikumi.Schema.Types (FieldMeta (..))
+import Shikumi.Schema.Types (Constrained (..), FieldMeta (..))
 import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, outputFields)
 
 -- ---------------------------------------------------------------------------
@@ -143,6 +143,11 @@ instance (PromptValue a) => PromptValue [a] where
 
 instance (PromptValue a) => PromptValue (Maybe a) where
   promptValue = maybe "" promptValue
+
+-- | A 'Constrained' field renders as its inner value (the constraint is a
+-- compile-time/decode-time concern, not a prompt concern). EP-26.
+instance (PromptValue a) => PromptValue (Constrained cs a) where
+  promptValue = promptValue . unConstrained
 
 -- ---------------------------------------------------------------------------
 -- The seam

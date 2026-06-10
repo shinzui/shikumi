@@ -78,7 +78,7 @@ state of the work.
       `render` wraps demo outputs and asks for XML-tagged output, its `parse`
       reads `<field>…</field>` tags and decodes to the typed `o`. New
       `XmlAdapterSpec` proves a render→parse round-trip and a missing-tag error.
-- [ ] M2: Declarative field constraints exist. A `Constrained cs a` field wrapper
+- [x] M2: Declarative field constraints exist. A `Constrained cs a` field wrapper
       (or equivalently-named mechanism chosen below) carries type-level constraint
       descriptors; `ToSchema` emits the matching JSON-Schema keywords; a derived
       check enforces them after decode. New `ConstraintSpec` proves the schema
@@ -108,6 +108,30 @@ implementation. Provide concise evidence.
   [userTurn i]`), so an image-bearing input would lower through XML's render too;
   the all-text path is byte-identical to the marker fallback. Demo turns stay text
   (`user (toPrompt i)`), matching `demoMessages`.
+- **M2: `ReflectConstraints`' `constraintSchema` is ambiguous in `a` and needs
+  explicit type applications.** The method `constraintSchema :: Proxy cs -> Value
+  -> Value` does not mention the class's second parameter `a`, so a recursive
+  `constraintSchema (Proxy @cs)` leaves `a` ambiguous (GHC-39999) even when a
+  `ReflectConstraints cs Text` dictionary is in context — GHC will not guess
+  `a = Text`. Fixed by writing the recursion as `constraintSchema @cs @<a> Proxy`
+  (e.g. `@cs @Text` for the `Text` instances, `@cs @a` under an
+  `instance forall s cs a.` for the numeric ones) and likewise in the
+  `FieldSchema (Constrained cs a)` instance. No design change; the class stays a
+  single two-parameter `ReflectConstraints` as the plan specified.
+- **M2: `FromField (Constrained cs a)` needs no explicit instance.** The
+  overlappable `instance {-# OVERLAPPABLE #-} (FromModel t) => FromField t` already
+  covers it through the new `FromModel (Constrained cs a)` instance — a constrained
+  field is looked up as required and decoded-then-checked. (The plan's "mirror the
+  `Field` instance" suggestion was a fallback, not required; building confirmed the
+  overlappable path resolves cleanly with no overlap.) `FieldDoc (Constrained cs
+  a)` is likewise covered by the overlappable `FieldDoc a`.
+- **M2: numeric bounds carried as `Symbol` round-trip exactly through the error
+  message.** The `MinVal`/`MaxVal` validator reports the bound as the *literal
+  symbol text* (`T.pack (symbolVal (Proxy @s))`, e.g. `"100"`), not the parsed
+  `Scientific` (which would render `"100.0"`), so the message reads `score: maximum
+  100 violated`. The schema keyword, by contrast, uses the parsed `Scientific`
+  (`Number 100`), and `Scientific`'s normalized `Eq` makes `Number 100 == Number
+  100.0`, so the schema assertions are representation-independent.
 
 
 ## Decision Log

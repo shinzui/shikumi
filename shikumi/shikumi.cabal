@@ -76,6 +76,7 @@ test-suite shikumi-test
   other-modules:
     AdapterSpec
     CombinatorSpec
+    ConstraintSpec
     EndToEndSpec
     ErrorSpec
     Fixtures

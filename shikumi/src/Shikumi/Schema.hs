@@ -28,6 +28,9 @@ module Shikumi.Schema
     -- * Validation hook
     Validatable (..),
 
+    -- * Declarative field constraints (EP-26)
+    ReflectConstraints (..),
+
     -- * Field-metadata traversal (shared with "Shikumi.Signature")
     GFieldMetas (..),
     fieldMetasOf,
@@ -51,9 +54,10 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import GHC.Generics
-import GHC.TypeLits (KnownSymbol, symbolVal)
+import GHC.TypeLits (KnownNat, KnownSymbol, Symbol, natVal, symbolVal)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Schema.Types
+import Text.Read (readMaybe)
 
 -- ---------------------------------------------------------------------------
 -- Forward direction: ToSchema
@@ -134,6 +138,13 @@ instance (KnownSymbol d, FieldSchema a) => FieldSchema (Field d a) where
     let (s, req) = fieldSchema (Proxy @a)
      in (withDescription (T.pack (symbolVal (Proxy @d))) s, req)
 
+-- | A 'Constrained' field emits its constraints' JSON-Schema keywords onto the
+-- inner type's schema, preserving the inner required-ness (EP-26).
+instance forall cs a. (ReflectConstraints cs a, FieldSchema a) => FieldSchema (Constrained cs a) where
+  fieldSchema _ =
+    let (s, req) = fieldSchema (Proxy @a)
+     in (constraintSchema @cs @a Proxy s, req)
+
 -- | Constructor names of a sum of nullary constructors.
 class GEnumNames (f :: Type -> Type) where
   gEnumNames :: Proxy f -> [Text]
@@ -208,6 +219,18 @@ instance (FromModel a) => FromModel (Maybe a) where
 
 instance (FromModel a) => FromModel (Field d a) where
   fromModelP path v = Field <$> fromModelP path v
+
+-- | A 'Constrained' field decodes its inner value, then enforces the constraints
+-- (EP-26). A violation becomes a 'ValidationFailure' located at the field, so the
+-- check composes with any record-level 'Validatable' rule with no change to
+-- 'fromModelChecked'. (@FromField (Constrained cs a)@ is covered by the
+-- overlappable @FromField@ instance via this @FromModel@ instance.)
+instance (FromModel a, ReflectConstraints cs a) => FromModel (Constrained cs a) where
+  fromModelP path v = do
+    a <- fromModelP path v
+    case checkConstraints (Proxy @cs) a of
+      Right ok -> Right (Constrained ok)
+      Left msg -> Left (ValidationFailure (renderPath path <> ": " <> msg))
 
 -- | Generic decode walk, mirroring 'GToSchema'.
 class GFromModel (f :: Type -> Type) where
@@ -292,6 +315,87 @@ class Validatable a where
 
 -- | Default "always valid" for any type without an explicit rule.
 instance {-# OVERLAPPABLE #-} Validatable a
+
+-- ---------------------------------------------------------------------------
+-- Declarative field constraints (EP-26)
+-- ---------------------------------------------------------------------------
+
+-- | Reflect a type-level constraint list (the @cs@ of a
+-- 'Shikumi.Schema.Types.Constrained') to (a) a schema-decorating function that
+-- inserts the matching JSON-Schema keywords and (b) a runtime validator over the
+-- decoded leaf value. The vocabulary is a small, closed set
+-- ('Shikumi.Schema.Types.Constraint'); instances cover the five constructors over
+-- 'Text' and the numeric leaves.
+class ReflectConstraints (cs :: [Constraint]) a where
+  -- | Compose all keyword inserts onto the inner type's schema.
+  constraintSchema :: Proxy cs -> Value -> Value
+
+  -- | Check the decoded value against every constraint; 'Left' names the first
+  -- rule that failed.
+  checkConstraints :: Proxy cs -> a -> Either Text a
+
+instance ReflectConstraints '[] a where
+  constraintSchema _ = id
+  checkConstraints _ = Right
+
+instance (KnownNat n, ReflectConstraints cs Text) => ReflectConstraints ('MinLen n ': cs) Text where
+  constraintSchema _ = constraintSchema @cs @Text Proxy . withMinLength (fromIntegral (natVal (Proxy @n)))
+  checkConstraints _ t
+    | T.length t < fromIntegral (natVal (Proxy @n)) = Left ("minLength " <> tshow (natVal (Proxy @n)) <> " violated")
+    | otherwise = checkConstraints (Proxy @cs) t
+
+instance (KnownNat n, ReflectConstraints cs Text) => ReflectConstraints ('MaxLen n ': cs) Text where
+  constraintSchema _ = constraintSchema @cs @Text Proxy . withMaxLength (fromIntegral (natVal (Proxy @n)))
+  checkConstraints _ t
+    | T.length t > fromIntegral (natVal (Proxy @n)) = Left ("maxLength " <> tshow (natVal (Proxy @n)) <> " violated")
+    | otherwise = checkConstraints (Proxy @cs) t
+
+instance forall s cs a. (KnownSymbol s, ToScientificLeaf a, ReflectConstraints cs a) => ReflectConstraints ('MinVal s ': cs) a where
+  constraintSchema _ = constraintSchema @cs @a Proxy . withMinimum (parseBound (Proxy @s))
+  checkConstraints _ x
+    | toScientificLeaf x < parseBound (Proxy @s) = Left ("minimum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
+    | otherwise = checkConstraints (Proxy @cs) x
+
+instance forall s cs a. (KnownSymbol s, ToScientificLeaf a, ReflectConstraints cs a) => ReflectConstraints ('MaxVal s ': cs) a where
+  constraintSchema _ = constraintSchema @cs @a Proxy . withMaximum (parseBound (Proxy @s))
+  checkConstraints _ x
+    | toScientificLeaf x > parseBound (Proxy @s) = Left ("maximum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
+    | otherwise = checkConstraints (Proxy @cs) x
+
+instance (KnownSymbols ss, ReflectConstraints cs Text) => ReflectConstraints ('EnumOneOf ss ': cs) Text where
+  constraintSchema _ = constraintSchema @cs @Text Proxy . withEnum (symbolTexts (Proxy @ss))
+  checkConstraints _ t
+    | t `elem` symbolTexts (Proxy @ss) = checkConstraints (Proxy @cs) t
+    | otherwise = Left ("enum membership violated (allowed: " <> T.intercalate ", " (symbolTexts (Proxy @ss)) <> ")")
+
+-- | A leaf type comparable against a 'Sci.Scientific' bound. Closed to the numeric
+-- leaves shikumi decodes.
+class ToScientificLeaf a where
+  toScientificLeaf :: a -> Sci.Scientific
+
+instance ToScientificLeaf Int where toScientificLeaf = fromIntegral
+
+instance ToScientificLeaf Integer where toScientificLeaf = fromIntegral
+
+instance ToScientificLeaf Double where toScientificLeaf = Sci.fromFloatDigits
+
+-- | Reflect a type-level list of 'Symbol's to their 'Text's (for @EnumOneOf@).
+class KnownSymbols (ss :: [Symbol]) where
+  symbolTexts :: Proxy ss -> [Text]
+
+instance KnownSymbols '[] where symbolTexts _ = []
+
+instance (KnownSymbol s, KnownSymbols ss) => KnownSymbols (s ': ss) where
+  symbolTexts _ = T.pack (symbolVal (Proxy @s)) : symbolTexts (Proxy @ss)
+
+-- | Parse a numeric-bound 'Symbol' (e.g. @"100"@, @"-3.5"@) to a 'Sci.Scientific'.
+parseBound :: forall s. (KnownSymbol s) => Proxy s -> Sci.Scientific
+parseBound _ = case readMaybe (symbolVal (Proxy @s)) of
+  Just v -> v
+  Nothing -> error ("Shikumi.Schema: invalid numeric bound symbol " <> symbolVal (Proxy @s))
+
+tshow :: (Show a) => a -> Text
+tshow = T.pack . show
 
 -- ---------------------------------------------------------------------------
 -- Shared field-metadata traversal (also used by Shikumi.Signature)

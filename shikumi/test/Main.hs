@@ -4,6 +4,7 @@ module Main (main) where
 
 import AdapterSpec qualified
 import CombinatorSpec qualified
+import ConstraintSpec qualified
 import EndToEndSpec qualified
 import ErrorSpec qualified
 import LLMSpec qualified
@@ -47,6 +48,7 @@ main =
         MultimodalAdapterSpec.tests,
         MultimodalEndToEndSpec.tests,
         XmlAdapterSpec.tests,
+        ConstraintSpec.tests,
         Shikumi.Effect.TimeSpec.tests,
         LiveSpec.tests
       ]
