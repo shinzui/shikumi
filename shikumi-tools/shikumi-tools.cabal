@@ -42,6 +42,10 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Agent.ReAct
+    Shikumi.CodeExec.CodeAct
+    Shikumi.CodeExec.Interpreter
+    Shikumi.CodeExec.ProgramOfThought
+    Shikumi.CodeExec.Prompt
     Shikumi.Tool
 
   build-depends:
@@ -65,10 +69,13 @@ test-suite shikumi-tools-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     AcceptanceSpec
+    CodeActSpec
     Fixtures
     MockLLM
+    ProgramOfThoughtSpec
     ProtocolSpec
     ReActSpec
+    RestrictedSpec
     SchemaSpec
     ToolSpec
 

@@ -3,8 +3,11 @@
 module Main (main) where
 
 import AcceptanceSpec qualified
+import CodeActSpec qualified
+import ProgramOfThoughtSpec qualified
 import ProtocolSpec qualified
 import ReActSpec qualified
+import RestrictedSpec qualified
 import SchemaSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import ToolSpec qualified
@@ -18,5 +21,8 @@ main =
         ToolSpec.tests,
         ReActSpec.tests,
         ProtocolSpec.tests,
-        AcceptanceSpec.tests
+        AcceptanceSpec.tests,
+        RestrictedSpec.tests,
+        ProgramOfThoughtSpec.tests,
+        CodeActSpec.tests
       ]

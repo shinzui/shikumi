@@ -65,14 +65,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `CodeInterpreter` value type + hermetic restricted interpreter (`restrictedInterpreter`) + stub interpreters (`echoInterpreter`, `scriptedInterpreter`); security write-up in module Haddock and this plan.
-- [ ] M1: `shikumi-tools` cabal updated; module `Shikumi.CodeExec.Interpreter` compiles; unit tests for the restricted evaluator pass under `cabal test shikumi-tools`.
-- [ ] M2: `programOfThought` / `programOfThoughtWith` as an `Embed` node (predict code → run via the captured interpreter → on error feed back up to `maxIters` → extract typed answer). Module `Shikumi.CodeExec.ProgramOfThought`.
-- [ ] M2: Acceptance test — `programOfThought` solves a fixture task a plain `predict` fails, asserting the emitted code ran and the typed answer is correct; plus an error-then-fix scripted test.
-- [ ] M3: `codeAct` / `codeActWithTrajectory` as an `Embed` node combining code + tool calls, reusing the ReAct trajectory data model. Module `Shikumi.CodeExec.CodeAct`.
-- [ ] M3: Acceptance test — a scripted `codeAct` run calls a provided tool from within a code snippet, accumulates a trajectory, and extracts the typed answer.
-- [ ] M4 (gated, non-CI): real subprocess interpreter (`subprocessInterpreter`) behind an `IOE`-bearing entry point; documented security posture; not exercised on CI.
-- [ ] Confirm parameter-count invariant: each new node is an `Embed`, carries no `Params`; `foldParams`/`programShape`/`setProgramParams`/`encodeCompiled` pass it through unchanged (a test asserts `foldParams (programOfThought sig) == []`).
+- [x] M1: `CodeInterpreter` value type + hermetic restricted interpreter (`restrictedInterpreter`) + `echoInterpreter`; security write-up in module Haddock and this plan. (`scriptedInterpreter` deliberately dropped — see Decision Log: a stateful interpreter in the pure `Embed` row would need `unsafePerformIO`; the hermetic `restrictedInterpreter` already produces real error-then-success behavior, so it is unnecessary.)
+- [x] M1: `shikumi-tools` cabal updated; module `Shikumi.CodeExec.Interpreter` compiles; `RestrictedSpec` (10 cases) for the restricted evaluator passes under `cabal test shikumi-tools`.
+- [x] M2: `programOfThought` / `programOfThoughtWith` as an `Embed` node (predict code → run via the captured interpreter → on error feed back up to `maxIters` → extract typed answer). Module `Shikumi.CodeExec.ProgramOfThought`.
+- [x] M2: Acceptance test (`ProgramOfThoughtSpec`) — `programOfThought` solves a fixture task end-to-end; the sandbox is proven load-bearing (an always-fail interpreter makes it give up, and an error-then-fix run only succeeds because the interpreter really rejected `1 / 0`); plus a plain-`predict` wrong-guess baseline.
+- [x] M3: `codeAct` / `codeActWithTrajectory` as an `Embed` node combining code + tool calls, reusing the ReAct trajectory data model. Module `Shikumi.CodeExec.CodeAct`.
+- [x] M3: Acceptance test (`CodeActSpec`) — a scripted `codeAct` run calls a provided tool (`addOne`) from within a `call("addOne", …)` snippet, accumulates a two-step `Trajectory`, finishes, and extracts the typed answer.
+- [ ] M4 (gated, non-CI): real subprocess interpreter (`subprocessInterpreter`) behind an `IOE`-bearing entry point. **Not implemented** — explicitly optional even within this optional plan; the parity behavior in the Purpose ships on M1–M3 under the hermetic interpreter. (Deferred; not part of the accept gate.)
+- [x] Confirm parameter-count invariant: each new node is an `Embed` (`codeAct` is `FMap fst (Embed …)`), carries no `Params`; `ProgramOfThoughtSpec` asserts `null (foldParams (programOfThought sig))`. No optimizer/compiler/serialization code changed.
 
 
 ## Surprises & Discoveries
@@ -80,7 +80,33 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **A stateful `scriptedInterpreter`/recording interpreter cannot be written without
+  `unsafePerformIO`, so it was dropped.** `CodeInterpreter.runCode` is rank-2 over
+  the exact `Embed` row `(LLM, Error ShikumiError)` — no `IOE`. Reading/popping an
+  `IORef` inside `runCode` is therefore impossible by the type, and the only escape
+  (`unsafePerformIO` on a non-input-dependent pop) is unsafe under GHC's float/CSE.
+  The hermetic `restrictedInterpreter` is /pure/ and already produces real
+  error-then-success behavior (`1 / 0` → `Left "division by zero"`, then `6` →
+  `Right "6"`), so loop-shape tests use it directly. To prove the interpreter is
+  *load-bearing* without recording, the spec uses a pure always-fail interpreter
+  (`CodeInterpreter (\_ -> pure (Left …))`): with it the program gives up
+  (`ProviderFailure`), with the restricted one the same code succeeds — bracketing
+  the interpreter's verdict as the deciding factor. This is a cleaner proof than
+  input-recording and needs no unsafe code.
+- **The plan's worked example was internally inconsistent (`37 * 19 + 6 = 703`).**
+  `37 * 19` is already `703`, so `37 * 19 + 6 = 709`. The restricted evaluator
+  correctly returns `709`; the fixtures were corrected from the plan's stated `703`
+  to the true `709`. (Evidence: `RestrictedSpec` `37 * 19 + 6 evaluates to 709: OK`.)
+- **`responseText` is reused from `Shikumi.Adapter`, not re-copied from ReAct.** EP-26
+  exported `Shikumi.Adapter.responseText`; the code-execution modules import it
+  rather than duplicating ReAct's private copy. Only `stripFences` and the one-turn
+  context/encode helpers were factored into the new `Shikumi.CodeExec.Prompt`.
+- **`codeAct`'s tool dispatch uses a `call("name", args)` protocol convention, parsed
+  by wrapping the inner text in `[...]` and JSON-decoding to `[String name, args]`.**
+  This keeps the hermetic pure DSL free of any foreign-function interface while still
+  routing tool use through the typed `runToolCall`; a snippet that is not a `call(…)`
+  is handed to the sandbox. (Evidence: `CodeActSpec` step 1 observation is the
+  `addOne` result `"42"`, step 2 runs `result = 42` in the sandbox.)
 
 
 ## Decision Log
@@ -115,13 +141,73 @@ Record every decision made while working on the plan.
   acceptance must run offline. A swappable `CodeInterpreter` value gives us both with one type.
   Date: 2026-06-09.
 
+- Decision: Drop `scriptedInterpreter`/recording interpreters from the shipped surface; keep
+  only the /pure/ `restrictedInterpreter` and `echoInterpreter`, and prove the interpreter is
+  load-bearing with a pure always-fail interpreter contrast plus the real error-then-fix path.
+  Rationale: `CodeInterpreter.runCode` is rank-2 over `(LLM, Error ShikumiError)` (no `IOE`),
+  so any state (popping a script, recording inputs) inside `runCode` would require
+  `unsafePerformIO`, which is unsafe under GHC float/CSE for a non-input-dependent effect. The
+  hermetic `restrictedInterpreter` already exhibits real error-then-success behavior, so the
+  loop-shape and load-bearing tests need no scripted/recording interpreter. This deviates from
+  the plan's listed `scriptedInterpreter` API but removes an unsafe construct; the acceptance
+  facts are all still demonstrated.
+  Date: 2026-06-09.
+
+- Decision: Do not implement M4 (the real subprocess interpreter) in this pass.
+  Rationale: M4 is explicitly optional even within this optional plan, is non-hermetic and
+  excluded from CI, and carries the real RCE security surface. All user-visible parity behavior
+  in the Purpose ships under the hermetic interpreter (M1–M3). M4 remains specified (Plan of
+  Work + SECURITY POSTURE) for a future, deliberately-gated pass.
+  Date: 2026-06-09.
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** M1–M3 complete; M4 deferred by design. `cabal test
+shikumi-tools` green (29 tests, +13: 10 `RestrictedSpec`, 5 `ProgramOfThoughtSpec`,
+1 `CodeActSpec` — note the spec counts differ slightly from the illustrative
+transcript) and `cabal test all` green. Against the Purpose:
+
+- **`programOfThought sig`** is an ordinary `Program i o` (a single `Embed` node)
+  that asks the model for code, runs it in a sandbox, feeds errors back up to
+  `maxIters`, and extracts the typed answer. `codeAct sig reg` is a `Program i o`
+  (`FMap fst (Embed …)`) whose each action is a code snippet that may call provided
+  tools via a `call("name", args)` convention, accumulating a reused
+  `Shikumi.Agent.ReAct.Trajectory`.
+- **The sandbox is a swappable value, hermetic by default.** `CodeInterpreter` is a
+  rank-2 value captured in the `Embed` closure (never an effect-row member, since the
+  `Embed` body is fixed to `(LLM, Error ShikumiError)`), exactly as `react` captures
+  its `ToolRegistry`. `restrictedInterpreter` evaluates a tiny arithmetic/string/list
+  DSL purely — no syscalls, no network, no filesystem, a step cap — so the whole
+  acceptance runs offline with no external interpreter.
+- **The code path is proven load-bearing, not incidental.** Beyond the end-to-end
+  solve, an always-fail interpreter makes `programOfThought` give up (the loop
+  consults the interpreter's verdict), and an error-then-fix run reaches the answer
+  only because the interpreter really rejected `1 / 0` and accepted the correction.
+- **The parameter-count invariant holds with zero compiler/optimizer changes.**
+  `foldParams (programOfThought sig) == []` is asserted; `Embed`/`FMap` carry no
+  `Params`, so `programShape`/`setProgramParams`/`encodeCompiled` pass these nodes
+  through unchanged, exactly as for `react`.
+
+**Gaps / deferred:**
+
+- **M4 (real subprocess interpreter) is not implemented** — optional and off-CI by
+  design; the SECURITY POSTURE and milestone spec remain for a future gated pass.
+- The hermetic DSL is deliberately tiny (arithmetic, strings, small list ops); it is
+  enough to *demonstrate the loop* (the plan's stated goal), not to run arbitrary
+  computation. A real subprocess interpreter (M4) would lift that ceiling.
+- `scriptedInterpreter` was dropped (would need `unsafePerformIO` in the pure `Embed`
+  row); see Decision Log.
+
+**Lessons.** The rank-2 `(LLM, Error)` row that makes `Embed` composable is exactly
+what forbids stateful/IO interpreters inside it — the pure-value sandbox design
+follows directly, and proving "the code ran" is cleanest via control-flow contrast
+(always-fail vs. real) rather than recording. The plan's worked arithmetic example
+was internally inconsistent (`37*19+6` is `709`, not `703`); the fixtures use the
+true value.
 
 
 ## Context and Orientation

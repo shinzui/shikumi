@@ -98,7 +98,7 @@ because it is real DSPy surface, but ordered and scoped so it never blocks the p
 | 24 | Multimodal field types | docs/plans/24-multimodal-field-types.md | None | None | Complete |
 | 25 | Program-level streaming and status messages | docs/plans/25-program-level-streaming-and-status-messages.md | None | EP-14 (MP-2) | Complete |
 | 26 | Adapter completeness and declarative field constraints | docs/plans/26-adapter-completeness-and-declarative-field-constraints.md | None | EP-24 | Complete |
-| 27 | Code-execution modules ProgramOfThought and CodeAct | docs/plans/27-code-execution-modules-programofthought-and-codeact.md | None | None | Not Started |
+| 27 | Code-execution modules ProgramOfThought and CodeAct | docs/plans/27-code-execution-modules-programofthought-and-codeact.md | None | None | Complete (M4 deferred) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference rows by their # prefix. `EP-14` lives in MasterPlan 2
@@ -177,7 +177,7 @@ current signatures it builds on (from the integration dossier) so it stands alon
 - [x] EP-25: Status messages (LM start/end, tool start/end) surfaced to the caller
 - [x] EP-26: `XMLAdapter` and `TwoStepAdapter` selectable alongside native/fallback
 - [x] EP-26: Declarative field constraints flow into JSON schema and `Validatable`
-- [ ] EP-27: `programOfThought`/`codeAct` run model-emitted code in a sandbox and feed results back
+- [x] EP-27: `programOfThought`/`codeAct` run model-emitted code in a sandbox and feed results back (M1–M3 under the hermetic restricted interpreter; the real subprocess interpreter M4 is deferred — optional, off-CI)
 
 
 ## Surprises & Discoveries
@@ -243,6 +243,19 @@ they refine the integration contracts above.
   field chunking is explicitly *not* promised. Aggregating combinators stream status, not field
   chunks. `runProgram`'s blocking contract is untouched; `streamProgram` is a separate additive
   entry point.
+- **EP-27 delivered: the `Embed`-row constraint shaped the sandbox design exactly as predicted,
+  and M4 was deferred.** (Discovered during EP-27 implementation, 2026-06-09.) `CodeInterpreter`
+  is a rank-2 value captured in the `Embed` closure (the `(LLM, Error ShikumiError)` row admits
+  no `IOE` and no new effect), so `programOfThought` and `codeAct` are plain `Embed`/`FMap`
+  programs with no `Params` — `foldParams` is `[]` and the serializers pass them through
+  unchanged (no compiler/optimizer edits). Two consequences for the design as built: (a) a
+  /stateful/ interpreter (scripted/recording) cannot live in that pure row without
+  `unsafePerformIO`, so it was dropped and the sandbox is proven load-bearing by a pure
+  always-fail-vs-real contrast instead; (b) the real subprocess interpreter needs `IOE` and so is
+  out of the composable path entirely — **M4 is deferred** (optional, off-CI). The parity
+  behavior (model writes code → sandbox runs it → result feeds back) ships under the hermetic
+  restricted DSL. `responseText`, exported from `Shikumi.Adapter` by EP-26, was reused here rather
+  than re-copied — a small cross-plan reuse win.
 
 
 ## Decision Log
@@ -272,4 +285,55 @@ they refine the integration contracts above.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Status (2026-06-09): all four child ExecPlans delivered.** EP-24, EP-25, EP-26
+complete; EP-27 complete for its hermetic M1–M3 with the gated subprocess interpreter
+(M4) deferred as the explicitly-optional, off-CI stretch. The full workspace is green
+(`cabal test all`): `shikumi-test` 117, `shikumi-tools-test` 29, all sibling suites
+passing, no regressions in any pre-existing spec.
+
+**The I/O surface reached parity, expressed through Shikumi's typed signatures:**
+
+- **Multimodal (EP-24).** An input signature field can be an `Image` that lowers to
+  baikai's `UserImage`/`ImageContent` so the model actually sees the image; the
+  all-text path is byte-for-byte unchanged. Image discovery rides on the existing
+  `ToPrompt` class (the standalone-`ImageFields`-class design proved unbuildable —
+  see Surprises), so it added no new constraint and no fixture churn.
+- **Streaming (EP-25).** A new additive `streamProgram` surfaces baikai `StreamEach`
+  events as field chunks + status messages through a per-event callback, while still
+  returning a value equal to `runProgram`'s. `runProgram`'s blocking contract is
+  untouched (integration point #4). Field chunks are honestly scoped to the
+  fallback/raw-text single-`Predict` path; aggregating combinators stream status only.
+- **Adapters + constraints (EP-26).** `xmlAdapter` is a third opt-in wire format on
+  the same typed seam; `twoStep` is a two-call (free-form → extraction) `Program`
+  combinator built on `Embed` (the `Adapter.parse` is pure and structurally cannot
+  issue the second call). Declarative `Constrained '[…]` field constraints flow into
+  both the JSON schema (`minLength`/`maximum`/`enum`/…) and the post-decode validator
+  from one type-level declaration. `responseText` was exported here and reused by EP-27.
+- **Code execution (EP-27).** `programOfThought` and `codeAct` make the model write
+  code that runs in a swappable, hermetic sandbox and feeds the result back — both
+  `Embed`-based programs carrying no `Params`. The sandbox-as-value design is forced
+  by, and consistent with, the `Embed` row constraint (integration point #5).
+
+**Cross-plan integration held.** The two plans sharing the schema/adapter seam (EP-24,
+EP-26) composed on disjoint instance heads with the existing text path intact, exactly
+as the decomposition intended; the `ToPrompt`-carries-two-extra-methods note from EP-24
+caused zero friction for EP-26 (its only new `ToPrompt` instance, `ExtractIn`, is a
+plain `Generic` newtype). The one MP-2 soft dependency (EP-25 ↔ routing) was satisfied
+hermetically with a stub event source; the live-against-a-real-model demo remains a
+clearly network-gated future extension.
+
+**Deferred / future work.** EP-27 M4 (real `deno`/`python3` subprocess interpreter
+behind an `IOE` entry point, with the documented security boundary) is the one
+substantive deferral — optional, off-CI, and specified for a future gated pass. EP-25's
+optional live-streaming spec (soft-dep on MP-2 EP-14) is likewise future, network-gated
+work. Neither blocks any delivered behavior.
+
+**Lessons.** GHC's instance-resolution and the `Embed`/`(LLM, Error)` row shaped more
+than one design: the multimodal `ImageFields` blanket was unbuildable (given-resolution
+poisoning), `ReflectConstraints`' value-parameter-free method needed explicit type
+applications, and the pure `Embed` row forbids stateful sandboxes — each resolved by
+working *with* the type system (methods on an existing class; `@cs @a` applications;
+sandbox-as-pure-value) rather than against it. Honest scoping (field chunks where
+chunking is real; `twoStep` as a combinator not an `Adapter`; the hermetic DSL as a
+loop demonstrator; M4 deferred) kept every shipped claim backed by a passing hermetic
+test.
