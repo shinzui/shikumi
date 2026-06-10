@@ -309,6 +309,11 @@ instance (ToPrompt i, ToPrompt o) => ToPrompt (MultiChainInput i o) where
     where
       renderAttempt a = "I tried to " <> reasoning a <> "; my answer is " <> toPrompt (value a)
 
+  -- Fields are polymorphic in @i@/@o@, so the generic image walk cannot resolve; a
+  -- synthesis input is text-only and carries no image fields.
+  imageFields _ = []
+  imageFieldNames _ = []
+
 -- | A 'MultiChainInput' is only ever an /input/ to the synthesis 'predict' node,
 -- so this decoder exists to satisfy the 'Shikumi.Program.Predict' constraint (used
 -- when decoding demos, of which the synthesis node has none).

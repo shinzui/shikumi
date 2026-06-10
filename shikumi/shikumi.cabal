@@ -82,6 +82,7 @@ test-suite shikumi-test
     LiveSpec
     LLMSpec
     ModuleSpec
+    MultimodalAdapterSpec
     MultimodalSpec
     ProgramAcceptanceSpec
     ProgramFixtures

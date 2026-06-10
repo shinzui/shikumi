@@ -55,6 +55,7 @@ import Baikai
     assistant,
     flattenAssistantBlocks,
     user,
+    userImage,
     _Context,
     _Options,
   )
@@ -72,6 +73,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Vector qualified as V
 import GHC.Generics
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Multimodal (GImageFieldNames (..), GImageFields (..), Image, imageToContent)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModelChecked)
 import Shikumi.Schema.Types (FieldMeta (..))
 import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, outputFields)
@@ -89,6 +91,24 @@ class ToPrompt a where
 
   toPrompt :: a -> Text
   toPrompt = T.intercalate "\n" . map (\(k, v) -> k <> ": " <> v) . toPromptFields
+
+  -- | The 'Image' values an /input/ record carries, in field order (EP-24). The
+  -- adapter lowers these to baikai @UserImage@ blocks in 'userTurn'. The generic
+  -- default walks the record, so any 'Generic' input gets it for free; a record
+  -- with no image field yields @[]@ and renders byte-for-byte as before. A
+  -- hand-written instance whose fields are polymorphic (e.g.
+  -- "Shikumi.Module".@WithReasoning@) cannot be walked generically and overrides
+  -- this to @[]@.
+  imageFields :: a -> [Image]
+  default imageFields :: (Generic a, GImageFields (Rep a)) => a -> [Image]
+  imageFields = gImageFields . from
+
+  -- | The names of an input record's image fields, in field order (EP-24). The
+  -- text renderer in 'userTurn' drops these so an image is not also rendered as
+  -- prose. Same defaulting story as 'imageFields'.
+  imageFieldNames :: a -> [Text]
+  default imageFieldNames :: (Generic a, GImageFieldNames (Rep a)) => a -> [Text]
+  imageFieldNames = gImageFieldNames . from
 
 class GToPromptFields (f :: Type -> Type) where
   gToPromptFields :: f p -> [(Text, Text)]
@@ -198,7 +218,7 @@ nativeAdapter =
   Adapter
     { render = \sig i ->
         let sys = systemHeader sig <> nativeOutputGuide sig
-            ctx = buildContext sys (demoMessages sig ++ [user (toPrompt i)])
+            ctx = buildContext sys (demoMessages sig ++ [userTurn i])
             opts = attachSchema (deriveSchema @o) _Options
          in (ctx, opts),
       parse = \_sig resp -> assistantJSON resp >>= fromModelChecked
@@ -214,7 +234,7 @@ fallbackAdapter =
   Adapter
     { render = \sig i ->
         let sys = systemHeader sig <> fallbackOutputGuide sig
-            ctx = buildContext sys (demoMessages sig ++ [user (toPrompt i)])
+            ctx = buildContext sys (demoMessages sig ++ [userTurn i])
          in (ctx, _Options),
       parse = \_sig resp ->
         let sections = parseMarkers (responseText resp)
@@ -229,6 +249,25 @@ fallbackAdapter =
 buildContext :: Text -> [Message] -> Context
 buildContext sys msgs =
   _Context & #systemPrompt .~ Just sys & #messages .~ V.fromList msgs
+
+-- | Build the final user turn for an input. If the input has an image field, it is
+-- lowered to a baikai 'userImage' block, with the remaining (text) fields rendered
+-- as a leading text block and the image field name dropped from that text. With no
+-- image field this is exactly @user (toPrompt i)@, so the all-text path is
+-- byte-for-byte unchanged (the EP-26 coexistence + regression invariant).
+--
+-- Only the /first/ image is attached: baikai's 'userImage' carries one image block,
+-- and the headline use case is one image per input. A multi-image input is future
+-- work (it would assemble the @UserPayload@ content vector by hand).
+userTurn :: forall i. (ToPrompt i) => i -> Message
+userTurn i = case imageFields i of
+  [] -> user (toPrompt i)
+  (img : _) ->
+    let dropped = imageFieldNames i
+        textBody =
+          T.intercalate "\n" [k <> ": " <> v | (k, v) <- toPromptFields i, k `notElem` dropped]
+        prefix = if T.null textBody then Nothing else Just textBody
+     in userImage (imageToContent img) prefix
 
 systemHeader :: Signature i o -> Text
 systemHeader sig = getInstruction sig <> "\n\n"

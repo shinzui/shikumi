@@ -91,6 +91,11 @@ instance (FromModel o) => FromModel (WithReasoning o) where
 instance (ToPrompt o) => ToPrompt (WithReasoning o) where
   toPromptFields wr = ("reasoning", reasoning wr) : toPromptFields (value wr)
 
+  -- @value@ is polymorphic in @o@, so the generic image walk cannot resolve; a
+  -- 'WithReasoning' is a text-only output wrapper and carries no image fields.
+  imageFields _ = []
+  imageFieldNames _ = []
+
 -- | Look up a required field in a JSON object, locating a miss precisely.
 getField :: (FromModel a) => FieldPath -> Text -> Object -> Either ShikumiError a
 getField path nm o = case KM.lookup (Key.fromText nm) o of

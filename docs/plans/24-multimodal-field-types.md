@@ -82,10 +82,13 @@ This section must always reflect the actual current state of the work.
 - [x] M1: `Image` type with `imageFromFile`/`imageFromBase64`/`imageFromBytes` constructors and
       `imageToContent`; hermetic round-trip test (file/base64 -> `ImageContent` bytes + MIME).
       Done: `Shikumi.Multimodal` created; `MultimodalSpec` passes (2/2).
-- [ ] M2: Generic derivations (`ToSchema`, `ToPrompt`, plus a new `ImageFields` collector)
-      treat an image field as input-only metadata; `render` lowers an image-bearing input to a
-      `Context` containing a `UserImage` block alongside the text fields; assertion test on the
-      built `Context`.
+- [x] M2: Generic derivations treat an image field as input-only metadata; `render` lowers an
+      image-bearing input to a `Context` containing a `UserImage` block alongside the text fields;
+      assertion test on the built `Context`. Done: image collection folded into `ToPrompt`
+      (`imageFields`/`imageFieldNames` methods with generic defaults, backed by `GImageFields`/
+      `GImageFieldNames` in `Shikumi.Multimodal`); `userTurn` in `Shikumi.Adapter` lowers the first
+      image to `userImage`; `MultimodalAdapterSpec` passes (3/3). Whole workspace (`cabal build all`)
+      builds with **zero** fixture changes.
 - [ ] M3: End-to-end stub test — `Describe { image, question } -> Answer { ... }` runs under a
       stub LM that captures and asserts the image block, then decodes the structured `Answer`;
       regression test that the all-text path's `Context` is unchanged.
@@ -104,6 +107,24 @@ implementation. Provide concise evidence.
   Using them keeps `MultimodalSpec` hermetic with no new third-party test dependency. Evidence:
   `MultimodalSpec` passes 2/2 with only `bytestring`/`base64-bytestring`/`directory` added to the
   test suite's `build-depends`.
+- **M2: image collection lives on `ToPrompt`, not a separate `ImageFields` class (revises the
+  Decision Log entry below).** The plan sketched a standalone `ImageFields` class with generic
+  defaults plus a blanket `OVERLAPPABLE` instance so `Generic` input fixtures got it free. Two hard
+  facts killed that: (1) an `OVERLAPPABLE` blanket *poisons given-resolution* — inside `runPredict`
+  the given `ImageFields i` is not used to discharge `adapterFor`'s wanted `ImageFields i`; GHC
+  reaches for the blanket and demands `Generic i` (GHC-39999). (2) Polymorphic-field records that
+  must be Predict inputs — `Shikumi.Refine.MultiChainInput i o`, `Shikumi.Module.WithReasoning o` —
+  cannot be walked generically at all (`ImageLeaf i` is unresolvable for a skolem because `i` might
+  be `Image`), so they need a manual instance, which *requires* the blanket to be overlappable,
+  which re-triggers (1). The fix: fold `imageFields`/`imageFieldNames` into the existing `ToPrompt`
+  class as methods with generic defaults. Because `ToPrompt i` is *already* the constraint threaded
+  through `predict`/`Predict`/`adapterFor`, **no new constraint is added anywhere**, and every
+  existing `ToPrompt` instance (empty, derived-anyclass, or hand-written on a concrete type) gets the
+  generic default for free. The only hand edits are `imageFields _ = []; imageFieldNames _ = []` on
+  the two polymorphic-field instances (`WithReasoning`, `MultiChainInput`). Evidence: `cabal build
+  all` is green with zero downstream package edits. The text path stays provably untouched (the
+  regression invariant): `userTurn` still falls back to `user (toPrompt i)` whenever `imageFields i`
+  is `[]`, which it is for every image-free record.
 - **M1: `imageToContent` is a plain record build, not a generic-lens update.** Since
   `ImageContent(..)` is exported from `Baikai` and both `Image` and `ImageContent` store decoded
   bytes, `ImageContent {imageData = …, mimeType = …}` is clearer than the `_ImageContent & #… .~ …`
@@ -132,6 +153,21 @@ Record every decision made while working on the plan.
   overloading them, so the all-text path is provably untouched.
   Rationale: minimises blast radius and lets the regression test assert byte-for-byte identical
   output for image-free inputs.
+  Date: 2026-06-09.
+- Decision (SUPERSEDES the entry above, made during M2 implementation): the image collection is
+  exposed as two methods on the existing `ToPrompt` class (`imageFields`, `imageFieldNames`) with
+  generic defaults, *not* a separate constraint-bearing class. The generic machinery
+  (`GImageFields`/`GImageFieldNames`/`ImageLeaf`) still lives in `Shikumi.Multimodal`; only the
+  class methods moved onto `ToPrompt`.
+  Rationale: a separate `ImageFields` constraint forced a blanket `OVERLAPPABLE` instance to avoid
+  per-fixture churn, but that instance poisons given-resolution (GHC-39999: `runPredict`'s given
+  `ImageFields i` is not used to discharge `adapterFor`'s wanted one, demanding `Generic i`), and
+  polymorphic-field Predict inputs (`MultiChainInput`, `WithReasoning`) cannot be walked generically
+  so they need a manual instance that *requires* the poisoning overlap. Folding into `ToPrompt`
+  reuses the `ToPrompt i` constraint already threaded everywhere — zero new constraints, zero
+  fixture churn (`cabal build all` green untouched) — while preserving the all-text regression
+  invariant (`userTurn` falls back to `user (toPrompt i)` when `imageFields i == []`). See the M2
+  Surprises entry for the full evidence.
   Date: 2026-06-09.
 - Decision: Coordinate with EP-26 (`docs/plans/26-adapter-completeness-and-declarative-field-constraints.md`)
   on the shared schema/adapter seam (MasterPlan Integration Point #1): EP-24 owns the
