@@ -328,6 +328,29 @@ via `runLLMReplay` (fail-closed: an unrecorded request is an error, never a netw
 and the `shikumi` CLI exposes `eval`, `trace`, `optimize`, and `replay` over the same
 machinery.
 
+### 9. Richer I/O: multimodal, streaming, adapters, and code execution
+
+Beyond text-in/text-out, a signature *input* field can be a typed `Image` that lowers to the
+provider's native image block (so the model genuinely sees the picture); `streamProgram`
+surfaces a program's output as field chunks and status messages through a callback while still
+returning the typed `o`; an opt-in `xmlAdapter` and a `twoStep` (free-form → extraction)
+combinator widen the wire surface; `Constrained '[…]` field constraints flow into *both* the
+JSON schema and the post-decode validator; and `programOfThought` / `codeAct` let the model
+write code a hermetic sandbox runs, feeding the result back into a typed answer.
+
+```haskell
+data Describe = Describe { prompt :: Text, photo :: Image }       -- the model sees the image
+data Bio      = Bio      { tagline :: Constrained '[MinLen 10] Text }  -- schema + validation, one decl
+
+pot :: Program Task Answer
+pot = programOfThought calcSig                                    -- model writes code; sandbox runs it
+```
+
+Each has a runnable offline counterpart — `jitsurei-multimodal`, `jitsurei-streaming`,
+`jitsurei-adapters`, `jitsurei-codeexec` (table above) — and a deep-dive in the
+[user guide](docs/user/README.md). (Image is input-only and image-only today; audio/document are
+upstream-gated on baikai.)
+
 ---
 
 ## The CLI
@@ -393,14 +416,23 @@ its type tells you exactly what it can do.
 ## Implementation status
 
 The framework was built as twelve ExecPlans across five phases (see
-[`docs/masterplans/1-shikumi-typed-lm-programming-framework.md`](docs/masterplans/1-shikumi-typed-lm-programming-framework.md)).
-All twelve are delivered; `cabal test all` is green across every package, hermetically.
-Since then, EP-6's persistent cache backends (SQLite, Redis, Postgres) landed, and an owned
-clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing. MasterPlan 4
-([richer I/O & multimodal](docs/masterplans/4-shikumi-richer-io-and-multimodal.md)) then widened
-the I/O surface: multimodal `Image` input fields, program-level streaming (`streamProgram`), the
-XML adapter and declarative field constraints, and the `programOfThought` / `codeAct`
-code-execution modules.
+[MasterPlan 1](docs/masterplans/1-shikumi-typed-lm-programming-framework.md)); all twelve are
+delivered. Three further MasterPlans have since landed **in full**:
+
+- [MasterPlan 2 — substrate & routing](docs/masterplans/2-shikumi-substrate-routing-completion.md):
+  ambient model routing, an embeddings backend, node-correlated tracing, and a live
+  OpenTelemetry export sink.
+- [MasterPlan 3 — DSPy-parity optimizers](docs/masterplans/3-shikumi-dspy-parity-optimizers-and-self-refinement.md):
+  reward-driven self-refinement, a grounded instruction proposer, and the MIPROv2 / COPRO /
+  GEPA / KNN / bootstrap-random-search optimizers.
+- [MasterPlan 4 — richer I/O & multimodal](docs/masterplans/4-shikumi-richer-io-and-multimodal.md):
+  multimodal `Image` input fields, program-level streaming (`streamProgram`), the XML adapter
+  and declarative field constraints, and the `programOfThought` / `codeAct` code-execution
+  modules (with the real subprocess sandbox gated/off-CI).
+
+Alongside these, EP-6's persistent cache backends (SQLite, Redis, Postgres) and precise effect
+constraints with an owned clock effect (`Shikumi.Effect.Time`) were added as foundational
+plumbing. `cabal test all` is green across every package, hermetically.
 
 | Area | Package | Status |
 |---|---|---|
