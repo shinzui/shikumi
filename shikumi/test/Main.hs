@@ -9,6 +9,7 @@ import ErrorSpec qualified
 import LLMSpec qualified
 import LiveSpec qualified
 import ModuleSpec qualified
+import MultimodalSpec qualified
 import ProgramAcceptanceSpec qualified
 import ProgramSpec qualified
 import RefineSpec qualified
@@ -39,6 +40,7 @@ main =
         ProgramAcceptanceSpec.tests,
         CombinatorSpec.tests,
         RefineSpec.tests,
+        MultimodalSpec.tests,
         Shikumi.Effect.TimeSpec.tests,
         LiveSpec.tests
       ]

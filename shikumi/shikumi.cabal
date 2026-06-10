@@ -37,6 +37,7 @@ library
     Shikumi.LLM
     Shikumi.LLM.Budget
     Shikumi.Module
+    Shikumi.Multimodal
     Shikumi.Prelude
     Shikumi.Program
     Shikumi.Refine
@@ -52,15 +53,17 @@ library
     , baikai-claude
     , baikai-effectful
     , baikai-openai
-    , base              >=4.20 && <5
+    , base               >=4.20 && <5
+    , base64-bytestring
     , bytestring
     , containers
     , effectful
+    , filepath
     , generic-lens
-    , lens              ^>=5.3
+    , lens               ^>=5.3
     , scientific
     , stm
-    , text              ^>=2.1
+    , text               ^>=2.1
     , time
     , vector
 
@@ -79,6 +82,7 @@ test-suite shikumi-test
     LiveSpec
     LLMSpec
     ModuleSpec
+    MultimodalSpec
     ProgramAcceptanceSpec
     ProgramFixtures
     ProgramSpec
@@ -100,7 +104,10 @@ test-suite shikumi-test
     , baikai-effectful
     , baikai-openai
     , base
+    , base64-bytestring
+    , bytestring
     , containers
+    , directory
     , effectful
     , generic-lens
     , lens

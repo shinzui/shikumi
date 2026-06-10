@@ -79,8 +79,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `Image` type with `imageFromFile`/`imageFromBase64`/`imageFromBytes` constructors and
+- [x] M1: `Image` type with `imageFromFile`/`imageFromBase64`/`imageFromBytes` constructors and
       `imageToContent`; hermetic round-trip test (file/base64 -> `ImageContent` bytes + MIME).
+      Done: `Shikumi.Multimodal` created; `MultimodalSpec` passes (2/2).
 - [ ] M2: Generic derivations (`ToSchema`, `ToPrompt`, plus a new `ImageFields` collector)
       treat an image field as input-only metadata; `render` lowers an image-bearing input to a
       `Context` containing a `UserImage` block alongside the text fields; assertion test on the
@@ -97,7 +98,16 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **M1: used `directory`'s `getTemporaryDirectory` + base's `openTempFile`, not `temporary`.**
+  `temporary` is not in the global package db (and probing the cabal plan was inconclusive),
+  while `directory` (1.3.10.1) and `filepath` (1.5.5.0) are GHC boot libraries already present.
+  Using them keeps `MultimodalSpec` hermetic with no new third-party test dependency. Evidence:
+  `MultimodalSpec` passes 2/2 with only `bytestring`/`base64-bytestring`/`directory` added to the
+  test suite's `build-depends`.
+- **M1: `imageToContent` is a plain record build, not a generic-lens update.** Since
+  `ImageContent(..)` is exported from `Baikai` and both `Image` and `ImageContent` store decoded
+  bytes, `ImageContent {imageData = …, mimeType = …}` is clearer than the `_ImageContent & #… .~ …`
+  sketch and sets both fields (no `-Wpartial-fields` risk).
 
 
 ## Decision Log
