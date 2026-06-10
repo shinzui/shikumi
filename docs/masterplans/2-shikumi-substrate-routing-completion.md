@@ -278,4 +278,38 @@ they refine the integration contracts above.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Status: Complete (2026-06-09).** All four child ExecPlans landed; the whole shikumi fleet
+(`cabal test all`) and baikai's suite are green, with no consumer's pinned row broken.
+
+What shipped, against the four integration points:
+
+1. **Ambient model routing (EP-14).** `Shikumi.Routing` provides the `Routing` effect,
+   `runRouting`, and the `routeLLM` re-interpreter. `runProgram`/`runProgramConc` are now
+   model-agnostic — they render against an inert placeholder and stamp intentions onto a private
+   `Options.metadata` channel; `routeLLM` overwrites the placeholder with the ambient model.
+   Integration point #4's pinned signature is **unchanged** (approach (a) held; no cross-plan
+   notification needed). `MajorityVote`'s `TempSchedule` is now live on the wire.
+2. **Live `attachSchema` / native adapter (EP-14).** `attachSchema` is a real metadata setter and
+   `routeLLM` turns it into `Options.responseFormat = Just (JsonSchema …)` for native-capable
+   models (stripped for fallback). A lenient parser (native JSON, then markers) keeps every prior
+   test green while making the native path coherent.
+3. **Node-path identity + `runProgramTraced` (EP-16).** `Shikumi.Trace.Node` gives each `Predict`
+   node a `NodePath` that agrees with `foldParams`/`mapParamsAt` by construction;
+   `Shikumi.Trace.Program.runProgramTraced` tags each model-call span with it. `nodeFields`/
+   `nodeFieldsIndexed` expose per-node field names. Trace `formatVersion` bumped 1→2.
+4. **Per-node feedback channel (EP-16).** `Shikumi.Trace.Feedback` is a trace-format-independent
+   sibling (`FeedbackLog` + `Feedback` effect) for per-node critiques.
+5. **Embeddings interpreter (EP-15).** baikai gained its first embeddings client
+   (`Baikai.Embedding`); shikumi gained `Shikumi.Eval.Embedding` (`runEmbeddingWith`/
+   `runEmbeddingLLM`/`runEmbeddingBy`), so `semanticSimilarity` runs end to end.
+
+Plus EP-17: `shikumi trace --otel` now exports the recorded tree (with `shikumi.node_path`) to a
+real OTLP collector via `Shikumi.Trace.LiveExport`.
+
+Notable course corrections (all recorded in the child plans' Decision Logs / Surprises): EP-14
+went straight to production rather than shipping a throwaway spike, and uses lenient parsing
+instead of switching the default render to native; EP-16 used a combined `tracedNodeLLM` capture
+(not the layered interpose the plan sketched, which would have tagged the wrong span); EP-17 factors
+its shared orchestration on a `SpanProcessor` (the type both the in-memory recorder and the OTLP
+exporter can produce), not the `SpanExporter` the plan assumed. None changed the integration
+contracts MasterPlans 3 and 4 depend on.
