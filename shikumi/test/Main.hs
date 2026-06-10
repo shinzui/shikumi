@@ -22,6 +22,7 @@ import SerializeSpec qualified
 import Shikumi.Effect.TimeSpec qualified
 import SignatureSpec qualified
 import Test.Tasty (defaultMain, testGroup)
+import XmlAdapterSpec qualified
 
 main :: IO ()
 main =
@@ -45,6 +46,7 @@ main =
         MultimodalSpec.tests,
         MultimodalAdapterSpec.tests,
         MultimodalEndToEndSpec.tests,
+        XmlAdapterSpec.tests,
         Shikumi.Effect.TimeSpec.tests,
         LiveSpec.tests
       ]

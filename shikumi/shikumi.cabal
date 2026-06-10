@@ -98,6 +98,7 @@ test-suite shikumi-test
     Shikumi.LLM.Mock
     SignatureSpec
     StubProvider
+    XmlAdapterSpec
 
   build-depends:
     , aeson

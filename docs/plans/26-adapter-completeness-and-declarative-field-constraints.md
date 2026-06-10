@@ -71,10 +71,10 @@ documented here, even if it requires splitting a partially completed task into t
 ("done" vs. "remaining"). This section must always reflect the actual current
 state of the work.
 
-- [ ] M0: Read the four ground-truth files named in *Context and Orientation*;
+- [x] M0: Read the four ground-truth files named in *Context and Orientation*;
       confirm the signatures in this plan still match the source (the plan quotes
       them verbatim, but the source is the authority).
-- [ ] M1: `xmlAdapter` exists in `Shikumi.Adapter`, exported, selectable; its
+- [x] M1: `xmlAdapter` exists in `Shikumi.Adapter`, exported, selectable; its
       `render` wraps demo outputs and asks for XML-tagged output, its `parse`
       reads `<field>…</field>` tags and decodes to the typed `o`. New
       `XmlAdapterSpec` proves a render→parse round-trip and a missing-tag error.
@@ -97,7 +97,17 @@ state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **M0: the plan's `defaultModel` reference is stale; the real placeholder is
+  private.** `Shikumi.Program` does *not* export `defaultModel`; the inert
+  placeholder model is `placeholderModel = _Model` (private). For `twoStep` (M3)
+  the two `complete` calls therefore pass `_Model` (imported from `Baikai`)
+  directly — `adapterFor _Model` resolves to the fallback adapter exactly as the
+  plan intends. No behavior change; only the name differs.
+- **M0: post-EP-24 the adapters render the live input via `userTurn i`, not
+  `user (toPrompt i)`.** `xmlAdapter` follows suit (`xmlDemoMessages sig ++
+  [userTurn i]`), so an image-bearing input would lower through XML's render too;
+  the all-text path is byte-identical to the marker fallback. Demo turns stay text
+  (`user (toPrompt i)`), matching `demoMessages`.
 
 
 ## Decision Log

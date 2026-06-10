@@ -33,6 +33,7 @@ module Shikumi.Adapter
     capabilityFor,
     nativeAdapter,
     fallbackAdapter,
+    xmlAdapter,
     adapterFor,
     attachSchema,
 
@@ -242,6 +243,31 @@ fallbackAdapter =
          in fromModelChecked obj
     }
 
+-- | The XML adapter (EP-26). A third wire format on the same typed seam: @render@
+-- asks the model to wrap each output field in @\<field\>…\</field\>@ tags, and
+-- @parse@ reads those tags back. Some models follow an XML shape more reliably than
+-- JSON or the @[[ ## … ## ]]@ markers. Opt-in — a caller selects it explicitly;
+-- 'adapterFor' does not auto-select it (XML is a caller choice, not a detectable
+-- model capability). Reuses the same 'sectionsToObject' + 'fromModelChecked'
+-- decode path as 'fallbackAdapter', so nested records and lists in tags coerce the
+-- same way.
+xmlAdapter ::
+  forall i o.
+  (ToSchema o, FromModel o, Validatable o, ToPrompt i, ToPrompt o) =>
+  Adapter i o
+xmlAdapter =
+  Adapter
+    { render = \sig i ->
+        let sys = systemHeader sig <> xmlOutputGuide sig
+            ctx = buildContext sys (xmlDemoMessages sig ++ [userTurn i])
+         in (ctx, _Options),
+      parse = \sig resp ->
+        let names = map fieldName (outputFields sig)
+            sections = parseXmlTags names (responseText resp)
+            obj = sectionsToObject (deriveSchema @o) sections
+         in fromModelChecked obj
+    }
+
 -- ---------------------------------------------------------------------------
 -- Rendering helpers
 -- ---------------------------------------------------------------------------
@@ -307,6 +333,34 @@ renderOutputSections :: (ToPrompt o) => o -> Text
 renderOutputSections o =
   T.unlines [marker k <> "\n" <> v | (k, v) <- toPromptFields o] <> marker "completed"
 
+-- | An XML-output guide: ask for one @\<field\>…\</field\>@ element per output
+-- field. Mirrors 'fallbackOutputGuide' with XML tags instead of markers.
+xmlOutputGuide :: Signature i o -> Text
+xmlOutputGuide sig =
+  "Reply with each output field wrapped in an XML tag, on its own lines:\n"
+    <> T.unlines [openTag (fieldName f) <> "…" <> closeTag (fieldName f) <> describeSuffix f | f <- outputFields sig]
+
+-- | An XML open tag, @\<name\>@.
+openTag :: Text -> Text
+openTag name = "<" <> name <> ">"
+
+-- | An XML close tag, @\</name\>@.
+closeTag :: Text -> Text
+closeTag name = "</" <> name <> ">"
+
+-- | Render a demo output as @\<field\>…\</field\>@ elements (the XML adapter's demo
+-- shape, mirroring 'renderOutputSections' for the marker adapters).
+renderOutputXml :: (ToPrompt o) => o -> Text
+renderOutputXml o =
+  T.unlines [openTag k <> "\n" <> v <> "\n" <> closeTag k | (k, v) <- toPromptFields o]
+
+-- | Render the demos as user/assistant message pairs, the assistant turn shaped as
+-- XML so the model sees an example consistent with the XML adapter's wire format.
+xmlDemoMessages :: (ToPrompt i, ToPrompt o) => Signature i o -> [Message]
+xmlDemoMessages sig = concatMap one (getDemos sig)
+  where
+    one (Demo i o) = [user (toPrompt i), assistant (renderOutputXml o)]
+
 -- ---------------------------------------------------------------------------
 -- Parsing helpers (fallback path)
 -- ---------------------------------------------------------------------------
@@ -338,6 +392,29 @@ parseMarkers body = go (T.lines body) Nothing Map.empty
     flush (Just (name, buf)) acc
       | name == "completed" = acc
       | otherwise = Map.insert name (T.strip (T.unlines buf)) acc
+
+-- | Extract @\<name\>…\</name\>@ sections into a name->text map. Only names that
+-- appear as output fields are kept (so stray tags are ignored, DSPy parity), and
+-- the first match per name wins. The content is whatever lies between the first
+-- @\<name\>@ and its next @\</name\>@ — a non-greedy match, the same as DSPy's
+-- @\<(?P\<name\>\\w+)\>(?P\<content\>.*?)\</\\1\>@ with DOTALL.
+parseXmlTags :: [Text] -> Text -> Map Text Text
+parseXmlTags names body =
+  Map.fromList [(nm, inner) | nm <- names, Just inner <- [extractTag nm body]]
+
+-- | The text between the first @\<name\>@ and its next @\</name\>@, trimmed;
+-- 'Nothing' if either tag is absent.
+extractTag :: Text -> Text -> Maybe Text
+extractTag nm body =
+  let open = openTag nm
+      close = closeTag nm
+      (_, afterOpen) = T.breakOn open body
+   in if T.null afterOpen
+        then Nothing
+        else
+          let rest = T.drop (T.length open) afterOpen
+              (inner, afterClose) = T.breakOn close rest
+           in if T.null afterClose then Nothing else Just (T.strip inner)
 
 -- | Recognize a @[[ ## name ## ]]@ marker line.
 markerName :: Text -> Maybe Text
