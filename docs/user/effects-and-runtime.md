@@ -256,11 +256,43 @@ at the discharge site `runTime`. Because it is an effect, a test can later run c
 
 ## Streaming
 
-`stream` / `Stream` exist for callers that need deltas; `runLLMResilient` charges streaming
-cost from the terminal event's assembled message. Note that the cache and replay layers
-**pass `Stream` through unchanged** (only blocking `Complete` calls are cached/replayed), so
-streaming is a baikai-shaped concern — if streaming to a UI is your main job, see
-[When to use shikumi](./when-to-use-shikumi.md).
+At the transport level, `stream` / `Stream` exist for callers that need deltas;
+`runLLMResilient` charges streaming cost from the terminal event's assembled message. The cache
+and replay layers **pass `Stream` through unchanged** (only blocking `Complete` calls are
+cached/replayed).
+
+On top of that, `Shikumi.Stream` exposes streaming **at the program level** — a separate,
+additive entry point that does not touch `runProgram`:
+
+```haskell
+streamProgram :: (LLM :> es, Error ShikumiError :> es)
+              => Program i o -> i -> (StreamEvent -> Eff es ()) -> Eff es o
+
+data StreamEvent = StreamFieldChunk FieldChunk | StreamStatus Status
+data FieldChunk  = FieldChunk { fieldName :: Text, chunk :: Text, isLast :: Bool }
+data StatusPhase = LmStart | LmEnd | ToolStart | ToolEnd | NodeStart | NodeEnd
+```
+
+You hand `streamProgram` a program, an input, and a callback; it invokes the callback once per
+event, in order, as execution proceeds, and **still returns the fully-decoded typed `o`** —
+identical to what `runProgram` would return for the same input. The effect row is exactly
+`runProgram`'s plus the callback, so a streamed program runs under the same interpreters as a
+blocking one (the callback runs in *your* `Eff`, so you can print, accumulate into an `IORef`,
+or push to a channel).
+
+Two kinds of event reach the callback:
+
+- **Field chunks** — a piece of an output field's text as the model writes it. Honestly scoped
+  to a single `Predict` node (and chains of them) on the prompt-fallback / raw-text path;
+  native whole-JSON field chunking is *not* promised (a JSON blob is only parseable once whole).
+- **Status messages** — "LM call started/finished", "tool started/finished", "node
+  started/finished". Status brackets every node, including composites; aggregating combinators
+  (`Map`/`Parallel`/`MajorityVote`/`Ensemble`) and opaque `Embed` bodies stream status only.
+
+`runProgram`'s blocking contract is untouched — `streamProgram` is parallel surface over the
+same decode. (The headline live demo, streaming a program against a real routed provider, rides
+on ambient routing above; the machinery is fully demonstrable against a stub event source with
+no network.)
 
 ---
 

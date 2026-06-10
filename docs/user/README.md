@@ -23,12 +23,12 @@ you want, jump straight to the relevant reference.
 
 | # | Guide | What it covers |
 |---|---|---|
-| 4 | [Signatures & schemas](./signatures-and-schemas.md) | How a record becomes a JSON schema, how a reply becomes a typed value, and the two adapters that bridge the wire. |
-| 5 | [Programs & combinators](./programs-and-combinators.md) | The `Program` GADT deep embedding: run it, rewrite it, serialize it. Every combinator explained — plus the reward-driven self-refinement modules (`bestOfN` / `refine` / `multiChainComparison`). |
-| 6 | [Effects & the runtime](./effects-and-runtime.md) | The `LLM` effect over baikai, resilience (retries/rate-limit/budget), the effect stack, and *why shikumi code never carries `IOE`*. |
+| 4 | [Signatures & schemas](./signatures-and-schemas.md) | How a record becomes a JSON schema, how a reply becomes a typed value, the three adapters that bridge the wire (native / fallback / XML), declarative field constraints, and multimodal image input fields. |
+| 5 | [Programs & combinators](./programs-and-combinators.md) | The `Program` GADT deep embedding: run it, rewrite it, serialize it. Every combinator explained — plus `twoStep` (free-form→extraction) and the reward-driven self-refinement modules (`bestOfN` / `refine` / `multiChainComparison`). |
+| 6 | [Effects & the runtime](./effects-and-runtime.md) | The `LLM` effect over baikai, resilience (retries/rate-limit/budget), the effect stack, program-level streaming (`streamProgram`), and *why shikumi code never carries `IOE`*. |
 | 7 | [Caching, tracing & replay](./caching-tracing-replay.md) | The `interpose` pattern, content-addressed cache keys, the span tree, and deterministic replay. |
 | 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the nine optimizers (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN) — with serialization. |
-| 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, and an agent loop that is itself a `Program`. |
+| 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, an agent loop that is itself a `Program`, and code-execution modules (`programOfThought` / `codeAct`) that run model-emitted code in a sandbox. |
 | 10 | [The CLI](./cli.md) | `eval` / `trace` / `optimize` / `replay`, all runnable offline. |
 
 ---

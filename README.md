@@ -357,7 +357,7 @@ shikumi replay   sentiment --store-dir .shikumi            # → identical outpu
         │                                               │
         │   Program i o   (GADT deep embedding)         │  ← run / rewrite / serialize
         │   Signature i o + Generic-derived schema      │  ← records in, records out
-        │   Adapter (native schema | prompt fallback)   │
+        │   Adapter (native | fallback | XML opt-in)    │
         │   LLM effect + ShikumiError + resilience      │  ← retries, rate limit, budget
         └───────────────────────┬───────────────────────┘
                                 │  Baikai effect (baikai-effectful)
@@ -392,16 +392,23 @@ The framework was built as twelve ExecPlans across five phases (see
 [`docs/masterplans/1-shikumi-typed-lm-programming-framework.md`](docs/masterplans/1-shikumi-typed-lm-programming-framework.md)).
 All twelve are delivered; `cabal test all` is green across every package, hermetically.
 Since then, EP-6's persistent cache backends (SQLite, Redis, Postgres) landed, and an owned
-clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing.
+clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing. MasterPlan 4
+([richer I/O & multimodal](docs/masterplans/4-shikumi-richer-io-and-multimodal.md)) then widened
+the I/O surface: multimodal `Image` input fields, program-level streaming (`streamProgram`), the
+XML adapter and declarative field constraints, and the `programOfThought` / `codeAct`
+code-execution modules.
 
 | Area | Package | Status |
 |---|---|---|
 | **Runtime substrate** — `LLM` effect over baikai, `ShikumiError`, retries / rate-limiting / budget | `shikumi` | ✅ Done |
 | **Clock effect** — owned `Time` effect (wall + monotonic clock); callers need only `Time :> es`, not `IOE` | `shikumi` | ✅ Done |
 | **Native structured output** — `response_format` / `output_config` (upstreamed to baikai) | *baikai* | ✅ Done |
-| **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam | `shikumi` | ✅ Done |
-| **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, parameter traversal & serialization | `shikumi` | ✅ Done |
+| **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam (native / prompt-fallback / XML) | `shikumi` | ✅ Done |
+| **Declarative field constraints** — `Constrained '[…]` (`MinLen`/`MaxLen`/`MinVal`/`MaxVal`/`EnumOneOf`) flow into both the JSON schema and the post-decode validator | `shikumi` | ✅ Done |
+| **Multimodal input** — typed `Image` input fields lower to baikai's native inline image block (`UserImage`); image-only today, audio/document upstream-gated | `shikumi` (`Shikumi.Multimodal`) | ✅ Done |
+| **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, `twoStep`, parameter traversal & serialization | `shikumi` | ✅ Done |
 | **Combinators** — `>>>`, `mapP`, `parallel2`, `retry`, `validate`, `majorityVote`, `ensemble` | `shikumi` | ✅ Done |
+| **Program-level streaming** — `streamProgram` surfaces field chunks + status messages via a per-event callback, still returning the typed `o` | `shikumi` (`Shikumi.Stream`) | ✅ Done |
 | **Self-refinement** — `bestOfN`, `refine`, `multiChainComparison` over a `Reward` | `shikumi` (`Shikumi.Refine`) | ✅ Done |
 | **Caching** — content-addressed key, `Cache` effect, in-memory + persistent backends | `shikumi-cache`, `-redis`, `-postgres` | ✅ Done — in-memory & SQLite (`shikumi-cache`), Redis, Postgres |
 | **Hierarchical tracing, OTel, deterministic replay** | `shikumi-trace`(`-otel`) | ✅ Done |
@@ -409,6 +416,7 @@ clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing.
 | **Compiler** — zero-shot / few-shot / CoT / RAG | `shikumi-compile` | ✅ Done |
 | **Optimizer** — demo selection, bootstrap few-shot, KNN few-shot, bootstrap random search, instruction search, COPRO, MIPROv2, GEPA, ensemble search | `shikumi-optimize` | ✅ Done — DSPy parity |
 | **Typed tools + ReAct agents** | `shikumi-tools` | ✅ Done |
+| **Code-execution modules** — `programOfThought` / `codeAct`: model writes code, a hermetic sandbox runs it, the result feeds back into a typed answer (real subprocess sandbox gated/off-CI) | `shikumi-tools` (`Shikumi.CodeExec`) | ✅ Done — hermetic |
 | **Ambient model routing** — pick a real model by name; live native `responseFormat` + per-sample temperature | `shikumi` (`Shikumi.Routing`) | ✅ Done |
 | **Embeddings backend** — OpenAI-compatible `/v1/embeddings`; `semanticSimilarity` runs end-to-end | *baikai*, `shikumi-eval` | ✅ Done |
 | **Node-correlated tracing** — `runProgramTraced`, `NodePath` per LM-call span, per-node feedback channel | `shikumi-trace` | ✅ Done |

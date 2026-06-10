@@ -130,6 +130,54 @@ rejection into a located `ValidationFailure`.
 
 ---
 
+## Declarative field constraints (`Constrained`)
+
+A `Field "desc" a` documents a field; a **`Constrained '[…] a`** field *constrains* it. The
+constraint is a compile-time list of rules that does two things automatically: it emits the
+matching JSON-Schema keywords (so a provider that enforces schemas rejects a violating answer
+on its side) **and** it is re-checked locally after decode (so a violation becomes a located
+`ValidationFailure` instead of slipping through).
+
+```haskell
+newtype Constrained (cs :: [Constraint]) a = Constrained { unConstrained :: a }
+
+data Constraint                    -- a small, closed type-level vocabulary
+  = MinLen Nat                     --  string min length  -> "minLength"
+  | MaxLen Nat                     --  string max length  -> "maxLength"
+  | MinVal Symbol                  --  numeric lower bound -> "minimum"  (e.g. MinVal "0")
+  | MaxVal Symbol                  --  numeric upper bound -> "maximum"  (e.g. MaxVal "100")
+  | EnumOneOf [Symbol]             --  allowed string set  -> "enum"
+```
+
+The two wrappers compose — `Field "desc" (Constrained '[MinLen 10] Text)` carries both a
+description and a constraint. Numeric bounds are carried as a `Symbol` so negatives and
+decimals are expressible (`MinVal "-3.5"`); both the schema emitter and the validator parse it
+to a `Scientific`.
+
+```haskell
+data Bio = Bio
+  { tagline :: Constrained '[MinLen 10]            Text
+  , score   :: Constrained '[MinVal "0", MaxVal "100"] Int
+  }
+  deriving stock (Generic, Show, Eq)
+instance ToSchema Bio
+instance FromModel Bio
+instance Validatable Bio
+```
+
+`deriveSchema @Bio` now carries `"minLength": 10` on `tagline` and `"minimum": 0` /
+`"maximum": 100` on `score`; decoding `{"tagline":"short","score":50}` fails with
+`ValidationFailure "tagline: minLength 10 violated"`, while the *same record without the
+constraint* (a plain `tagline :: Text`) accepts `"short"` happily — the constraint is what
+rejects it. Because the check runs *inside* `FromModel`/`fromModelChecked`, it composes with any
+hand-written record-level `Validatable` rule with no extra wiring.
+
+> Both keyword emission and runtime enforcement are driven from the one declaration. The
+> mechanism is a closed vocabulary (the five constructors over `Text` and the numeric leaves),
+> not an open extension point.
+
+---
+
 ## The adapter seam: native schema vs. prompt fallback
 
 A `Signature i o` plus an input must become a wire request, and a reply must become a typed
@@ -142,13 +190,14 @@ data Adapter i o = Adapter
   }
 ```
 
-Two adapters ship, and `adapterFor` / `capabilityFor` select per model:
+**Three adapters ship.** Two are auto-selected per model by `adapterFor` / `capabilityFor`;
+the third (`xmlAdapter`) is opt-in — a caller picks it explicitly.
 
 ```haskell
 data ModelCapability = NativeSchema | PromptFallback
 
 capabilityFor :: Model -> ModelCapability    -- pure check on (provider, api)
-adapterFor    :: Model -> Adapter i o
+adapterFor    :: Model -> Adapter i o        -- auto-selects native vs. fallback
 ```
 
 - **`nativeAdapter` (the reliable path).** For models that support provider-native structured
@@ -160,10 +209,19 @@ adapterFor    :: Model -> Adapter i o
   `[[ ## completed ## ]]` marker (DSPy's convention). `parse` splits the sections, coerces
   each to its schema type (string-like fields stay strings; everything else is JSON-parsed),
   assembles a JSON object, and decodes it the same way.
+- **`xmlAdapter` (opt-in).** A third wire format on the same seam: `render` asks the model to
+  wrap each output field in an XML tag — `<headline>…</headline>` — and `parse` reads those
+  tags back. Some models follow an XML shape more reliably than JSON or the `[[ ## … ## ]]`
+  markers. It is not a *capability* the framework can detect from a `Model`, so `adapterFor`
+  never auto-selects it — you pass it deliberately (e.g. to a custom `runPredict`-style driver,
+  or any code that takes an `Adapter i o`). Under the covers it reuses the very same
+  `sectionsToObject` + `fromModelChecked` decode path as the fallback adapter, so nested
+  records and lists in tags coerce identically, and a missing `<bullets>` tag yields the same
+  located `MissingField "bullets"`.
 
-The crucial property: **the program code is identical under either adapter** — only the wire
-format differs. A field that is missing from the model's reply yields the same
-`MissingField` downstream regardless of which adapter parsed it.
+The crucial property: **the program code is identical under every adapter** — only the wire
+format differs. A field missing from the model's reply yields the same `MissingField`
+downstream regardless of which adapter parsed it.
 
 ### Demos render the same way under both adapters
 
@@ -179,6 +237,55 @@ as a separate extension). Until that lands in the local checkout, the native ada
 is exactly one place (`attachSchema`) that will set the field when it arrives. In practice the
 prompt-fallback path is the exercised one today; the native path is wired and verified for
 OpenAI. This does not change any of your code.
+
+---
+
+## Multimodal input: image fields
+
+Shikumi's V1 is text-in, text-out. An **`Image` field** lets a signature *input* carry a
+picture that lowers to baikai's native inline image block (`UserImage` / `ImageContent`), so
+the provider actually *sees* the image instead of receiving base64 buried in the prose.
+
+```haskell
+import Shikumi.Multimodal (Image, imageFromFile, imageFromBase64, imageFromBytes)
+
+data Image = Image { imageBytes :: ByteString, imageMime :: Text }   -- decoded bytes + MIME
+
+imageFromBytes  :: Text -> ByteString -> Image                       -- mime, bytes
+imageFromFile   :: FilePath -> IO (Either ShikumiError Image)        -- MIME inferred from extension
+imageFromBase64 :: Text -> Text -> Either ShikumiError Image         -- mime, base64
+```
+
+Put one in an input record and the rest is automatic:
+
+```haskell
+data Describe = Describe
+  { instruction :: Text
+  , photo       :: Image
+  }
+  deriving stock (Generic, Show, Eq)
+instance ToPrompt Describe          -- the generic default discovers the image field
+```
+
+When the adapter renders the user turn, it lowers the first `Image` field to a baikai
+`userImage` block, renders the remaining (text) fields as a leading text block, and drops the
+image field's name from that text so the picture is not also described in prose. A record with
+**no** image field renders byte-for-byte as before — the all-text path is provably untouched.
+
+Three scope facts worth knowing:
+
+- **Image is input-only.** It has no `ToSchema` instance, so putting an `Image` in an *output*
+  record is a clean compile error (a model cannot emit raw image bytes through the
+  structured-decode path).
+- **Image only, today.** baikai's `UserContent` models `UserText` and `UserImage` only, so
+  audio and document fields are upstream-gated on a new baikai content constructor.
+- **One image per input.** The headline case attaches the first image field; multi-image
+  inputs are future work.
+
+Discovery rides on the existing `ToPrompt` class (via two extra methods with generic
+defaults), so any `Generic` input record gets it for free with no new constraint. A
+hand-written `ToPrompt` instance on a type with polymorphic/non-`Generic` fields adds
+`imageFields _ = []` / `imageFieldNames _ = []` (the all-text fallback).
 
 ---
 

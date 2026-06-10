@@ -93,6 +93,26 @@ optimizer tunes a chain-of-thought node with no special casing. (`WithReasoning`
 schema/decode/prompt instances are hand-written rather than derived, because its `value` field
 is polymorphic in `o`; it nests `o`'s own schema under a `value` key.)
 
+### `twoStep` — free-form answer, then structured extraction
+
+```haskell
+twoStep :: (FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)
+        => Signature i o -> Program i o
+```
+
+For models that are strong reasoners but weak at producing structured output, `twoStep` makes
+**two** model calls: the first asks the question in plain prose and lets the model answer in
+free-form text; the second hands that text to an *extraction* call (using the robust
+`[[ ## field ## ]]` fallback adapter) that pulls the structured fields out. The caller gets a
+normal typed `o`; the two-call dance is hidden inside.
+
+It is built as an [`embed`](#embed-the-escape-hatch) node, not as a third `Adapter` value —
+deliberately. An `Adapter`'s `parse` is a *pure* `Response -> Either ShikumiError o` and so
+structurally cannot issue the second model call; an embedded body runs in `runProgram`'s effect
+row and can. Because `embed` carries no `Params`, `twoStep` composes and serializes exactly like
+any other node. (Both calls target the same ambient model; a separate, smaller extraction model
+is out of scope — matching DSPy's own limitation.)
+
 ---
 
 ## The combinators
