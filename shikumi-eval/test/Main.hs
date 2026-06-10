@@ -5,6 +5,7 @@
 module Main (main) where
 
 import DocSpec qualified
+import EmbeddingSpec qualified
 import EvaluateSpec qualified
 import GoldenSpec qualified
 import MetricLMSpec qualified
@@ -24,5 +25,6 @@ main =
         EvaluateSpec.tests,
         MetricLMSpec.tests,
         GoldenSpec.tests,
+        EmbeddingSpec.tests,
         DocSpec.tests
       ]

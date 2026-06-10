@@ -69,19 +69,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Upstream baikai embeddings client — new module `Baikai.Embedding` in package
-      `baikai` exposing `embed`/`embedText` plus the `EmbeddingModel` selection record;
-      OpenAI `/v1/embeddings` request/response mapping reusing baikai's auth machinery.
-- [ ] M1: Upstream baikai embeddings tests (request-mapping unit test + gated `LiveSpec`)
-      pass in the baikai repo under its dev shell.
-- [ ] M2: Shikumi interpreter `runEmbeddingLLM` / `runEmbeddingWith` for the existing
-      `Shikumi.Eval.Metric.Embedding` effect, driving the baikai client; embedding-model
-      selection supplied by the caller.
-- [ ] M3: Hermetic stub-backed test in `shikumi-eval` proving close > distant under
-      `semanticSimilarity`, wired through the new interpreter path; gated live test
-      asserting real-vector dimensionality.
-- [ ] Master-plan registry row for EP-15 flipped to In Progress / Complete and the two
-      EP-15 progress bullets in the parent master plan checked off.
+- [x] M1: Upstream baikai embeddings client — new module `Baikai.Embedding` in package
+      `baikai` exposing `embed`/`embedOne` + the pure `mkEmbeddingRequest`, plus the
+      `EmbeddingModel` selection record and `openAIEmbeddingModel`; OpenAI `/v1/embeddings`
+      mapping through the vendored `openai` SDK (`getClientEnv`/`makeMethods`/`createEmbeddings`),
+      reusing `Baikai.Auth`. `openai` added to core baikai's library deps.
+- [x] M1: Upstream baikai embeddings tests pass in the baikai repo (`cabal test baikai`, 43
+      cases): the request-mapping unit test (`mkEmbeddingRequest` puts input/model/dimensions on
+      the wire) is green and the gated `BAIKAI_EMBEDDING_LIVE` test skips cleanly. Committed in the
+      baikai repo.
+- [x] M2: Shikumi interpreter `Shikumi.Eval.Embedding` — `runEmbeddingWith` (explicit
+      `EmbeddingModel`), `runEmbeddingLLM` (defaulted to `text-embedding-3-small`), and
+      `runEmbeddingBy` (injected batching embedder) driving the baikai client; transport failures
+      become typed `ProviderFailure`. `baikai` added to `shikumi-eval`'s library deps.
+- [x] M3: Hermetic stub-backed test in `shikumi-eval` (`EmbeddingSpec`) proves close > distant
+      under `semanticSimilarity` routed through the real `runEmbeddingBy` interpreter; gated
+      `SHIKUMI_EMBEDDING_LIVE` test asserts a 1536-length vector. `cabal test shikumi-eval` green
+      (38 cases).
+- [x] Master-plan registry row for EP-15 flipped to Complete and the two EP-15 progress bullets
+      checked off.
 
 
 ## Surprises & Discoveries
@@ -106,7 +112,14 @@ implementation. Provide concise evidence.
   array. This shapes the M1 API: `embed` over a list of texts loops/sequences per-input
   calls rather than issuing one batched request. Documented in the Decision Log.
 
-(Otherwise none yet — fill in during implementation.)
+- The vendored `openai` SDK's `OpenAI.V1.Models.Model` is a `newtype Model { text :: Text }` that
+  derives `FromJSON`/`IsString`/`Show`/`ToJSON` but **not `Eq`**. So the M1 request-mapping unit
+  test cannot compare the request's `model` field with `==`; it asserts on the unwrapped
+  `OpenAIModels.text (Emb.model req)` instead.
+- Confirmed the core-baikai placement works: adding `openai` to core `baikai`'s library
+  `build-depends` resolves cleanly (it is already a dep of `baikai-openai`), and `shikumi-eval`
+  reaches `Baikai.Embedding` through its existing `baikai` dependency — no `cabal.project` change
+  and no relocation to `baikai-openai` was needed.
 
 
 ## Decision Log
@@ -180,7 +193,18 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-15 delivered across both repos. baikai gained its first embeddings client (`Baikai.Embedding`,
+core package), a thin policy-free wrapper over the vendored `openai` SDK's `createEmbeddings`,
+selecting a model by a bare id string + base URL in `EmbeddingModel` (no `Api` tag, no chat
+catalog). shikumi gained `Shikumi.Eval.Embedding` with `runEmbeddingWith`/`runEmbeddingLLM` and the
+test-seam `runEmbeddingBy`, so the previously-inert `semanticSimilarity` now produces
+meaning-sensitive scores from a real backend — demonstrated hermetically (close pair strictly
+outscores a distant pair through the real interpreter over a deterministic stub) and behind a gated
+live check (1536-d vector from `text-embedding-3-small`). The `Embedding` effect contract
+(integration point #5) is unchanged; only interpreters were added. No gaps; the one deviation from
+the plan was confirming up front that `OpenAI.V1.Models.Model` has no `Eq` instance, so the unit
+test compares the unwrapped `text` field rather than the `Model` value. The whole shikumi fleet
+stays green and baikai's suite is green.
 
 
 ## Context and Orientation

@@ -34,6 +34,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Eval
+    Shikumi.Eval.Embedding
     Shikumi.Eval.Evaluate
     Shikumi.Eval.Golden
     Shikumi.Eval.Metric
@@ -43,6 +44,7 @@ library
 
   build-depends:
     , aeson
+    , baikai
     , base          >=4.20 && <5
     , bytestring
     , containers
@@ -63,6 +65,7 @@ test-suite shikumi-eval-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     DocSpec
+    EmbeddingSpec
     EvalFixtures
     EvaluateSpec
     GoldenSpec
