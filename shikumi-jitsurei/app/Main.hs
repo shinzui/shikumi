@@ -13,3 +13,7 @@ main = do
   putStrLn "  jitsurei-optimize       Optimize demos, then serialize and reload them"
   putStrLn "  jitsurei-react          A typed tool and a ReAct agent loop"
   putStrLn "  jitsurei-trace-replay   Caching, hierarchical tracing, deterministic replay"
+  putStrLn "  jitsurei-multimodal     An image input field the model actually sees"
+  putStrLn "  jitsurei-streaming      Program-level streaming: field chunks + status"
+  putStrLn "  jitsurei-adapters       XML adapter, two-step extraction, field constraints"
+  putStrLn "  jitsurei-codeexec       programOfThought / codeAct over a hermetic sandbox"

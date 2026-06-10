@@ -294,6 +294,10 @@ same decode. (The headline live demo, streaming a program against a real routed 
 on ambient routing above; the machinery is fully demonstrable against a stub event source with
 no network.)
 
+```bash
+cabal run jitsurei-streaming   # field chunks + status events, then the typed answer — offline
+```
+
 ---
 
 ## Where to go next

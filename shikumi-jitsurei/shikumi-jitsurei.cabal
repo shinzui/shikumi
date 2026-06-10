@@ -161,3 +161,66 @@ executable jitsurei-trace-replay
     , shikumi-trace
     , temporary
     , text
+
+-- (9) Multimodal input: an image field the model actually sees.
+executable jitsurei-multimodal
+  import:         common-options
+  main-is:        Multimodal.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , baikai
+    , base              >=4.20 && <5
+    , bytestring
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
+    , shikumi-jitsurei
+    , text
+    , vector
+
+-- (10) Program-level streaming: field chunks and status messages.
+executable jitsurei-streaming
+  import:         common-options
+  main-is:        Streaming.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , baikai
+    , base          >=4.20 && <5
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
+    , text
+    , vector
+
+-- (11) Adapter completeness (XML, two-step) and declarative field constraints.
+executable jitsurei-adapters
+  import:         common-options
+  main-is:        Adapters.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , base              >=4.20 && <5
+    , shikumi
+    , shikumi-jitsurei
+    , text
+
+-- (12) Code execution: programOfThought and codeAct over a hermetic sandbox.
+executable jitsurei-codeexec
+  import:         common-options
+  main-is:        CodeExec.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , base              >=4.20 && <5
+    , bytestring
+    , shikumi
+    , shikumi-jitsurei
+    , shikumi-tools
+    , text
+    , vector

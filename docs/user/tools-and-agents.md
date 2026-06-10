@@ -195,9 +195,11 @@ build.
 ## See it run
 
 ```bash
-cabal run jitsurei-react
+cabal run jitsurei-react      # a typed Tool, a ToolRegistry, and a reactWithTrajectory agent
+cabal run jitsurei-codeexec   # programOfThought + codeAct over the hermetic sandbox
 ```
 
-A typed `Tool`, a `ToolRegistry`, and a `reactWithTrajectory` agent driven by a scripted
-offline stub — showing the thought/action/observation turns and the recorded trajectory, no
-network.
+`jitsurei-react` shows the thought/action/observation turns and the recorded trajectory;
+`jitsurei-codeexec` shows the model write code that the sandbox runs (including an
+error-then-fix recovery) and a `codeAct` snippet calling a provided tool — all driven by a
+scripted offline stub, no network.

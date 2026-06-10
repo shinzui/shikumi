@@ -170,6 +170,10 @@ demonstration of the real API, not a sketch:
 | `cabal run jitsurei-optimize` | optimize demos, then serialize & reload them | [`app/Optimize.hs`](shikumi-jitsurei/app/Optimize.hs) |
 | `cabal run jitsurei-react` | a typed tool and a ReAct agent loop | [`app/ReActAgent.hs`](shikumi-jitsurei/app/ReActAgent.hs) |
 | `cabal run jitsurei-trace-replay` | caching, hierarchical tracing, deterministic replay | [`app/TraceReplay.hs`](shikumi-jitsurei/app/TraceReplay.hs) |
+| `cabal run jitsurei-multimodal` | an image input field the model actually sees | [`app/Multimodal.hs`](shikumi-jitsurei/app/Multimodal.hs) |
+| `cabal run jitsurei-streaming` | program-level streaming: field chunks + status messages | [`app/Streaming.hs`](shikumi-jitsurei/app/Streaming.hs) |
+| `cabal run jitsurei-adapters` | XML adapter, two-step extraction, declarative field constraints | [`app/Adapters.hs`](shikumi-jitsurei/app/Adapters.hs) |
+| `cabal run jitsurei-codeexec` | `programOfThought` / `codeAct` over a hermetic sandbox | [`app/CodeExec.hs`](shikumi-jitsurei/app/CodeExec.hs) |
 
 The shared offline harness (the stub LM and the response builders) lives in
 [`Shikumi.Jitsurei.Stub`](shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs); each `app/` module is a

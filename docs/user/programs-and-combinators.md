@@ -346,6 +346,7 @@ optimizer's serialization use — see [Evaluation & optimization](./evaluation-a
 ```bash
 cabal run jitsurei-compose        # extract >>> enrich >>> approve, type-checked hand-offs
 cabal run jitsurei-combinators    # retry / validateRetry / majorityVote / mapP / ensemble
+cabal run jitsurei-adapters       # twoStep (free-form → extraction), plus the XML adapter & constraints
 ```
 
-Both run offline against the deterministic stub LM; the `app/` sources are self-contained.
+All run offline against the deterministic stub LM; the `app/` sources are self-contained.

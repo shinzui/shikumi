@@ -305,3 +305,17 @@ That is the entire wire behaviour, defined once and shared by both the sequentia
 concurrent executor. Everything above it (caching, tracing) wraps the `LLM` call in step 4;
 everything below it (resilience, transport) is the interpreter that handles it. See
 [Effects & the runtime](./effects-and-runtime.md).
+
+---
+
+## See it run
+
+```bash
+cabal run jitsurei-adapters     # the XML adapter, twoStep, and declarative constraints, offline
+cabal run jitsurei-multimodal   # an image input field lowered to a UserImage block
+```
+
+`jitsurei-adapters` renders and parses through `xmlAdapter`, runs a `twoStep` program, and shows
+a `Constrained` record's schema keywords plus a violating/conforming decode; `jitsurei-multimodal`
+renders an image-bearing request and shows the user turn carries a real image block — both fully
+offline against the stub LM.
