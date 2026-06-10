@@ -22,6 +22,7 @@ import SchemaSpec qualified
 import SerializeSpec qualified
 import Shikumi.Effect.TimeSpec qualified
 import SignatureSpec qualified
+import StreamSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import TwoStepSpec qualified
 import XmlAdapterSpec qualified
@@ -51,6 +52,7 @@ main =
         XmlAdapterSpec.tests,
         ConstraintSpec.tests,
         TwoStepSpec.tests,
+        StreamSpec.tests,
         Shikumi.Effect.TimeSpec.tests,
         LiveSpec.tests
       ]

@@ -96,7 +96,7 @@ because it is real DSPy surface, but ordered and scoped so it never blocks the p
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 24 | Multimodal field types | docs/plans/24-multimodal-field-types.md | None | None | Complete |
-| 25 | Program-level streaming and status messages | docs/plans/25-program-level-streaming-and-status-messages.md | None | EP-14 (MP-2) | Not Started |
+| 25 | Program-level streaming and status messages | docs/plans/25-program-level-streaming-and-status-messages.md | None | EP-14 (MP-2) | Complete |
 | 26 | Adapter completeness and declarative field constraints | docs/plans/26-adapter-completeness-and-declarative-field-constraints.md | None | EP-24 | Complete |
 | 27 | Code-execution modules ProgramOfThought and CodeAct | docs/plans/27-code-execution-modules-programofthought-and-codeact.md | None | None | Not Started |
 
@@ -173,8 +173,8 @@ current signatures it builds on (from the integration dossier) so it stands alon
 
 - [x] EP-24: Image (and other feasible media) field types lower to baikai `Content`; model sees the image
 - [x] EP-24: Round-trip through `ToSchema`/`FromModel`/`ToPrompt` for a media-bearing signature
-- [ ] EP-25: Program-level streaming entry point surfacing field chunks via `StreamEach`
-- [ ] EP-25: Status messages (LM start/end, tool start/end) surfaced to the caller
+- [x] EP-25: Program-level streaming entry point surfacing field chunks via `StreamEach`
+- [x] EP-25: Status messages (LM start/end, tool start/end) surfaced to the caller
 - [x] EP-26: `XMLAdapter` and `TwoStepAdapter` selectable alongside native/fallback
 - [x] EP-26: Declarative field constraints flow into JSON schema and `Validatable`
 - [ ] EP-27: `programOfThought`/`codeAct` run model-emitted code in a sandbox and feed results back

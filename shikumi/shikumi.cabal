@@ -46,6 +46,7 @@ library
     Shikumi.Schema
     Shikumi.Schema.Types
     Shikumi.Signature
+    Shikumi.Stream
 
   build-depends:
     , aeson
@@ -98,6 +99,7 @@ test-suite shikumi-test
     Shikumi.Effect.TimeSpec
     Shikumi.LLM.Mock
     SignatureSpec
+    StreamSpec
     StubProvider
     TwoStepSpec
     XmlAdapterSpec

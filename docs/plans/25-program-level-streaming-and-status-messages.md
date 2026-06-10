@@ -69,19 +69,20 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `StreamEvent`, `StatusPhase`, `FieldChunk` types and a `streamComplete` helper
+- [x] M1: Add `StreamEvent`, `StatusPhase`, `FieldChunk` types and a `streamComplete` helper
       that drives the `LLM` effect's `Stream` op and folds baikai `AssistantMessageEvent`s
       into `StreamEvent`s, in a new module `Shikumi.Stream`. New test module `StreamSpec`
       proves a scripted stub LLM emitting `["Hel","lo"]` yields the expected `StreamEvent`s.
-- [ ] M2: Add `streamProgram` for a single `Predict` node: emit `LmStart`, stream the output
+- [x] M2: Add `streamProgram` for a single `Predict` node: emit `LmStart`, stream the output
       field's chunks (via the fallback/raw text path), emit `LmEnd`, and return the typed
       `o` equal to `runProgram`'s result. Extend `StreamSpec` with the headline acceptance.
-- [ ] M3: Bracket sub-nodes and tool calls with status messages through composite programs
+- [x] M3: Bracket sub-nodes and tool calls with status messages through composite programs
       (`Compose`, `FMap`, `Embed`, etc.), reusing trace span-kinds as the phase vocabulary,
       with field chunks attributed to leaf `Predict` calls. Document multi-node honesty.
       Extend `StreamSpec` with a chained-`Predict` acceptance.
-- [ ] Wire `StreamSpec` into `shikumi/test/Main.hs` and the cabal `other-modules`.
-- [ ] Final audit: `cabal test shikumi` green; Progress/Decision Log/Outcomes updated.
+- [x] Wire `StreamSpec` into `shikumi/test/Main.hs` and the cabal `other-modules`.
+- [x] Final audit: `cabal test shikumi` green (117 tests); `cabal test all` green;
+      Progress/Decision Log/Outcomes updated.
 
 
 ## Surprises & Discoveries
@@ -89,7 +90,39 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`Response.message` is an `AssistantPayload`, but the terminal event's `message`
+  is a `Message`.** Reassembling a `Response` from a stream's terminal event means
+  matching `EventDone (TerminalPayload _ (AssistantMessage payload))` to pull the
+  `AssistantPayload` out of the `Message`, then `_Response & #message .~ payload`.
+  (`Baikai.Response.Response.message :: AssistantPayload`;
+  `Baikai.Message.Message = … | AssistantMessage AssistantPayload | …`.) `reassemble`
+  in `Shikumi.Stream` does exactly this, with a `synthResponse` fallback built from
+  the first `TextEnd` content if no terminal assistant message is present.
+- **`Validatable o` is a redundant constraint anywhere `adapterFor` is called.**
+  Because `Shikumi.Schema` ships a universal `instance {-# OVERLAPPABLE #-}
+  Validatable a`, `Validatable o` is always dischargeable, so GHC's
+  `-Wredundant-constraints` flags it on a helper like `streamPredict` even though
+  `adapterFor`'s own signature lists it. Dropped from `streamPredict`'s context
+  (the wire path still validates via `fromModelChecked` inside the adapter's
+  `parse`). No behavior change.
+- **`FieldChunk.fieldName` collides with `FieldMeta.fieldName`.** Both are record
+  selectors named `fieldName` (DuplicateRecordFields is on workspace-wide), so
+  `Shikumi.Stream` imports `Shikumi.Schema.Types` qualified (`ST`) and writes
+  `ST.fieldName` when reading a signature's output-field names, keeping its own
+  `FieldChunk.fieldName` selector unambiguous.
+- **`streamProgram`'s `Predict` overlay had to be replicated.** `runProgram`'s
+  internal `effectiveSignature`/`runPredict` are not exported from
+  `Shikumi.Program`, so `Shikumi.Stream` re-implements the small `Params` overlay
+  (`effectiveSig`: instruction override + JSON-demo decode). It reuses the exported
+  `retryWith`/`acceptOrReject` for the `Retry`/`RetryWhen`/`Validate` branches so
+  those nodes' semantics match `runProgram` exactly while still streaming their leaf
+  predicts.
+- **Tool-status is demonstrated at the callback boundary, as scoped.** An `Embed`
+  body is opaque to `streamProgram` (it runs blocking with `NodeStart`/`NodeEnd`
+  only), so `ToolStart`/`ToolEnd` cannot be auto-surfaced from inside a ReAct loop
+  yet. The acceptance proves the *event variants flow through the callback in
+  order* by emitting them directly — matching the plan's honest scoping; a future
+  agent integration threads the callback into the loop.
 
 
 ## Decision Log
@@ -140,6 +173,20 @@ Record every decision made while working on the plan.
   Rationale: the streaming surface should stand alone; trace is a sibling package, and adding a
   build edge to it for a four-constructor enum is not worth the coupling.
   Date: 2026-06-09.
+- Decision (M3 outcome): Do **not** add a per-event, `StreamEach`-shaped operation
+  to the `LLM` effect; keep building on the existing materializing `Stream` op.
+  Rationale: adding `StreamEach :: Model -> Context -> Options ->
+  (AssistantMessageEvent -> m ()) -> LLM m ()` would be additive to the `LLM`
+  constructor set but would force *every* interpreter (`runLLM`, `runLLMWith`,
+  `runLLMResilient`, the test mocks, the routing/cache/trace re-interpreters) to
+  pattern-match it — a broad ripple for no behavioral gain in the hermetic and
+  current live paths, where `Stream` already delivers every event and
+  `streamComplete` folds the list into ordered callbacks. The materialize-then-replay
+  shape preserves event order (the helper's contract) and is sufficient for finite
+  scripted streams and for a single provider call. If true incremental delivery
+  against a live provider becomes necessary, the per-event op can be added later as a
+  separate, additive change. Recorded here per the plan's M3 instruction.
+  Date: 2026-06-09.
 - Decision: Soft-depend on EP-14 (ambient routing,
   `docs/plans/14-ambient-model-routing-and-live-native-structured-output.md`) only for the
   live demo; build and verify everything against a hermetic stub streaming LM first.
@@ -154,7 +201,44 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Delivered (2026-06-09).** All milestones complete; `cabal test shikumi` green
+(117 tests, +5 `StreamSpec`) and `cabal test all` green. Against the Purpose:
+
+- **A new, additive streaming entry point exists.** `streamProgram :: (LLM :> es,
+  Error ShikumiError :> es) => Program i o -> i -> (StreamEvent -> Eff es ()) -> Eff
+  es o` in the new module `Shikumi.Stream`, plus the lower-level `streamComplete`
+  for one LM call. `runProgram`/`runProgramConc` and the `LLM` effect are unchanged
+  (integration point #4 honored) — streaming is parallel surface over the same decode.
+- **Field chunks and status messages both reach the caller.** A single `Predict`
+  streams its first output field's text deltas as `StreamFieldChunk`s bracketed by
+  `LmStart`/`LmEnd`; composites bracket with `NodeStart`/`NodeEnd`. A chained
+  `predict >>> predict` streams both leaves' fields in order. The decisive fidelity
+  proof — the streamed return value asserted **equal** to `runProgram`'s for the same
+  scripted events — passes for both the single-`Predict` and the chained case.
+- **Scope is honest.** Field chunks are delivered on the prompt-fallback/raw-text
+  path (the exercised path, since the placeholder model maps to the fallback
+  adapter); native whole-JSON field chunking is explicitly not promised. Aggregating
+  combinators (`Map`/`Parallel`/`MajorityVote`/`Ensemble`) and opaque `Embed` bodies
+  stream status only. The chunk text is the raw provider delta. All of this is stated
+  in the `Shikumi.Stream` module haddock.
+
+**Gaps / known limitations (by design):**
+
+- Tool-level status from inside an `Embed`/ReAct body is not auto-surfaced (the body
+  is opaque); the `ToolStart`/`ToolEnd` variants exist and are proven to flow through
+  the callback, ready for a future agent integration that threads the callback in.
+- Delivery is materialize-then-replay over the existing `Stream` op (event order
+  preserved); a per-event `StreamEach` `LLM` op was evaluated and deliberately not
+  added (see Decision Log).
+- The optional live demo against a real model (soft-dep on MP-2 EP-14 routing) is not
+  implemented; everything is verified hermetically, and the live path is a clearly
+  network-gated future extension.
+
+**Lessons.** The main friction was baikai's payload shapes (terminal `Message`
+vs. `Response.message :: AssistantPayload`) and three workspace-wide ergonomics
+(`DuplicateRecordFields` selector collision on `fieldName`; the universal
+`Validatable` instance making that constraint redundant; non-exported `runPredict`
+internals needing a small replicated overlay). All recorded in Surprises & Discoveries.
 
 
 ## Context and Orientation
