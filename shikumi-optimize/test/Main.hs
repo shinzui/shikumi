@@ -11,10 +11,12 @@ import CoproSpec qualified
 import EnsembleSpec qualified
 import GepaSpec qualified
 import InstructionSpec qualified
+import KNNSpec qualified
 import LabeledFewShotSpec qualified
 import Miprov2Spec qualified
 import OptimizeSpec qualified
 import ProposeSpec qualified
+import RandomSearchSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -31,5 +33,7 @@ main =
         Miprov2Spec.tests,
         CoproSpec.tests,
         GepaSpec.tests,
+        KNNSpec.tests,
+        RandomSearchSpec.tests,
         AcceptanceSpec.tests
       ]

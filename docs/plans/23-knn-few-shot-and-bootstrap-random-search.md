@@ -80,22 +80,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `Shikumi.Optimize.KNN` module with `knnFewShot` (run-time, `Embed`-node form) and
-      `knnDemos`/`knnFewShotCentroid` (compile-time fallback); selects nearest demos by
-      embedding cosine similarity; re-exported from `Shikumi.Optimize`.
-- [ ] M1: Hermetic test `KNNSpec` proving, under a known stub-embedder geometry, that the
-      attached demos are the input-nearest training examples (run-time form) and the
-      centroid-nearest training examples (compile-time fallback).
-- [ ] M2: `Shikumi.Optimize.RandomSearch` module with `bootstrapRandomSearch` reusing V1's
-      `bootstrapFewShot`/`bootstrapFewShotWith` over deterministic seeds, keeping the best by
-      held-out score; re-exported from `Shikumi.Optimize`.
-- [ ] M2: Hermetic test `RandomSearchSpec` proving the best-of-N held-out score is `>=` a
-      single bootstrap run on a fixture, with a stub LM and pure metric.
-- [ ] M3: Acceptance — held-out lift assertions for both optimizers; `encodeCompiled` /
-      `decodeCompiledOnto` round-trip for both compiled outputs (documenting how the run-time
-      `Embed`-based KNN serializes — it carries no `Params`, like `react`).
-- [ ] Master-plan registry row for EP-23 flipped to In Progress / Complete and the EP-23
-      progress bullet in the parent master plan checked off.
+- [x] M1: (2026-06-09) `Shikumi.Optimize.KNN` with `knnFewShot`/`knnDemos` (run-time `Embed`-node
+      form), `knnFewShotCentroid` (compile-time fallback), and pure helpers
+      `cosine`/`nearestDemos`/`centroid`; re-exported from `Shikumi.Optimize`. The embedder is a
+      pure injected `Text -> Vector Double` closure (no `Embedding` effect in the `Embed` body).
+- [x] M1: (2026-06-09) `KNNSpec` proves the attached demos are the input-nearest (run-time) and
+      centroid-nearest (fallback) examples under a known stub geometry, plus that the run-time KNN
+      program runs end-to-end under the stub LM.
+- [x] M2: (2026-06-09) `Shikumi.Optimize.RandomSearch` with `bootstrapRandomSearch`/
+      `bootstrapRandomSearchWith` reusing `bootstrapFewShotWith` over deterministic LCG seeds
+      (shuffle + random demo count) plus a zero-shot baseline, keeping the best via `selectBest`;
+      re-exported from `Shikumi.Optimize`.
+- [x] M2: (2026-06-09) `RandomSearchSpec` proves best-of-N held-out ≥ single bootstrap and that
+      the search is reproducible.
+- [x] M3: (2026-06-09) Round-trip tests for both: the centroid/random-search baked demos persist
+      through `encodeCompiled`/`decodeCompiledOnto`; the run-time `Embed` KNN serializes as the
+      empty `Params` vector (like `react`) and reloads onto a reconstructed template.
+- [x] (2026-06-09) MasterPlan registry row for EP-23 flipped to Complete and the EP-23 progress
+      bullet checked off.
 
 
 ## Surprises & Discoveries
@@ -103,7 +105,24 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet — fill in during implementation.)
+- **KNN consumes EP-15 only at the *contract* level — its module imports no `Embedding` effect.**
+  The plan's load-bearing decision (pure `Text -> Vector Double` closure into the `Embed` body,
+  not the effect) means `Shikumi.Optimize.KNN` needs only `Data.Vector` + the program/eval
+  vocabulary; the caller obtains the closure from EP-15 (its pure `runEmbedding` argument shape).
+  So EP-15 is a true hard dependency for *live* use but the module builds and tests with a stub
+  embedder and no `shikumi-eval` `Embedding` import.
+- **`RandomSearchConfig` drops the `passThreshold` field the plan sketched.** It would have
+  clashed (DuplicateRecordFields) with `BootstrapConfig.passThreshold` at the selector site; the
+  config keeps `minDemos`/`maxDemos` and forwards `defaultBootstrapConfig`'s threshold (1.0). The
+  public surface is otherwise as planned.
+- **The run-time `Embed` KNN serializes to `[]` exactly as `react` does**, confirmed by the
+  round-trip test: `programParams (freezeProgram (knnDemos …)) == []` and
+  `decodeCompiledOnto (knnDemos …) "[]"` is `Right`. The per-input behaviour lives in the closure,
+  reconstructed in code, not in serialized `Params` — the honest, documented consequence of the
+  faithful run-time form.
+- **The LCG `shuffle` seeds with `seed + 1`** so seed 1 (the first candidate) does not degenerate
+  to the identity-ish stream; combined with the always-present zero-shot baseline candidate, the
+  best-of-N ≥ single-bootstrap inequality holds deterministically.
 
 
 ## Decision Log
@@ -177,7 +196,23 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** Both demo-selection optimizers ship in `shikumi-optimize`:
+`Shikumi.Optimize.KNN` (`knnFewShot`/`knnDemos` run-time + `knnFewShotCentroid` fallback + pure
+`cosine`/`nearestDemos`/`centroid`) and `Shikumi.Optimize.RandomSearch`
+(`bootstrapRandomSearch`/`bootstrapRandomSearchWith` over LCG seeds), both re-exported from
+`Shikumi.Optimize` and returning V1's `CompiledProgram` through the unchanged `optimize`.
+
+The headline behaviours are demonstrated hermetically (stub embedder + stub LM, no network):
+under a known 2-D geometry the attached demos are the input-nearest (and centroid-nearest)
+training examples; best-of-N bootstrap held-out ≥ a single bootstrap, reproducibly; and both
+compiled outputs round-trip through `encodeCompiled`/`decodeCompiledOnto` (baked demos persist;
+the run-time `Embed` KNN serializes as `[]`, like `react`). `cabal test shikumi-optimize` is 43/43
+green and `cabal test all` passes.
+
+Gaps / deferred (documented above): the per-input teacher re-bootstrap (the labelled-demo path is
+used, which is the deterministic core of DSPy's behaviour); `RandomSearchConfig.passThreshold`
+(forwarded from `defaultBootstrapConfig`); a corpus-scale ANN index for KNN (`vector` brute-force
+cosine is exact and fast at demo scale — the MasterPlan's deferred `hmatrix`/BLAS lever).
 
 
 ## Context and Orientation

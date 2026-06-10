@@ -44,6 +44,7 @@ library
     Shikumi.Optimize.Ensemble
     Shikumi.Optimize.GEPA
     Shikumi.Optimize.Instruction
+    Shikumi.Optimize.KNN
     Shikumi.Optimize.LabeledFewShot
     Shikumi.Optimize.MIPRO
     Shikumi.Optimize.Pareto
@@ -52,6 +53,7 @@ library
     Shikumi.Optimize.Propose.Summarize
     Shikumi.Optimize.Propose.Tips
     Shikumi.Optimize.Propose.Types
+    Shikumi.Optimize.RandomSearch
     Shikumi.Optimize.Search
     Shikumi.Optimize.Types
 
@@ -80,10 +82,12 @@ test-suite shikumi-optimize-test
     EnsembleSpec
     GepaSpec
     InstructionSpec
+    KNNSpec
     LabeledFewShotSpec
     Miprov2Spec
     OptimizeSpec
     ProposeSpec
+    RandomSearchSpec
     StubLM
 
   build-depends:

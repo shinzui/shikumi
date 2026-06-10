@@ -98,7 +98,7 @@ rejected: COPRO consumes the same proposer; defining it once as its own plan pre
 | 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Complete |
 | 21 | COPRO instruction optimizer | docs/plans/21-copro-instruction-optimizer.md | EP-19 | None | Complete |
 | 22 | GEPA reflective optimizer | docs/plans/22-gepa-reflective-optimizer.md | EP-16 (MP-2), EP-19 | EP-18 | Complete |
-| 23 | KNN few-shot and bootstrap random search | docs/plans/23-knn-few-shot-and-bootstrap-random-search.md | EP-15 (MP-2) | None | Not Started |
+| 23 | KNN few-shot and bootstrap random search | docs/plans/23-knn-few-shot-and-bootstrap-random-search.md | EP-15 (MP-2) | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference rows by their # prefix. `EP-14`, `EP-15`, `EP-16` live in
@@ -194,7 +194,7 @@ inherits from MasterPlan 2. Each child plan embeds the exact current signatures 
 - [x] EP-20: Held-out score lift over the V1 instruction search baseline on a fixture task (2026-06-09)
 - [x] EP-21: COPRO coordinate-ascent instruction optimizer with breadth/depth control (2026-06-09)
 - [x] EP-22: GEPA reflective evolution with per-node feedback and a Pareto frontier (2026-06-09)
-- [ ] EP-23: KNNFewShot (embedding-similarity demos) + BootstrapFewShotWithRandomSearch
+- [x] EP-23: KNNFewShot (embedding-similarity demos) + BootstrapFewShotWithRandomSearch (2026-06-09)
 
 
 ## Surprises & Discoveries
@@ -413,7 +413,47 @@ they refine the integration contracts above.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Initiative complete — all six child ExecPlans landed (2026-06-09).** Shikumi's optimizer stack
+is now at parity with modern DSPy, expressed through the typed, effect-honest, program-as-data
+substrate. What shipped:
+
+- **EP-18** (`shikumi`): `Shikumi.Reward` + `Shikumi.Refine` — `bestOfN`, `refine`,
+  `multiChainComparison` as first-class composable `Program`s built from `Embed` (no new GADT
+  constructor). A weak program's reward improves 0.2→0.9 wrapped; `refine` climbs bad→good.
+- **EP-19** (`shikumi-optimize`): `Shikumi.Optimize.Propose` — the grounded `proposeInstructions`
+  surface (dataset/program/module summarizers as typed Programs, `programFieldNames` per-node
+  metadata via EP-16, tip bank, instruction history). `instructionSearch` re-pointed onto it.
+- **EP-20**: `Shikumi.Optimize.MIPRO` — joint instruction×demo search with minibatch screening;
+  lifts a joint-win fixture 0.0→1.0, strictly above `instructionSearch`'s 0.5.
+- **EP-21**: `Shikumi.Optimize.COPRO` — breadth/depth coordinate ascent feeding scored history
+  forward; weak program 0.0→1.0, depth-monotone.
+- **EP-22**: `Shikumi.Optimize.GEPA` + `Shikumi.Optimize.Pareto` — reflective evolution with
+  per-node feedback (EP-16 channel) and a Pareto frontier; weak program 0.0→1.0.
+- **EP-23**: `Shikumi.Optimize.KNN` + `Shikumi.Optimize.RandomSearch` — embedding-similarity
+  per-input demos (run-time `Embed` form + centroid fallback) and best-of-N bootstrap.
+
+Every optimizer is V1's `Optimizer i o`, invoked through the stable `optimize`, returning V1's
+`CompiledProgram i o`, persisted unchanged via `encodeCompiled`/`decodeCompiledOnto` (integration
+point #4 held throughout). `cabal test all` is green across the entire workspace
+(`shikumi-optimize` at 43 tests, up from 13).
+
+**Cross-plan lessons.** (1) The "`Embed` body's row is load-bearing" pattern (Surprises) held for
+every plan that needed a node doing "more" than a bare `Predict`: EP-18's modules, EP-23's KNN
+node, and GEPA's internally-discharged effects all kept the `runProgram`/`Optimizer` rows
+unchanged by injecting capability as a closure/value rather than widening a row. (2) Because EP-18
+and EP-19 landed first, the *delivered* EP-19 proposer interface (`proposeInstructions :: Dataset
+-> ProposeRequest -> ProposeResult`, with V1's `proposeInstruction` removed) became the real
+contract — EP-20/EP-21 were implemented against it, not the drafts that assumed a `ProposeSignals`
+shape or a `variant:N` fallback. (3) The grounded proposer's fixed `4 + numCandidates` per-node LM
+cost is the budget unit every proposer-driven optimizer (MIPROv2, COPRO) guards against. (4) The
+teacher-bootstrap circularity (a weak teacher harvests no demos) forced including *labelled*
+training pairs as demo candidates in MIPROv2 and made the joint-win fixture reachable.
+
+**Deferred (documented in the child plans, none blocking parity).** A discrete-TPE/`splitmix`
+sampler upgrade for MIPROv2's global joint search; COPRO minibatch screening; GEPA node-specific
+sub-trace critique, the merge step, and a splitmix RNG; per-input teacher re-bootstrap and a
+corpus-scale ANN index for KNN; and the cross-cutting `shikumi-cache` wiring (the Speed-audit
+lever). Each is additive and changes no public `Optimizer i o` surface.
 
 
 ---

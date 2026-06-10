@@ -24,6 +24,8 @@ module Shikumi.Optimize
     module Shikumi.Optimize.MIPRO,
     module Shikumi.Optimize.GEPA,
     module Shikumi.Optimize.Pareto,
+    module Shikumi.Optimize.KNN,
+    module Shikumi.Optimize.RandomSearch,
     module Shikumi.Optimize.Ensemble,
   )
 where
@@ -42,9 +44,11 @@ import Shikumi.Optimize.COPRO
 import Shikumi.Optimize.Ensemble
 import Shikumi.Optimize.GEPA
 import Shikumi.Optimize.Instruction
+import Shikumi.Optimize.KNN
 import Shikumi.Optimize.LabeledFewShot
 import Shikumi.Optimize.MIPRO
 import Shikumi.Optimize.Pareto
+import Shikumi.Optimize.RandomSearch
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Types
 import Shikumi.Program (Program)
