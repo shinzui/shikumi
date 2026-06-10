@@ -48,6 +48,7 @@ module StubLM
     -- * The stub interpreters
     runStubLM,
     runStubLMCounting,
+    runStubLMCapturing,
   )
 where
 
@@ -63,7 +64,6 @@ import Baikai.Content (UserContent (..))
 import Baikai.Message (AssistantPayload (..), Message (..), UserPayload (..))
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (ToJSON)
-import Data.Char (isDigit)
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef')
 import Data.Maybe (fromMaybe)
@@ -167,24 +167,51 @@ runStubLMCounting ref = interpret $ \_ -> \case
     pure (mkResponse (respondTo ctx))
   Stream {} -> pure []
 
--- | Decide the response body for a request from its rendered context.
+-- | Like 'runStubLM' but records each request's full rendered text (system prompt +
+-- user messages) into a test-readable 'IORef', so a test can assert which signals
+-- (dataset summary, field names, tip) reached the model.
+runStubLMCapturing :: (IOE :> es) => IORef [Text] -> Eff (LLM : es) a -> Eff es a
+runStubLMCapturing ref = interpret $ \_ -> \case
+  Complete _ ctx _ -> do
+    liftIO (modifyIORef' ref (++ [fullRequestText ctx]))
+    pure (mkResponse (respondTo ctx))
+  Stream {} -> pure []
+
+-- | The full rendered request: system prompt followed by every user message's text.
+fullRequestText :: Context -> Text
+fullRequestText ctx =
+  T.intercalate "\n" (maybe [] pure (ctx ^. #systemPrompt) ++ allUserText ctx)
+
+-- | All user message texts in a request.
+allUserText :: Context -> [Text]
+allUserText ctx = [userPayloadText u | UserMessage u <- V.toList (ctx ^. #messages)]
+
+-- | Decide the response body for a request from its rendered context. The grounded
+-- proposer (EP-19) issues several distinct sub-program requests; each is recognised
+-- by the output-field marker its guide carries in the system prompt (@[[ ## name ## ]]@).
 respondTo :: Context -> Text
 respondTo ctx
-  | isProposer ctx = markerBody [("proposedInstruction", proposerInstruction (parseVariant lastUser))]
+  | sysMarker "programDescription" =
+      markerBody [("programDescription", "This program classifies the sentiment of a sentence.")]
+  | sysMarker "observations" =
+      markerBody [("observations", "The rows pair short film reviews with positive or negative labels.")]
+  | sysMarker "summary" =
+      markerBody [("summary", "A sentiment dataset of short film reviews labelled positive or negative.")]
+  | sysMarker "moduleDescription" =
+      markerBody [("moduleDescription", "This module assigns a sentiment label to the input sentence.")]
+  | sysMarker "proposedInstruction" =
+      markerBody [("proposedInstruction", groundedInstruction ctx)]
   | otherwise = markerBody [("sentiment", answerSentiment ctx)]
   where
-    lastUser = lastUserText ctx
+    sysMarker name = maybe False (T.isInfixOf ("## " <> name <> " ##")) (ctx ^. #systemPrompt)
 
--- | A request is an instruction-proposer request iff its output guide asks for a
--- @proposedInstruction@ field.
-isProposer :: Context -> Bool
-isProposer ctx = maybe False (T.isInfixOf "proposedInstruction") (ctx ^. #systemPrompt)
-
--- | The candidate instruction for a proposer variant: variant 0 is the magic
--- @RULE@-bearing one; everything else is bland.
-proposerInstruction :: Int -> Text
-proposerInstruction 0 = ruleInstruction
-proposerInstruction _ = blandInstruction
+-- | The grounded proposer's instruction choice: the "magic" @RULE@-bearing
+-- instruction when the request carries the /creative/ tip (so exactly one candidate
+-- per node proposes it), otherwise a bland one.
+groundedInstruction :: Context -> Text
+groundedInstruction ctx
+  | T.isInfixOf "creative" (lastUserText ctx) = ruleInstruction
+  | otherwise = blandInstruction
 
 -- | Classify the actual input given the demos and instruction in the context.
 answerSentiment :: Context -> Text
@@ -283,17 +310,6 @@ markerValue name body =
     _ -> ""
   where
     isMarker l = T.strip l == "[[ ## " <> name <> " ## ]]"
-
--- | Read the integer following a @variant:@ marker in proposer input text.
-parseVariant :: Text -> Int
-parseVariant t =
-  let (_, rest) = T.breakOn "variant:" t
-   in if T.null rest
-        then 0
-        else
-          let after = T.strip (T.drop (T.length "variant:") rest)
-              digits = T.takeWhile isDigit after
-           in if T.null digits then 0 else read (T.unpack digits)
 
 -- ---------------------------------------------------------------------------
 -- Response construction

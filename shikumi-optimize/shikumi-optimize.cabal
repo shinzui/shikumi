@@ -43,6 +43,11 @@ library
     Shikumi.Optimize.Ensemble
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.LabeledFewShot
+    Shikumi.Optimize.Propose
+    Shikumi.Optimize.Propose.Grounded
+    Shikumi.Optimize.Propose.Summarize
+    Shikumi.Optimize.Propose.Tips
+    Shikumi.Optimize.Propose.Types
     Shikumi.Optimize.Search
     Shikumi.Optimize.Types
 
@@ -70,6 +75,7 @@ test-suite shikumi-optimize-test
     InstructionSpec
     LabeledFewShotSpec
     OptimizeSpec
+    ProposeSpec
     StubLM
 
   build-depends:

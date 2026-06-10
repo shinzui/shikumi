@@ -94,7 +94,7 @@ rejected: COPRO consumes the same proposer; defining it once as its own plan pre
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 18 | Reward-driven self-refinement modules | docs/plans/18-reward-driven-self-refinement-modules.md | EP-14 (MP-2) | None | Complete |
-| 19 | Grounded instruction proposer | docs/plans/19-grounded-instruction-proposer.md | None | EP-16 (MP-2) | Not Started |
+| 19 | Grounded instruction proposer | docs/plans/19-grounded-instruction-proposer.md | None | EP-16 (MP-2) | Complete |
 | 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Not Started |
 | 21 | COPRO instruction optimizer | docs/plans/21-copro-instruction-optimizer.md | EP-19 | None | Not Started |
 | 22 | GEPA reflective optimizer | docs/plans/22-gepa-reflective-optimizer.md | EP-16 (MP-2), EP-19 | EP-18 | Not Started |
@@ -188,8 +188,8 @@ inherits from MasterPlan 2. Each child plan embeds the exact current signatures 
 
 - [x] EP-18: `refine`, `bestOfN`, `multiChainComparison` as first-class composable Programs (2026-06-09)
 - [x] EP-18: Reward-driven retry demonstrably improves a deliberately-weak program's score (2026-06-09)
-- [ ] EP-19: Grounded proposer — dataset/program/module summarizers as typed Programs
-- [ ] EP-19: Per-node field-metadata accessor; proposer consumes real field names + tips + history
+- [x] EP-19: Grounded proposer — dataset/program/module summarizers as typed Programs (2026-06-09)
+- [x] EP-19: Per-node field-metadata accessor; proposer consumes real field names + tips + history (2026-06-09)
 - [ ] EP-20: MIPROv2 joint instruction×demo search with minibatch evaluation
 - [ ] EP-20: Held-out score lift over the V1 instruction search baseline on a fixture task
 - [ ] EP-21: COPRO coordinate-ascent instruction optimizer with breadth/depth control
@@ -321,6 +321,22 @@ they refine the integration contracts above.
   new `Program` GADT constructor** — they are `Embed` leaves serializing as `ShapeEmbed` — so the
   V1 param/shape/serialization surface is unchanged, the pattern EP-20/EP-22 should follow when
   they need a node that does "more" than a bare `Predict`.
+
+- **EP-19 landed (2026-06-09); the proposer contract EP-20/EP-21/EP-22 depend on is now
+  concrete.** The shared surface lives in `Shikumi.Optimize.Propose`:
+  `proposeInstructions :: (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es) => Dataset i
+  o -> ProposeRequest i o -> Eff es ProposeResult`, where `ProposeRequest` carries the program,
+  target-node index, current instruction, per-node history (`[PastInstruction]`), bootstrapped
+  demos, `numCandidates`, `tipIndex`, and `viewBatch`; `ProposeResult { rankedCandidates ::
+  [Text] }` always retains the current instruction (deduped, first). Integration point #3 is
+  realized as `programFieldNames :: Program i o -> [NodeFieldNames]` (one entry per `Predict`
+  node, `foldParams`-aligned), delegating to EP-16's `nodeFieldsIndexed`; EP-20/EP-21/EP-22
+  consume *this* accessor (or the field names already embedded in `ProposeRequest`'s
+  `moduleSignature`), never a typed `Signature` accessor. Two facts for the consumers: (a) the
+  proposer makes exactly `4 + numCandidates` LM calls per node, so a budget-bounded optimizer
+  guards `calls + (4+n) <= maxLmCalls` before calling it (as the re-pointed `instructionSearch`
+  does); (b) `renderProgramPseudo` and `datasetSummary` are exported for GEPA (EP-22) reflection
+  context. The blind V1 `ProposeIn`/`ProposeOut`/`proposeInstruction` is removed.
 
 ## Decision Log
 

@@ -11,6 +11,7 @@ import EnsembleSpec qualified
 import InstructionSpec qualified
 import LabeledFewShotSpec qualified
 import OptimizeSpec qualified
+import ProposeSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -23,5 +24,6 @@ main =
         BootstrapSpec.tests,
         InstructionSpec.tests,
         EnsembleSpec.tests,
+        ProposeSpec.tests,
         AcceptanceSpec.tests
       ]

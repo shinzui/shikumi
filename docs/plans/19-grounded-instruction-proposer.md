@@ -77,22 +77,26 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: per-node field-metadata accessor wired (consume EP-16's `nodeFieldsIndexed` if
-      present; otherwise the in-package fallback `programFieldNames`), and the
-      `programDescription` summarizer (a typed `Program ProgramDescribeIn ProgramDescribeOut`)
-      with a hermetic unit test proving the rendered prompt carries the field names.
-- [ ] M2: the dataset summarizer (`datasetSummary` over sampled examples, a typed
-      `Program DatasetDescribeIn DatasetDescribeOut`), the `tipBank`, and the
-      instruction-history rendering (`renderHistory`), each with a hermetic unit test.
-- [ ] M3: the assembled `proposeInstructions` returning ranked candidates with the current
-      instruction always retained; module/role describer `moduleDescription`; the final
-      `GenerateInstructionIn`/`ProposeResult` records; the acceptance test (rendered prompt
-      contains dataset summary + field names + tip; N distinct candidates) and the
-      MIPROv2-shaped-caller compile/run test.
-- [ ] Final: `instructionSearch` re-pointed at `proposeInstructions` (V1's `ProposeIn`/
-      `ProposeOut` retained as a thin shim or removed with the spec updated); `cabal test
-      shikumi-optimize` and `cabal test all` green inside `nix develop .#ghc9124`; plan's
-      living sections updated; commit with MasterPlan/ExecPlan/Intention trailers.
+- [x] M1: (2026-06-09) per-node field-metadata accessor `programFieldNames` wired to EP-16's
+      `nodeFieldsIndexed` (EP-16 is merged, so the preferred path is used, not the fallback);
+      `renderProgramPseudo`; `programDescriber` (typed `Program ProgramDescribeIn
+      ProgramDescribeOut`). `Propose.M1` tests prove the field names are recovered (`["text"]`
+      → `["sentiment"]`), the pseudo-code is `predict(text) -> sentiment`, and the describer
+      prompt carried the pseudo-code.
+- [x] M2: (2026-06-09) `datasetSummary` (two-step `datasetDescriber` →
+      `observationSummarizer`), the `tipBank`/`tipAt`, and `renderHistory`. `Propose.M2` tests
+      prove the summary reaches the describer (sees `good film`), tips select deterministically
+      and wrap, and history renders/empties as specified.
+- [x] M3: (2026-06-09) `moduleDescriber`, `instructionGenerator`, `GenerateInstructionIn`/
+      `GenerateInstructionOut`, `ProposeRequest`/`ProposeResult`, and the `proposeInstructions`
+      driver (current instruction always retained, candidates deduped). `Propose.M3` tests prove
+      distinct candidates retaining the current one, that the dataset summary + field names + tip
+      reach the generator, and that a MIPROv2-shaped caller compiles and runs.
+- [x] Final: (2026-06-09) `instructionSearch` re-pointed at `proposeInstructions`; V1's
+      `ProposeIn`/`ProposeOut`/`proposeInstruction` **removed** (the grounded
+      `GenerateInstructionIn`/`Out` replaces them, still emitting `proposedInstruction`).
+      `cabal test shikumi-optimize` (18) and `cabal test all` green inside `nix develop
+      .#ghc9124`; living sections updated; committed with MasterPlan/ExecPlan/Intention trailers.
 
 
 ## Surprises & Discoveries
@@ -100,7 +104,32 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-16 was already merged, so `programFieldNames` uses the preferred path, never the
+  fallback.** `programFieldNames = map convert . nodeFieldsIndexed`. One wrinkle: EP-16's
+  `NodeFields` record carries field selectors named `inputFieldNames`/`outputFieldNames` —
+  identical to this plan's `NodeFieldNames`. Importing `NodeFields (..)` made those selectors
+  ambiguous, so the import is `NodeFields (NodeFields)` (constructor only) and `convert` pattern-
+  matches positionally. Evidence: the ambiguous-occurrence GHC error, resolved by the
+  constructor-only import.
+- **The stub routes each grounded sub-program by its output *marker*, not by prose substring.**
+  The first cut keyed on substrings like `"observations"`/`"summary"`, but the
+  `observationSummarizer` instruction contains *both* words, so it was mis-routed. The fix keys
+  on the rendered output-guide marker `[[ ## <field> ## ]]` (e.g. `## summary ##`), which is
+  unambiguous because each sub-program's guide names exactly its own output field. The grounded
+  `instructionGenerator` keeps DSPy's `proposedInstruction` output field, so the existing
+  proposer-recognition still works.
+- **The re-point makes `instructionSearch` carry `(ToJSON i, ToJSON o)`.** `proposeInstructions`
+  renders dataset rows via `encodeToLazyText`, so it needs `ToJSON i`/`o`; the `Optimizer` type
+  itself is unchanged (those constraints live on the `instructionSearch` smart constructor and are
+  captured by the closure), matching how `labeledFewShot`/`bootstrapFewShot` already constrain
+  their constructors. All callers (`InstructionSpec`, `AcceptanceSpec`) use `Sentence`/`Label`,
+  which are `ToJSON`, so nothing downstream broke.
+- **Budget accounting for the proposer is a fixed per-node cost, guarded before the call.** The
+  grounded proposer makes exactly `4 + proposalsPerNode` LM calls per node. `instructionSearch`
+  checks `calls + (4 + proposalsPerNode) <= maxLmCalls` *before* proposing; if it does not fit,
+  the node keeps its current instruction (no partial proposal). This preserves the existing
+  "respects the LM-call budget" test (`maxLmCalls = 6` → the node skips proposing and only the
+  current instruction is scored, so the recorded count stays ≤ 6).
 
 
 ## Decision Log
@@ -152,6 +181,25 @@ Record every decision made while working on the plan.
   index keeps tip selection reproducible and lets a search vary tips across rounds by varying
   the index, while a hermetic test can pin it.
   Date: 2026-06-09.
+- Decision: **The N candidates are made distinct by varying the tip per candidate**
+  (`tip = tipAt (tipIndex + j)` for candidate `j`), and the stub keys its "magic" instruction
+  off the *creative* tip. Rationale: under a deterministic stub the proposer must produce
+  *distinct* candidates without an RNG; per-candidate tip variation is DSPy's own mechanism and
+  is fully reproducible. One candidate per node therefore carries the creative tip and proposes
+  the `RULE`-bearing instruction, which is exactly what `InstructionSpec`/`AcceptanceSpec` rely on.
+  Date: 2026-06-09.
+- Decision: **Remove V1's `ProposeIn`/`ProposeOut`/`proposeInstruction` rather than keep a
+  shim.** Rationale: no code outside `Instruction.hs` imported them (verified by grep across the
+  workspace), and the grounded `GenerateInstructionIn`/`Out` is a strict superset; a shim would
+  be dead surface. `instructionSearch` is now the module's only export.
+  Date: 2026-06-09.
+- Decision: **The public `Shikumi.Optimize.Propose` re-export lists names explicitly rather than
+  re-exporting whole sub-modules.** Rationale: the internal describer records
+  (`ProgramDescribeIn`, `ModuleDescribeIn`, …) share field names (`programCode`,
+  `programDescription`), so a `module X` wildcard re-export would create conflicting field
+  exports. The curated list exposes only the consumer-facing surface (`proposeInstructions`,
+  `ProposeRequest`/`ProposeResult`, `programFieldNames`/`NodeFieldNames`, the history vocabulary,
+  the tips, and `renderProgramPseudo`/`datasetSummary` for GEPA). Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -159,7 +207,30 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** The blind V1 proposer is replaced by a grounded one. Delivered under
+`shikumi-optimize/src/Shikumi/Optimize/Propose/`:
+
+- `Types.hs` — `NodeFieldNames`/`programFieldNames` (integration point #3, via EP-16's
+  `nodeFieldsIndexed`), `moduleSignatureAt`, `PastInstruction`/`renderHistory`,
+  `ProposeRequest`/`ProposeResult`.
+- `Tips.hs` — the deterministic, index-addressable `tipBank`/`tipAt`.
+- `Summarize.hs` — `renderProgramPseudo` and the typed sub-programs `programDescriber`,
+  `datasetDescriber`, `observationSummarizer` (+ `datasetSummary`), `moduleDescriber`.
+- `Grounded.hs` — `instructionGenerator` and the `proposeInstructions` driver.
+- `Propose.hs` — the single-import public surface.
+
+`instructionSearch` (`Instruction.hs`) now sources candidates from `proposeInstructions`; V1's
+blind predictor is gone. Tests: 3 new `Propose.*` groups (8 cases) and the full
+`shikumi-optimize` suite (18) green, plus `cabal test all` across the workspace. The headline
+purpose is met — the M3 capture test reads the prompt the final generator received and asserts it
+carries the dataset summary, the node's real field names (`predict(text) -> sentiment`), and the
+selected tip, proving the proposer is genuinely grounded rather than blind.
+
+Gaps / future enhancements (noted, not blocking): `datasetSummary` uses a single observation batch
+(DSPy iterates with prior-observation refinement); the dataset summary is recomputed per node
+inside `proposeInstructions` (a caching enhancement the Speed-audit note flags). The downstream
+contract for EP-20/EP-21/EP-22 is the `proposeInstructions` surface + `programFieldNames`; the
+MIPROv2-shaped caller test demonstrates it compiles and runs before EP-20 exists.
 
 
 ## Context and Orientation
