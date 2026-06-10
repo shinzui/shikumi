@@ -26,7 +26,7 @@ The packages, at a glance:
 | `shikumi-trace` (`-otel`) | Hierarchical tracing, trace files, deterministic replay, OpenTelemetry export. |
 | `shikumi-eval` | `Dataset` / `Metric` / `Report` and the evaluation runner. |
 | `shikumi-compile` | Prompting strategies (zero-shot / few-shot / CoT / RAG) compiled into a program. |
-| `shikumi-optimize` | Four optimizers that search for better demos and instructions. |
+| `shikumi-optimize` | Nine optimizers that search for better demos and instructions (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN). |
 | `shikumi-tools` | Typed tools and the ReAct agent loop. |
 | `shikumi-cli` | The `shikumi` executable: `eval` / `trace` / `optimize` / `replay`. |
 | `shikumi-jitsurei` | 実例 — runnable, offline worked examples of everything above. |

@@ -24,10 +24,10 @@ you want, jump straight to the relevant reference.
 | # | Guide | What it covers |
 |---|---|---|
 | 4 | [Signatures & schemas](./signatures-and-schemas.md) | How a record becomes a JSON schema, how a reply becomes a typed value, and the two adapters that bridge the wire. |
-| 5 | [Programs & combinators](./programs-and-combinators.md) | The `Program` GADT deep embedding: run it, rewrite it, serialize it. Every combinator explained. |
+| 5 | [Programs & combinators](./programs-and-combinators.md) | The `Program` GADT deep embedding: run it, rewrite it, serialize it. Every combinator explained — plus the reward-driven self-refinement modules (`bestOfN` / `refine` / `multiChainComparison`). |
 | 6 | [Effects & the runtime](./effects-and-runtime.md) | The `LLM` effect over baikai, resilience (retries/rate-limit/budget), the effect stack, and *why shikumi code never carries `IOE`*. |
 | 7 | [Caching, tracing & replay](./caching-tracing-replay.md) | The `interpose` pattern, content-addressed cache keys, the span tree, and deterministic replay. |
-| 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the four optimizers — with serialization. |
+| 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the nine optimizers (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN) — with serialization. |
 | 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, and an agent loop that is itself a `Program`. |
 | 10 | [The CLI](./cli.md) | `eval` / `trace` / `optimize` / `replay`, all runnable offline. |
 

@@ -212,6 +212,40 @@ constrained to exactly the executor's effect row, it runs under the ordinary
 parameter traversal (no `Params`) and serializes as `ShapeEmbed`. ReAct agents are built on
 this.
 
+### Reward-driven self-refinement
+
+Three **inference-time** modules wrap any `Program i o` to steer its re-runs by *how good the
+answer is*. They share a reward vocabulary (`Shikumi.Reward`): a `Reward o` is a function
+scoring a single output, built with `mkReward (o -> Double)` or `boolReward (o -> Bool)`. Each
+module is itself an ordinary `Program i o` built from `Embed` (no new GADT constructor), so it
+runs under the unchanged executors, composes with every combinator, and carries no `Params`.
+
+```haskell
+bestOfN :: Int -> Double -> Reward o -> Program i o -> Program i o
+refine  :: Int -> Double -> Reward o -> Program i o -> Program i o
+multiChainComparison
+  :: (…) => Int -> Program i (WithReasoning o) -> Signature (MultiChainInput i o) o2 -> Program i o2
+```
+
+- **`bestOfN n threshold reward p`** — run `p` up to `n` times at *spread* sampling temperatures
+  (so the attempts genuinely differ), score each output, and return the highest-scoring one —
+  short-circuiting as soon as one clears `threshold`.
+- **`refine n threshold reward p`** — run `p`; on a sub-threshold output, ask an LM to write a
+  textual critique ("advice") and feed it into the next attempt, returning the best seen. Where
+  `bestOfN` re-samples, `refine` *learns from the failure*.
+- **`multiChainComparison m reasoner synthSig`** — run `m` independent reasoning chains, then make
+  one final synthesis call shown all `m` candidates and asked for a single corrected consensus.
+
+```haskell
+robust = bestOfN 5 1.0 (boolReward isValid) (predict extractSig)   -- keep the first valid extraction
+```
+
+Per-attempt temperature flows through the same `TempSchedule` channel `majorityVote` uses, so
+the modules "light up" with distinct per-sample temperatures once a router is installed (see
+[Effects & the runtime → Ambient model routing](./effects-and-runtime.md#ambient-model-routing)).
+The reward/critique vocabulary is shared with GEPA's `FeedbackMetric`
+([Evaluation & optimization](./evaluation-and-optimization.md#optimization-shikumi-optimize)).
+
 ---
 
 ## The two executors

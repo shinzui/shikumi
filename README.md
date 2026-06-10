@@ -274,8 +274,13 @@ This is the payoff of the GADT deep embedding: an optimizer **traverses and rewr
 node's parameters** (its instruction override and few-shot demos) as data, without runtime
 reflection — then serializes the tuned parameter vector. A program's parameter count equals
 its number of `Predict` nodes; `foldParams` reads them, `mapParamsAt n` edits node *n*, and
-`programParams` / `setProgramParams` save and load them. Four optimizers ship: `labeledFewShot`,
-`bootstrapFewShot`, `instructionSearch`, and `ensembleSearch`.
+`programParams` / `setProgramParams` save and load them. Nine optimizers ship — demo selection
+(`labeledFewShot`, `bootstrapFewShot`, `bootstrapRandomSearch`, `knnFewShot`), instruction search
+(`instructionSearch`, `copro`), joint instruction×demo search (`miprov2`), reflective evolution
+(`gepa`), and ensembling (`ensembleSearch`) — all at DSPy parity, all returning the same
+`CompiledProgram`. The instruction optimizers share one grounded LM proposer, and inference-time
+self-refinement modules (`bestOfN`, `refine`, `multiChainComparison`) wrap any program to steer
+its re-runs by a reward.
 
 ### 7. Typed tools and a ReAct agent loop
 
@@ -397,11 +402,12 @@ clock effect (`Shikumi.Effect.Time`) was added as foundational plumbing.
 | **Signatures & structured I/O** — Generic-derived schema, total decode, the `Adapter` seam | `shikumi` | ✅ Done |
 | **Typed program core** — `Program i o` GADT, `runProgram`, `predict`, `chainOfThought`, parameter traversal & serialization | `shikumi` | ✅ Done |
 | **Combinators** — `>>>`, `mapP`, `parallel2`, `retry`, `validate`, `majorityVote`, `ensemble` | `shikumi` | ✅ Done |
+| **Self-refinement** — `bestOfN`, `refine`, `multiChainComparison` over a `Reward` | `shikumi` (`Shikumi.Refine`) | ✅ Done |
 | **Caching** — content-addressed key, `Cache` effect, in-memory + persistent backends | `shikumi-cache`, `-redis`, `-postgres` | ✅ Done — in-memory & SQLite (`shikumi-cache`), Redis, Postgres |
 | **Hierarchical tracing, OTel, deterministic replay** | `shikumi-trace`(`-otel`) | ✅ Done |
 | **Evaluation** — `Dataset` / `Metric` / `evaluate` / `Report` | `shikumi-eval` | ✅ Done |
 | **Compiler** — zero-shot / few-shot / CoT / RAG | `shikumi-compile` | ✅ Done |
-| **Optimizer** — demo selection, bootstrap few-shot, instruction & ensemble search | `shikumi-optimize` | ✅ Done |
+| **Optimizer** — demo selection, bootstrap few-shot, KNN few-shot, bootstrap random search, instruction search, COPRO, MIPROv2, GEPA, ensemble search | `shikumi-optimize` | ✅ Done — DSPy parity |
 | **Typed tools + ReAct agents** | `shikumi-tools` | ✅ Done |
 | **Ambient model routing** — pick a real model by name; live native `responseFormat` + per-sample temperature | `shikumi` (`Shikumi.Routing`) | ✅ Done |
 | **Embeddings backend** — OpenAI-compatible `/v1/embeddings`; `semanticSimilarity` runs end-to-end | *baikai*, `shikumi-eval` | ✅ Done |
