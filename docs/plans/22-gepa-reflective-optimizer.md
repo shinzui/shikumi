@@ -71,23 +71,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Feedback capture. Run the student under EP-16's `runProgramTraced` + `Feedback`,
-      derive a per-node textual critique from a *feedback metric*, and accumulate it into a
-      `FeedbackLog` keyed by `NodePath`. Hermetic test: a deliberately-weak node accumulates
-      a non-empty critique whose `NodePath` matches that node's `foldParams` index.
-- [ ] M2: Reflective mutation proposer. A typed Shikumi `Program ReflectIn ReflectOut` that,
-      given a node's current instruction, its accumulated critiques, and the EP-19 program/
-      dataset summaries, proposes a better instruction; apply it to a selected node via
-      `mapParamsAt`. Hermetic test: a node whose critique says "be more specific" receives a
-      mutated instruction, asserted via `foldParams`.
-- [ ] M3: Pareto frontier + parent sampling + evolution loop honoring V1 `Budget`; return the
-      best `CompiledProgram`. Hermetic acceptance: held-out `aggregateScore` strictly rises;
-      the frontier has ≥1 non-dominated candidate; `encodeCompiled`/`decodeCompiledOnto`
-      round-trips the result.
-- [ ] Final: `Shikumi.Optimize.GEPA` + `Shikumi.Optimize.Pareto` added, re-exported from
-      `Shikumi.Optimize`; `cabal test shikumi-optimize` and `cabal test all` green inside
-      `nix develop .#ghc9124`; living sections updated; commit carries MasterPlan/ExecPlan/
-      Intention trailers.
+- [x] M1: (2026-06-09) Feedback capture. `captureFeedback` runs the student per example inside
+      EP-16's `runFeedback`, derives a critique from the `FeedbackMetric`, and (when non-empty)
+      attaches it to every node keyed by its `NodePath` (`programNodePaths`), returning the
+      `FeedbackLog` + per-example score vector. Test: the weak node accumulates "be more specific"
+      under its node-0 `NodePath`. (Program-level critique attachment — the documented M1 baseline;
+      node-specific sub-trace critique deferred. The trace *tree* is not consumed, only the
+      `Feedback`/`NodePath` channel.)
+- [x] M2: (2026-06-09) `ReflectIn`/`ReflectOut` + default `reflectiveProposer`; `mutateNode`
+      reflects on a node's critiques and overwrites its instruction via `mapParamsAt` (a node with
+      no feedback is left untouched). Test: node 0's critique → `Just ruleInstruction`, asserted
+      via `foldParams`.
+- [x] M3: (2026-06-09) `Shikumi.Optimize.Pareto` (`Candidate`/`dominates`/`paretoFrontier`/
+      `sampleParent`, pure, seeded LCG) + the `gepa` evolution loop honoring `Budget` (full step =
+      `2n+1` calls, gated). Held-out lift (0.0 → 1.0), pure frontier unit tests, and
+      `encodeCompiled`/`decodeCompiledOnto` round-trip all pass.
+- [x] Final: (2026-06-09) `Shikumi.Optimize.GEPA` + `Shikumi.Optimize.Pareto` added, re-exported
+      from `Shikumi.Optimize`; `shikumi-trace` added to the package deps; `cabal test
+      shikumi-optimize` (35) and `cabal test all` green; living sections updated; committed with
+      MasterPlan/ExecPlan/Intention trailers.
 
 
 ## Surprises & Discoveries
@@ -95,7 +97,30 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **EP-16's published surface matches the plan; the trace *tree* is not actually needed for the
+  M1 baseline.** EP-16 ships `runProgramTraced :: (LLM, Trace, CurrentNode, Error) => ...`,
+  `runTrace :: (Prim, Time) => ...`, `runCurrentNode :: Prim => ...`, and the `Feedback` channel
+  (`attachFeedback`/`feedbackFor`/`runFeedback`/`FeedbackLog`) plus `programNodePaths`. But the
+  program-level-critique baseline the plan endorses attaches the *same* critique to every node, so
+  `captureFeedback` only needs `runFeedback` (Prim) + `runProgram` + `programNodePaths` — no
+  `runTrace`/`runCurrentNode`/`tracedNodeLLM` stack. That keeps GEPA's body simple and its row at
+  `(LLM, Error, Prim)`, well inside the `Optimizer` row. Node-specific critique from per-node
+  sub-outputs (which *would* need the trace tree) is the deferred enhancement.
+- **GEPA needs no `(ToPrompt i, ToPrompt o)` constraints.** The plan added them for rich fallback
+  summaries; the in-package fallbacks only use the node count and dataset size (plain `Int`s), so
+  `gepa :: Program ReflectIn ReflectOut -> FeedbackMetric o -> Budget -> Optimizer i o` is fully
+  unconstrained on `i`/`o`. EP-19's richer summarizers can be wired later for grounding without a
+  signature change.
+- **`shikumi-optimize` gained a `shikumi-trace` dependency** (library + test). No cycle:
+  `shikumi-trace` depends only on `shikumi`/`shikumi-eval`, not on `shikumi-optimize`.
+- **The reflective proposer reuses the `proposedInstruction` output field**, so the stub
+  recognises it the same way it recognises EP-19's grounded generator; GEPA's stub
+  (`runGepaStubLM`) returns the magic `RULE` instruction when the request's feedback asks the node
+  to be more *specific*, deterministically driving the held-out lift.
+- **The LCG (not splitmix) was used for `sampleParent`.** The MasterPlan floated a seeded
+  `splitmix` as a "free win"; a hand-rolled glibc LCG keeps the parent sampler deterministic with
+  no new dependency and is sufficient (sampling only affects diversification, not correctness).
+  Recorded in the Decision Log.
 
 
 ## Decision Log
@@ -144,6 +169,14 @@ Record every decision made while working on the plan.
   fully demonstrable without them; merge adds search complexity with no bearing on the
   acceptance criteria, and multimodality belongs to a separate MasterPlan. They can be added
   later additively without changing GEPA's public `Optimizer i o` surface. Date: 2026-06-09.
+- Decision (revised at implementation, 2026-06-09): **Use the EP-16 `Feedback`/`NodePath` channel
+  for program-level critique attachment, without consuming the trace tree.** Since the M1 baseline
+  attaches one critique per example to every node, `captureFeedback` runs the program under
+  `runFeedback` only (no `runTrace`/`runCurrentNode`/`tracedNodeLLM`), keeping its row at
+  `(LLM, Error, Prim)`. Node-specific critique via per-node sub-traces is deferred. Date: 2026-06-09.
+- Decision (2026-06-09): **`sampleParent` uses a hand-rolled glibc LCG, not splitmix.** Keeps the
+  parent sampler deterministic with no new dependency; sampling only affects diversification. The
+  MasterPlan's splitmix preference is a deferred quality lever. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -151,7 +184,24 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** GEPA ships as `Shikumi.Optimize.GEPA` (`gepa`/`reflectiveProposer`/
+`FeedbackMetric`/`ReflectIn`/`ReflectOut`/`captureFeedback`/`mutateNode`) and `Shikumi.Optimize.Pareto`
+(`Candidate`/`dominates`/`paretoFrontier`/`sampleParent`), both re-exported from `Shikumi.Optimize`
+and invoked through the unchanged `optimize`. The loop seeds a candidate from the student, samples
+a parent from the Pareto frontier (seeded LCG, biased toward column-winners), captures per-node
+feedback via EP-16's `Feedback`/`NodePath` channel, mutates a round-robin-selected node by
+reflection, scores the child, folds it into the frontier, and returns the best candidate as V1's
+`CompiledProgram` — never worse than the seed.
+
+The headline purpose is met: a weak program scores **0.0 → 1.0** on held-out after `gepa`; the
+mutation lands on the node whose critique said "be more specific" (asserted via `foldParams`); the
+pure Pareto tests prove `dominates`/`paretoFrontier`/`sampleParent`; and the result round-trips
+through serialization. `cabal test shikumi-optimize` is 35/35 green and `cabal test all` passes.
+
+Gaps / deferred (documented above): node-specific critique from per-node sub-traces (the
+program-level baseline is used); the DSPy merge step and multimodal proposer (out of scope);
+EP-19's richer summarizers (minimal in-package fallbacks are used); a seeded splitmix (the LCG is
+used). None affects the acceptance contract or the public `Optimizer i o` surface.
 
 
 ## Context and Orientation

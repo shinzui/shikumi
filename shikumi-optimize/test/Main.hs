@@ -9,6 +9,7 @@ import AcceptanceSpec qualified
 import BootstrapSpec qualified
 import CoproSpec qualified
 import EnsembleSpec qualified
+import GepaSpec qualified
 import InstructionSpec qualified
 import LabeledFewShotSpec qualified
 import Miprov2Spec qualified
@@ -29,5 +30,6 @@ main =
         ProposeSpec.tests,
         Miprov2Spec.tests,
         CoproSpec.tests,
+        GepaSpec.tests,
         AcceptanceSpec.tests
       ]

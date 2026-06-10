@@ -53,6 +53,9 @@ module StubLM
     -- * The joint instruction×demo task (EP-20)
     runJointStubLM,
     runJointStubLMCounting,
+
+    -- * The reflective task (EP-22, GEPA)
+    runGepaStubLM,
   )
 where
 
@@ -229,23 +232,45 @@ allUserText ctx = [userPayloadText u | UserMessage u <- V.toList (ctx ^. #messag
 -- (@[[ ## name ## ]]@). The @answerFn@ supplies the task-specific classification.
 respondWith :: (Context -> Text) -> Context -> Text
 respondWith answerFn ctx
-  | sysMarker "programDescription" =
+  | sysHasMarker "programDescription" ctx =
       markerBody [("programDescription", "This program classifies the sentiment of a sentence.")]
-  | sysMarker "observations" =
+  | sysHasMarker "observations" ctx =
       markerBody [("observations", "The rows pair short film reviews with positive or negative labels.")]
-  | sysMarker "summary" =
+  | sysHasMarker "summary" ctx =
       markerBody [("summary", "A sentiment dataset of short film reviews labelled positive or negative.")]
-  | sysMarker "moduleDescription" =
+  | sysHasMarker "moduleDescription" ctx =
       markerBody [("moduleDescription", "This module assigns a sentiment label to the input sentence.")]
-  | sysMarker "proposedInstruction" =
+  | sysHasMarker "proposedInstruction" ctx =
       markerBody [("proposedInstruction", groundedInstruction ctx)]
   | otherwise = markerBody [("sentiment", answerFn ctx)]
-  where
-    sysMarker name = maybe False (T.isInfixOf ("## " <> name <> " ##")) (ctx ^. #systemPrompt)
+
+-- | Whether the request's system prompt carries a @[[ ## name ## ]]@ output marker.
+sysHasMarker :: Text -> Context -> Bool
+sysHasMarker name ctx = maybe False (T.isInfixOf ("## " <> name <> " ##")) (ctx ^. #systemPrompt)
 
 -- | The default sentiment task's response decision.
 respondTo :: Context -> Text
 respondTo = respondWith answerSentiment
+
+-- | GEPA's reflective task. Like the sentiment task, but the reflective proposer
+-- (recognised by its @proposedInstruction@ output) returns the magic @RULE@
+-- instruction whenever the request's feedback asks the node to be more /specific/,
+-- and a bland instruction otherwise. So a node whose captured critique is "be more
+-- specific" gets mutated to the instruction that unlocks correct answers.
+runGepaStubLM :: Eff (LLM : es) a -> Eff es a
+runGepaStubLM = interpret $ \_ -> \case
+  Complete _ ctx _ -> pure (mkResponse (respondGepa ctx))
+  Stream {} -> pure []
+
+respondGepa :: Context -> Text
+respondGepa ctx
+  | sysHasMarker "proposedInstruction" ctx =
+      markerBody
+        [ ( "proposedInstruction",
+            if T.isInfixOf "specific" (lastUserText ctx) then ruleInstruction else blandInstruction
+          )
+        ]
+  | otherwise = markerBody [("sentiment", answerSentiment ctx)]
 
 -- | The grounded proposer's instruction choice: the "magic" @RULE@-bearing
 -- instruction when the request carries the /creative/ tip (so exactly one candidate

@@ -42,9 +42,11 @@ library
     Shikumi.Optimize.Bootstrap
     Shikumi.Optimize.COPRO
     Shikumi.Optimize.Ensemble
+    Shikumi.Optimize.GEPA
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.LabeledFewShot
     Shikumi.Optimize.MIPRO
+    Shikumi.Optimize.Pareto
     Shikumi.Optimize.Propose
     Shikumi.Optimize.Propose.Grounded
     Shikumi.Optimize.Propose.Summarize
@@ -61,6 +63,7 @@ library
     , shikumi
     , shikumi-compile
     , shikumi-eval
+    , shikumi-trace
     , text             ^>=2.1
     , vector
 
@@ -75,6 +78,7 @@ test-suite shikumi-optimize-test
     BootstrapSpec
     CoproSpec
     EnsembleSpec
+    GepaSpec
     InstructionSpec
     LabeledFewShotSpec
     Miprov2Spec
@@ -94,6 +98,7 @@ test-suite shikumi-optimize-test
     , shikumi-compile
     , shikumi-eval
     , shikumi-optimize
+    , shikumi-trace
     , tasty
     , tasty-hunit
     , text

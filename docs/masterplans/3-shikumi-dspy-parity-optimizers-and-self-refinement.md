@@ -97,7 +97,7 @@ rejected: COPRO consumes the same proposer; defining it once as its own plan pre
 | 19 | Grounded instruction proposer | docs/plans/19-grounded-instruction-proposer.md | None | EP-16 (MP-2) | Complete |
 | 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Complete |
 | 21 | COPRO instruction optimizer | docs/plans/21-copro-instruction-optimizer.md | EP-19 | None | Complete |
-| 22 | GEPA reflective optimizer | docs/plans/22-gepa-reflective-optimizer.md | EP-16 (MP-2), EP-19 | EP-18 | Not Started |
+| 22 | GEPA reflective optimizer | docs/plans/22-gepa-reflective-optimizer.md | EP-16 (MP-2), EP-19 | EP-18 | Complete |
 | 23 | KNN few-shot and bootstrap random search | docs/plans/23-knn-few-shot-and-bootstrap-random-search.md | EP-15 (MP-2) | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -193,7 +193,7 @@ inherits from MasterPlan 2. Each child plan embeds the exact current signatures 
 - [x] EP-20: MIPROv2 joint instruction×demo search with minibatch evaluation (2026-06-09)
 - [x] EP-20: Held-out score lift over the V1 instruction search baseline on a fixture task (2026-06-09)
 - [x] EP-21: COPRO coordinate-ascent instruction optimizer with breadth/depth control (2026-06-09)
-- [ ] EP-22: GEPA reflective evolution with per-node feedback and a Pareto frontier
+- [x] EP-22: GEPA reflective evolution with per-node feedback and a Pareto frontier (2026-06-09)
 - [ ] EP-23: KNNFewShot (embedding-similarity demos) + BootstrapFewShotWithRandomSearch
 
 
