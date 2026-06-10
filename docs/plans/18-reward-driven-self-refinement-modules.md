@@ -68,23 +68,27 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] **M1 — reward vocabulary + `bestOfN`.** `Shikumi.Reward` module exists (`Reward o`,
-  `mkReward`, `boolReward`, `Threshold`); `bestOfN` is a smart constructor producing a
-  `Program i o` built from an `Embed` node; hermetic test shows `bestOfN` returns the
-  highest-reward scripted sample and short-circuits on a pass.
-- [ ] **M2 — `refine`.** `refine` smart constructor producing a `Program i o` (an `Embed`
-  node) that, on a sub-threshold output, derives textual advice from the reward and threads it
-  into the next attempt; hermetic test shows it climbs from a failing to a passing output and
-  returns the best output seen.
-- [ ] **M3 — `multiChainComparison`.** `multiChainComparison` smart constructor producing a
-  `Program i o`; hermetic test shows it runs `M` reasoning attempts and the final synthesis
-  call sees all `M` candidates and returns the consensus.
-- [ ] **M4 — composition + acceptance.** A test nests a self-refinement module inside an
-  existing combinator (e.g. `mapP (bestOfN ...)` and `bestOfN ... >>> validate ...`) and shows
-  it runs unchanged through `runProgram`/`runProgramConc`, `programShape`, `foldParams`, and
-  `setProgramParams`; the MasterPlan acceptance test "reward-driven retry demonstrably improves
-  a deliberately-weak program's score" passes.
-- [ ] MasterPlan Progress checkboxes for EP-18 ticked; Decision Log / Surprises updated.
+- [x] **M1 — reward vocabulary + `bestOfN`.** (2026-06-09) `Shikumi.Reward` module exists
+  (`Reward o`, `mkReward`, `boolReward`); threshold is a plain `Double` argument. `bestOfN` is a
+  smart constructor producing a `Program i o` built from an `Embed` node; hermetic tests show
+  `bestOfN` returns the highest-reward scripted sample (all 3 attempts run), short-circuits on a
+  pass (stops after 2), and propagates the error when every attempt throws.
+- [x] **M2 — `refine`.** (2026-06-09) `refine`/`refineWith` smart constructors producing a
+  `Program i o` (an `Embed` node) that, on a sub-threshold output, derive textual advice from the
+  reward (via a typed `AdviceIn -> AdviceOut` `predict` node) and thread it into the next attempt;
+  hermetic test shows it climbs from a failing (`bad`) to a passing (`good`) output and the final
+  reward strictly exceeds the single-shot reward.
+- [x] **M3 — `multiChainComparison`.** (2026-06-09) `multiChainComparison` smart constructor
+  producing a `Program i o2`, plus `MultiChainInput`/`multiChainSig`; hermetic test shows it runs
+  `M` reasoning attempts and the final synthesis call sees all `M` "Student Attempt" candidates and
+  returns the modal consensus.
+- [x] **M4 — composition + acceptance.** (2026-06-09) Tests nest a module inside `mapP 2 (...)`
+  and `bestOfN ... >>> validate ...`, run under both `runProgram` and `runProgramConc` with
+  identical results, and assert `programShape == ShapeEmbed`, `foldParams == []`,
+  `setProgramParams [] == Right`. The MasterPlan acceptance test "reward-driven retry demonstrably
+  improves a deliberately-weak program's score" passes (single-shot 0.2 → wrapped 0.9).
+- [x] MasterPlan Progress checkboxes for EP-18 ticked; Decision Log / Surprises updated.
+  (2026-06-09)
 
 
 ## Surprises & Discoveries
@@ -92,7 +96,25 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Per-attempt temperature needs the router installed to actually reach the wire — and that is
+  the right hermetic seam.** `bestOfN`/`multiChainComparison` use the *exported*
+  `Shikumi.Program.withSampleTemp` (no `Eq o` constraint, unlike `MajorityVote 1 (TempFixed [t])`,
+  which the plan suggested but which would have forced an `Eq o` constraint the public signatures
+  do not carry). `withSampleTemp` only *stamps* the temperature onto the private metadata channel;
+  it becomes a real `Options.temperature` only once `routeLLM . runRouting model` (EP-14) is
+  installed below the stub. So the EP-18 tests install the production router over the stub exactly
+  as `RoutingSpec` does, and the stub reads `o ^. #temperature`. This means EP-18's headline
+  behaviour is *already live* against the merged EP-14 substrate — not merely stub-demonstrable.
+- **Advice is injected by rewriting the outgoing request, not via a metadata key.** The plan
+  floated stamping advice on an `Options.metadata` key; but unknown metadata keys do not reach the
+  model's prompt on a real provider. `withAdvice` instead `interpose`s on the `LLM` effect and
+  appends "Hint from a previous attempt: <advice>" to the request's *system prompt*, so the advice
+  is visible to both the hermetic stub and a real model. Recorded in the Decision Log below.
+- **`refine`'s advice generator carries only the reward and threshold, not the input.** Because
+  `refine :: Int -> Double -> Reward o -> Program i o -> Program i o` is deliberately
+  constraint-free on `i`, the wrapper cannot render the opaque input. `AdviceIn` therefore carries
+  the achieved reward and the target threshold (as `Text`); the advice is whole-program, the honest
+  analogue given the wrapper sees the inner program as an opaque `Embed` body.
 
 
 ## Decision Log
@@ -151,6 +173,24 @@ Record every decision made while working on the plan.
   should tolerate as many failures as it has attempts, but no more, so a program that always
   throws surfaces its error rather than silently returning nothing.
   Date: 2026-06-09.
+- Decision: **Use the exported `Shikumi.Program.withSampleTemp` to vary per-attempt temperature,
+  not a `MajorityVote 1 (TempFixed [t])` wrapper.** Rationale: `MajorityVote` carries an `Eq o`
+  constraint that `bestOfN`/`multiChainComparison`'s public signatures do not; `withSampleTemp ::
+  (LLM :> es) => Maybe Double -> Eff es a -> Eff es a` stamps the temperature with no such
+  constraint and is already the mechanism `MajorityVote` itself uses internally. Implemented; the
+  hermetic tests install the EP-14 router so the stamp becomes a real `Options.temperature`.
+  Date: 2026-06-09.
+- Decision: **Inject `refine` advice by `interpose`-ing on the `LLM` effect to append a hint to
+  the system prompt, rather than via an `Options.metadata` key.** Rationale: a private metadata key
+  would be stub-readable but invisible to a real provider's prompt; rewriting the outgoing
+  `Context.systemPrompt` works for both. `withAdvice` is scoped via `interpose` so it affects only
+  the advice-bearing attempt. Date: 2026-06-09.
+- Decision: **Add `bestOfNWith`/`refineWith` (explicit `failCount`/`TempSchedule`) and a
+  `multiChainSig` helper.** Rationale: the plan flagged the `With` variants as optional; they cost
+  nothing and make the budget/schedule explicit for callers. `multiChainSig` is needed because the
+  synthesis input `MultiChainInput i o` is not `Generic` (its `attempts` field is polymorphic in
+  `o`), so `mkSignature` cannot build its signature — `multiChainSig` constructs it directly with
+  the output-field metadata derived from `o2`. Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
@@ -158,7 +198,27 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-09.** All four milestones landed. Delivered:
+
+- `shikumi/src/Shikumi/Reward.hs` — the owned reward vocabulary (`Reward o`, `mkReward`,
+  `boolReward`) in the base `shikumi` package, as integration point #1 requires.
+- `shikumi/src/Shikumi/Refine.hs` — `bestOfN`/`bestOfNWith`, `refine`/`refineWith`,
+  `multiChainComparison` (+ `MultiChainInput`/`multiChainSig`), all built from the existing
+  `Embed` leaf with **no new `Program` GADT constructor** — so `paramsTraversal`, `programShape`,
+  `setProgramParams`, `runProgram`, and `runProgramConc` are untouched and the modules pass
+  through V1 serialization as `ShapeEmbed`.
+- `shikumi/test/RefineStub.hs` + `shikumi/test/RefineSpec.hs` — 8 hermetic tests, wired into
+  `shikumi/test/Main.hs` and the cabal suite.
+
+The headline purpose is met: the acceptance test shows a deliberately-weak classify program
+scoring **0.2 single-shot vs 0.9 wrapped in `bestOfN`** under a deterministic stub, and `refine`
+climbs `bad → good` (0.0 → 1.0) via advice. `cabal test shikumi` is 94/94 green and `cabal test
+all` passes every workspace suite, confirming the additive change regressed nothing.
+
+Gaps / accepted limitations (unchanged from the plan): the inner program's per-node `Params` are
+invisible to an optimizer *through* these wrappers (the `Embed` body is opaque) — acceptable for
+inference-time selection/retry modules and identical to how ReAct already behaves. EP-22 (GEPA)
+reuses `Shikumi.Reward` directly and must not define a parallel reward type.
 
 
 ## Context and Orientation

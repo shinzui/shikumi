@@ -11,6 +11,7 @@ import LiveSpec qualified
 import ModuleSpec qualified
 import ProgramAcceptanceSpec qualified
 import ProgramSpec qualified
+import RefineSpec qualified
 import ResilienceSpec qualified
 import RoutingSpec qualified
 import SchemaSpec qualified
@@ -37,6 +38,7 @@ main =
         ModuleSpec.tests,
         ProgramAcceptanceSpec.tests,
         CombinatorSpec.tests,
+        RefineSpec.tests,
         Shikumi.Effect.TimeSpec.tests,
         LiveSpec.tests
       ]

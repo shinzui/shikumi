@@ -93,7 +93,7 @@ rejected: COPRO consumes the same proposer; defining it once as its own plan pre
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 18 | Reward-driven self-refinement modules | docs/plans/18-reward-driven-self-refinement-modules.md | EP-14 (MP-2) | None | Not Started |
+| 18 | Reward-driven self-refinement modules | docs/plans/18-reward-driven-self-refinement-modules.md | EP-14 (MP-2) | None | Complete |
 | 19 | Grounded instruction proposer | docs/plans/19-grounded-instruction-proposer.md | None | EP-16 (MP-2) | Not Started |
 | 20 | MIPROv2 optimizer | docs/plans/20-miprov2-optimizer.md | EP-19 | EP-16 (MP-2) | Not Started |
 | 21 | COPRO instruction optimizer | docs/plans/21-copro-instruction-optimizer.md | EP-19 | None | Not Started |
@@ -186,8 +186,8 @@ inherits from MasterPlan 2. Each child plan embeds the exact current signatures 
 
 ## Progress
 
-- [ ] EP-18: `refine`, `bestOfN`, `multiChainComparison` as first-class composable Programs
-- [ ] EP-18: Reward-driven retry demonstrably improves a deliberately-weak program's score
+- [x] EP-18: `refine`, `bestOfN`, `multiChainComparison` as first-class composable Programs (2026-06-09)
+- [x] EP-18: Reward-driven retry demonstrably improves a deliberately-weak program's score (2026-06-09)
 - [ ] EP-19: Grounded proposer — dataset/program/module summarizers as typed Programs
 - [ ] EP-19: Per-node field-metadata accessor; proposer consumes real field names + tips + history
 - [ ] EP-20: MIPROv2 joint instruction×demo search with minibatch evaluation
@@ -232,6 +232,95 @@ they refine the integration contracts above.
   three define budget in terms of V1's `Budget {maxLmCalls, maxCandidates}` and prove a
   held-out lift under a deterministic stub LM (mirroring V1 EP-10's 0.0→1.0 style).
 
+- **Ecosystem audit (2026-06-09): Haskell has everything this MasterPlan needs, and the one
+  category it *lacks* a mature library for was already designed around.** The audit walked each
+  child plan against the dependency set already declared across the workspace cabals
+  (`shikumi`, `shikumi-eval`, `shikumi-optimize`):
+  - *EP-18 (self-refinement)* needs per-sample temperature (MP-2 EP-14 ambient routing, live
+    in `baikai`/`baikai-effectful`), reward functions (pure), and retry control (`effectful`).
+    **No new package.**
+  - *EP-19 (grounded proposer)* / *EP-21 (COPRO)* are text/structure manipulation and
+    coordinate ascent over candidate instructions — `text`, `containers`, and the existing
+    `foldM`-style search already in `Shikumi.Optimize.Instruction`/`Search`. **No new package.**
+  - *EP-20 (MIPROv2)* is the only place DSPy reaches for an external numeric library: CPython
+    DSPy drives the joint instruction×demo search with **Optuna's TPE** (Bayesian/tree-Parzen
+    sampler). Haskell has **no production-grade equivalent** (the nearest candidates —
+    `bayesopt`, `ad`, `hmatrix`/`hmatrix-gsl`, `statistics`+`math-functions` — are either
+    immature, GSL-FFI-heavy, or solve a different problem). This is the single genuine gap,
+    and it was already closed by design: EP-20's deterministic minibatch coordinate-descent
+    surrogate (above) needs **no sampler library** and buys offline, reproducible acceptance
+    tests that a stochastic TPE could not. The trade is sample-efficiency, not capability.
+  - *EP-22 (GEPA)* needs a Pareto frontier (pure dominance check over score tuples) and seeded
+    pseudo-randomness — supplied by the same hand-rolled LCG already used in
+    `Shikumi.Optimize.Ensemble` (`lcg`, glibc constants), deliberately *not* `random`/
+    `splitmix`, to keep runs reproducible with no IO entropy. **No new package.**
+  - *EP-23 (KNNFewShot)* needs embedding vectors (MP-2 EP-15 delivers `Text -> Vector Double`)
+    and nearest-neighbour selection by cosine similarity — and `cosineScore`/`cosineSimilarity`
+    over `vector` is **already implemented** in `Shikumi.Eval.Metric`. At few-shot demo-set
+    scale, brute-force cosine is correct and fast; a spatial index (`kdt`/ANN bindings) would
+    only matter at corpus scale and is explicitly *not* required. **No new package.**
+  Net: the planned dependency footprint is exactly the existing one (`effectful`, `vector`,
+  `containers`, `text`, `aeson`, `lens`/`generic-lens`, `time`, `stm`, plus the `baikai`
+  family). No required new library. (`hmatrix` and `random`/`splitmix` are *optional* quality/
+  speed levers — see the two entries below — not gaps.)
+
+- **Quality audit (2026-06-09): the package availability is not the quality question — the
+  search-fidelity question is, and it has exactly one soft spot.** Being offline/reproducible
+  is an acceptance-test property and says nothing about whether these optimizers match DSPy's
+  *result quality*. Walking it through:
+  - *KNN (EP-23)* brute-force cosine is **exact** — strictly higher quality than the ANN index
+    Python reaches for at scale. No risk.
+  - *GEPA (EP-22)* quality is reflective-mutation + Pareto-frontier driven (both fully
+    implementable); parent-sampling RNG only affects diversification. *Self-refinement (EP-18)*
+    is reward+temperature driven. *COPRO (EP-21)* is coordinate ascent in DSPy too — faithful.
+  - *MIPROv2 (EP-20)* is the **one genuine quality risk.** DSPy runs Optuna TPE over the
+    *joint* per-module `(instruction × demoset)` assignment vector precisely because the
+    objective is **not separable** (module B's best instruction depends on module A's output).
+    EP-20's currently-specified **greedy coordinate descent assumes separability** and can miss
+    inter-module interactions. Two facts defang this, neither needing Optuna: (1) at the modest
+    trial budgets MIPROv2 actually uses (its light/medium/heavy presets are tens of trials),
+    TPE's edge over seeded random search is small — the dominant quality levers are
+    **proposal quality (EP-19)** and **minibatch screening**, not the sampler; (2) a discrete/
+    categorical **TPE is ~150 lines of pure Haskell** (per-dimension score-weighted categorical
+    densities), so "no Optuna" ≠ "no TPE." **Recommended upgrade:** EP-20 should search the
+    *joint assignment vector globally* (seeded random + minibatch-screen + full-eval top-k,
+    optionally a discrete-TPE/evolutionary sampler) rather than single-axis greedy descent.
+    EP-20 already leaves this door open ("swap in a TPE-lite without changing the public
+    surface"); this entry promotes it from optional to the fidelity target. Free win: use a
+    **seeded `splitmix` (`random`)** for all stochastic search — deterministic, splittable, and
+    higher-quality exploration than the hand-rolled glibc LCG (which was chosen for simplicity,
+    not quality) currently specified in EP-22/EP-23.
+
+- **Speed audit (2026-06-09): wall-clock is LM-call-bound, so the sampler choice is
+  speed-irrelevant; the levers are concurrency, minibatching, and caching — and Haskell is
+  advantaged on the first.** A run's cost ≈ a few proposer calls + `numTrials × minibatchSize`
+  scoring calls + one full eval — hundreds of LM round-trips at ~0.3–3s each; the search
+  arithmetic runs in microseconds against that. The real speed levers: (1) **evaluation
+  concurrency** — IO-bound fan-out where GHC green threads over `effectful`/`Concurrent` beat
+  Python+GIL; the existing `evaluate` already does bounded-parallel scoring (**strength, not
+  gap**); (2) **minibatch screening** — EP-20 has it, but EP-21 deliberately scores
+  whole-dataset "for determinism," a false tradeoff (a *seeded* minibatch is equally
+  deterministic), so EP-21 should screen-then-confirm for real-workload speed; (3) **caching** —
+  joint/coordinate search re-evaluates heavily-overlapping `(node-config, example)` pairs, and
+  the workspace already ships `shikumi-cache`/`-redis`/`-postgres` **unused by these optimizer
+  plans**; wiring evaluation through it is the single biggest real-world speedup and is *wiring,
+  not a missing library*. The only CPU-bound spot is KNN cosine; `vector` is sub-millisecond at
+  demo scale, and `hmatrix` (BLAS) is the available 10–100× lever if a corpus-scale KNN ever
+  lands.
+
+
+- **EP-18 landed (2026-06-09); the reward vocabulary EP-22 consumes is now concrete.**
+  `Shikumi.Reward` exports `newtype Reward o = Reward { runReward :: o -> Double }` with `mkReward`
+  / `boolReward`, in the base `shikumi` package (integration point #1). EP-22 (GEPA) must
+  `import Shikumi.Reward` and reuse `Reward` (as score + critique `Text`), not define a parallel
+  reward type. Two implementation facts that refine the shared contracts: (a) per-attempt
+  temperature is varied via the *exported* `Shikumi.Program.withSampleTemp` (no `Eq o`
+  constraint), and only becomes a real `Options.temperature` with EP-14's `routeLLM . runRouting`
+  installed — so any optimizer that wants per-sample temperature must install the router beneath
+  the stub/provider (EP-22's internal sampling included); (b) the self-refinement modules add **no
+  new `Program` GADT constructor** — they are `Embed` leaves serializing as `ShapeEmbed` — so the
+  V1 param/shape/serialization surface is unchanged, the pattern EP-20/EP-22 should follow when
+  they need a node that does "more" than a bare `Predict`.
 
 ## Decision Log
 
@@ -261,8 +350,60 @@ they refine the integration contracts above.
 - Decision: Associate this MasterPlan with intention `intention_01ktq80q01emxtjfxzd3rw4tjs`;
   every commit carries `MasterPlan:`, `ExecPlan:`, and `Intention:` trailers.
   Date: 2026-06-09.
+- Decision: Implement the whole optimizer stack on the workspace's existing dependency set
+  (`effectful`, `vector`, `containers`, `text`, `aeson`, `lens`/`generic-lens`, `time`, `stm`,
+  baikai family) with no *required* new heavyweight numeric or optimization library; in
+  particular, do not adopt an Optuna-equivalent TPE sampler library for MIPROv2.
+  Rationale: an ecosystem audit (see Surprises & Discoveries, 2026-06-09) found Haskell has no
+  production-grade Optuna/TPE equivalent, and discrete TPE is ~150 LOC in-language when wanted.
+  Date: 2026-06-09.
+- Decision: Treat quality and speed — not offline-reproducibility — as the bar. Two consequent
+  adjustments to the child plans (to be cascaded): (a) **EP-20 (MIPROv2)** targets a *global*
+  joint-assignment search (seeded random + minibatch-screen + full-eval top-k, with an optional
+  in-house discrete-TPE/evolutionary sampler) rather than single-axis greedy coordinate
+  descent, because the joint objective is not separable across modules; (b) all stochastic
+  search adopts a **seeded `splitmix` (`random`)** generator instead of the hand-rolled glibc
+  LCG (EP-22/EP-23) — deterministic and splittable, but higher-quality exploration.
+  Rationale: greedy coordinate descent can miss inter-module interactions that DSPy's TPE
+  captures; the fix is algorithmic, not a dependency. The earlier "offline surrogate is enough"
+  framing conflated an acceptance property with result quality.
+  Date: 2026-06-09.
+- Decision: Make evaluation **caching** and **minibatch screening** first-class speed levers
+  across the optimizers. Wire optimizer evaluation through the existing `shikumi-cache`
+  family (re-evaluation of overlapping `(node-config, example)` pairs is the dominant avoidable
+  cost), and have **EP-21 (COPRO)** screen candidates on a *seeded* minibatch before confirming
+  survivors on the full dataset (its current whole-dataset-for-determinism stance is a false
+  tradeoff — a seeded minibatch is equally deterministic). Lean on `effectful`/`Concurrent`
+  bounded parallelism (already in `evaluate`) for LM-call fan-out. KNN reuses `cosineScore`
+  over `vector` (exact); `hmatrix`/BLAS is the deferred corpus-scale lever, not in scope now.
+  Rationale: optimizer wall-clock is LM-call-bound, so caching/concurrency/minibatching — not
+  the search arithmetic — determine real-world speed; the substrate already exists in-tree.
+  Date: 2026-06-09.
 
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+
+---
+
+**Revision 2026-06-09.** Added a Haskell-ecosystem feasibility audit answering "does Haskell
+have all the necessary packages to implement this MasterPlan efficiently?" Recorded the
+per-child-plan package walk in Surprises & Discoveries and the resulting "no required new
+heavyweight dependency" decision in the Decision Log. Conclusion: yes — the planned footprint is
+the existing workspace dependency set; the only category Haskell lacks (Optuna/TPE-style search)
+is ~150 LOC in-language when wanted.
+
+**Revision 2026-06-09 (quality & speed).** Reframed the audit: offline-reproducibility is an
+acceptance property, not a quality or speed argument. Added a **Quality audit** and a **Speed
+audit** to Surprises & Discoveries, and two Decision-Log entries. Findings: (1) quality has one
+real soft spot — EP-20 MIPROv2's greedy coordinate descent assumes module separability and can
+miss interactions DSPy's joint TPE captures; the fix is an in-house global/discrete-TPE search
+over the joint assignment vector plus seeded `splitmix`, no dependency; (2) speed is LM-call-
+bound, so the levers are evaluation concurrency (a Haskell strength), minibatch screening (extend
+to EP-21), and wiring the already-in-tree `shikumi-cache` family into optimizer evaluation —
+all wiring, not missing libraries; `hmatrix`/BLAS is a deferred corpus-scale KNN lever.
+**Cascade pending:** EP-20 (joint-search surrogate), EP-21 (minibatch screening), EP-22/EP-23
+(`splitmix`), and a cross-cutting cache-wiring note are flagged for the child plans but not yet
+edited there.

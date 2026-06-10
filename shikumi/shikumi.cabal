@@ -39,6 +39,8 @@ library
     Shikumi.Module
     Shikumi.Prelude
     Shikumi.Program
+    Shikumi.Refine
+    Shikumi.Reward
     Shikumi.Routing
     Shikumi.Schema
     Shikumi.Schema.Types
@@ -80,6 +82,8 @@ test-suite shikumi-test
     ProgramAcceptanceSpec
     ProgramFixtures
     ProgramSpec
+    RefineSpec
+    RefineStub
     ResilienceSpec
     RoutingSpec
     SchemaSpec
