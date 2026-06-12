@@ -1,19 +1,10 @@
 -- shikumi build descriptor.
 --
--- shikumi depends on four sibling packages that live in the baikai repository
--- (`/Users/shinzui/Keikaku/bokuno/baikai`): `baikai` (core transport), the two
--- provider packages `baikai-claude` / `baikai-openai`, and `baikai-effectful`
--- (the thin, policy-free `effectful` binding over baikai's transport — EP-1's
--- `LLM` effect is built on top of its `Baikai` effect).
---
--- These are referenced by LOCAL PATH rather than the `source-repository-package`
--- form the ExecPlan sketches. Two reasons make local paths the only reproducible
--- option on this fleet today: (1) the baikai HEAD shikumi builds against is not
--- pushed to GitHub, so a pinned `tag:` would not resolve for a fresh clone; and
--- (2) `baikai-effectful` is unpublished (not on Hackage, not yet listed as its
--- own mori package). The fleet co-develops sibling Haskell packages from local
--- checkouts under `~/Keikaku/bokuno`. Revisit and switch to
--- `source-repository-package` once baikai (with `baikai-effectful`) is published.
+-- shikumi depends on four packages from the baikai repository: `baikai`
+-- (core transport), the provider packages `baikai-claude` / `baikai-openai`,
+-- and `baikai-effectful` (the thin, policy-free `effectful` binding over
+-- baikai's transport). They are pinned to a GitHub commit so fresh clones build
+-- reproducibly without local sibling checkouts.
 --
 -- The GHC toolchain (9.12.4) + cabal come from the dev shell defined in
 -- ./flake.nix (`nix develop`), shared via the `shinzui/haskell-nix-dev` base
@@ -32,15 +23,16 @@ packages:
   shikumi-tools
   shikumi-trace
   shikumi-trace-otel
-  /Users/shinzui/Keikaku/bokuno/baikai/baikai
-  /Users/shinzui/Keikaku/bokuno/baikai/baikai-claude
-  /Users/shinzui/Keikaku/bokuno/baikai/baikai-openai
-  /Users/shinzui/Keikaku/bokuno/baikai/baikai-effectful
-  -- ephemeral-pg (shinzui/ephemeral-pg) backs the shikumi-cache-postgres test:
-  -- it spins up a throwaway PostgreSQL instance per run (no external server).
-  -- Local path because it co-develops in the fleet and is not on Hackage in the
-  -- revision shikumi builds against (mirrors the baikai siblings above).
-  /Users/shinzui/Keikaku/bokuno/ephemeral-pg-project/ephemeral-pg
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/baikai.git
+  tag: f17f83fa8668bc5f3166cac94b7c0f11f1199d1a
+  subdir:
+    baikai
+    baikai-claude
+    baikai-openai
+    baikai-effectful
 
 -- blake3 (EP-6 cache key) vendors SIMD C/asm. Its non-x86 fallback for the SSE
 -- flags still compiles x86 intrinsics (mmintrin.h), which fails under clang on
