@@ -38,6 +38,25 @@ output, typed programs, combinators, caching, tracing, replay, evaluation,
 compilation, optimization, tools, agents, streaming, multimodal input, and code
 execution modules.
 
+## The Name: 仕組み
+
+**仕組み** (*shikumi*) is a Japanese word meaning **"the mechanism — the system
+behind how something works."** It is the word you reach for when you want to
+describe not the surface of a thing but its inner workings: the gears, the
+structure, the arrangement that makes it behave the way it does. 仕 (*shi*) means
+"to do / to make / to serve"; 組み (*kumi*) means "to assemble, to join, to put
+together." Literally, it is *the way the parts are put together to make
+something function.*
+
+That is the stance of this framework. A language-model program is often a pile
+of prompt strings held together by convention, with no inspectable mechanism
+underneath. Shikumi is the **仕組み**: the structure that turns "ask a model and
+hope" into ordinary, well-typed software where the input is a record, the output
+is a record, the failure modes are enumerated, and the whole thing composes,
+type-checks, and can be evaluated and improved like any other program. The name
+is the thesis: there is a mechanism here, and you can see it, inspect it, and
+rewrite it.
+
 ## Why Shikumi
 
 Most LM application code treats prompts as the program: string templates,
@@ -54,10 +73,6 @@ Shikumi treats the program as a typed Haskell value:
   caching, tracing, replay, and streaming without changing the program.
 - Evaluation and optimizers operate on the same `Program i o` values that run in
   production.
-
-The name **仕組み** (*shikumi*) means "the mechanism" or "the way the parts are
-put together." That is the design goal: make language-model programs inspectable
-software instead of prompt strings held together by convention.
 
 ## What Ships
 
