@@ -1,7 +1,8 @@
-cabal-version: 3.4
-name:          shikumi-cache
-version:       0.1.0.0
-synopsis:      Content-addressed response caching for shikumi (EP-6)
+cabal-version:   3.4
+name:            shikumi-cache
+version:         0.1.0.0
+synopsis:        Content-addressed response caching for shikumi (EP-6)
+category:        AI
 description:
   The caching subsystem for shikumi: a content-addressed cache key (a BLAKE3
   digest over a canonical request serialization — the contract EP-7's replay
@@ -9,10 +10,11 @@ description:
   @cachedLLM@ memoizing interpreter that wraps EP-1's @LLM@ effect so identical
   requests contact the provider once.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -43,7 +45,7 @@ library
   build-depends:
     , aeson
     , baikai
-    , base           >=4.20 && <5
+    , base           >=4.20     && <5
     , blake3
     , bytestring
     , containers
@@ -52,7 +54,7 @@ library
     , generic-lens
     , lens           ^>=5.3
     , scientific
-    , shikumi
+    , shikumi        ^>=0.1.0.0
     , stm
     , text           ^>=2.1
     , time
@@ -76,8 +78,8 @@ test-suite shikumi-cache-test
     , generic-lens
     , lens
     , process
-    , shikumi
-    , shikumi-cache
+    , shikumi        ^>=0.1.0.0
+    , shikumi-cache  ^>=0.1.0.0
     , stm
     , tasty
     , tasty-hunit

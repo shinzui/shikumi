@@ -1,7 +1,8 @@
-cabal-version: 3.4
-name:          shikumi-eval
-version:       0.1.0.0
-synopsis:      Typed evaluation framework for shikumi LM programs (EP-8)
+cabal-version:   3.4
+name:            shikumi-eval
+version:         0.1.0.0
+synopsis:        Typed evaluation framework for shikumi LM programs (EP-8)
+category:        AI
 description:
   The evaluation framework for shikumi: the owned data model (@Example@,
   @Prediction@, @Dataset@, @Metric@, @Score@, @Report@ — MasterPlan integration
@@ -10,10 +11,11 @@ description:
   parallelism and per-example error boundaries, and golden testing that pins a
   program's behaviour deterministically under a mock or replayed LM.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -45,13 +47,13 @@ library
   build-depends:
     , aeson
     , baikai
-    , base          >=4.20 && <5
+    , base          >=4.20     && <5
     , bytestring
     , containers
     , effectful
     , generic-lens
     , lens          ^>=5.3
-    , shikumi
+    , shikumi       ^>=0.1.0.0
     , tasty
     , tasty-golden
     , text          ^>=2.1
@@ -81,8 +83,8 @@ test-suite shikumi-eval-test
     , effectful
     , generic-lens
     , lens
-    , shikumi
-    , shikumi-eval
+    , shikumi       ^>=0.1.0.0
+    , shikumi-eval  ^>=0.1.0.0
     , tasty
     , tasty-golden
     , tasty-hunit

@@ -1,7 +1,8 @@
-cabal-version: 3.4
-name:          shikumi-compile
-version:       0.1.0.0
-synopsis:      The compiler layer for shikumi LM programs (EP-9)
+cabal-version:   3.4
+name:            shikumi-compile
+version:         0.1.0.0
+synopsis:        The compiler layer for shikumi LM programs (EP-9)
+category:        AI
 description:
   The compiler layer for shikumi: pure @Program -> Program@ transformations that
   bake a prompting strategy into a program's per-node parameters or structure
@@ -13,10 +14,11 @@ description:
   acceptance assertion is about the prompt the model would have seen, observed
   offline through a capturing stub, so the whole package tests with no network.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -47,10 +49,10 @@ library
 
   build-depends:
     , aeson
-    , base        >=4.20 && <5
+    , base        >=4.20     && <5
     , bytestring
     , effectful
-    , shikumi
+    , shikumi     ^>=0.1.0.0
     , text        ^>=2.1
 
 test-suite shikumi-compile-test
@@ -71,8 +73,8 @@ test-suite shikumi-compile-test
     , effectful
     , generic-lens
     , lens
-    , shikumi
-    , shikumi-compile
+    , shikumi          ^>=0.1.0.0
+    , shikumi-compile  ^>=0.1.0.0
     , tasty
     , tasty-hunit
     , text

@@ -1,7 +1,8 @@
-cabal-version: 3.4
-name:          shikumi-cache-postgres
-version:       0.1.0.0
-synopsis:      Postgres-backed shikumi cache (EP-6)
+cabal-version:   3.4
+name:            shikumi-cache-postgres
+version:         0.1.0.0
+synopsis:        Postgres-backed shikumi cache (EP-6)
+category:        AI
 description:
   A PostgreSQL backend for shikumi's @Cache@ effect (EP-6), in a separate
   package so the @hasql@ client (and libpq) is only pulled in when used. Entries
@@ -11,10 +12,11 @@ description:
   @Shikumi.Cache.ResponseJSON@). The test uses @ephemeral-pg@ to spin up a
   throwaway server, so it needs no external database.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -37,10 +39,10 @@ library
   exposed-modules: Shikumi.Cache.Backend.Postgres
   build-depends:
     , aeson
-    , base           >=4.20 && <5
+    , base           >=4.20     && <5
     , effectful
     , hasql
-    , shikumi-cache
+    , shikumi-cache  ^>=0.1.0.0
     , text           ^>=2.1
 
 test-suite shikumi-cache-postgres-test
@@ -56,9 +58,9 @@ test-suite shikumi-cache-postgres-test
     , ephemeral-pg
     , generic-lens
     , lens
-    , shikumi
-    , shikumi-cache
-    , shikumi-cache-postgres
+    , shikumi                 ^>=0.1.0.0
+    , shikumi-cache           ^>=0.1.0.0
+    , shikumi-cache-postgres  ^>=0.1.0.0
     , tasty
     , tasty-hunit
     , text

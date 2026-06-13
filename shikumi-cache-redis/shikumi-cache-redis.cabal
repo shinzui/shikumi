@@ -1,7 +1,8 @@
-cabal-version: 3.4
-name:          shikumi-cache-redis
-version:       0.1.0.0
-synopsis:      Redis-backed shikumi cache (EP-6)
+cabal-version:   3.4
+name:            shikumi-cache-redis
+version:         0.1.0.0
+synopsis:        Redis-backed shikumi cache (EP-6)
+category:        AI
 description:
   A Redis backend for shikumi's @Cache@ effect (EP-6), kept in a separate
   package so the heavy @hedis@ client and a running Redis server are only
@@ -10,10 +11,11 @@ description:
   a @CachedResponse@ (the @Response@ round-trip comes from @shikumi-cache@'s
   @Shikumi.Cache.ResponseJSON@).
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -35,11 +37,11 @@ library
   exposed-modules: Shikumi.Cache.Backend.Redis
   build-depends:
     , aeson
-    , base           >=4.20 && <5
+    , base           >=4.20     && <5
     , bytestring
     , effectful
     , hedis
-    , shikumi-cache
+    , shikumi-cache  ^>=0.1.0.0
     , text           ^>=2.1
 
 test-suite shikumi-cache-redis-test
@@ -56,9 +58,9 @@ test-suite shikumi-cache-redis-test
     , generic-lens
     , hedis
     , lens
-    , shikumi
-    , shikumi-cache
-    , shikumi-cache-redis
+    , shikumi              ^>=0.1.0.0
+    , shikumi-cache        ^>=0.1.0.0
+    , shikumi-cache-redis  ^>=0.1.0.0
     , tasty
     , tasty-hunit
     , text

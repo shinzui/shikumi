@@ -1,16 +1,18 @@
-cabal-version: 3.4
-name:          shikumi
-version:       0.1.0.0
-synopsis:      Typed, structured, evaluable LM programs over baikai
+cabal-version:   3.4
+name:            shikumi
+version:         0.1.0.0
+synopsis:        Typed, structured, evaluable LM programs over baikai
+category:        AI
 description:
   Shikumi is a Haskell-native framework for building typed language-model programs.
   This package provides the runtime substrate: the LLM effect over baikai, the
   shikumi error type, and resilience (retries, rate limiting, budget control).
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -119,7 +121,7 @@ test-suite shikumi-test
     , generic-lens
     , lens
     , QuickCheck
-    , shikumi
+    , shikumi            ^>=0.1.0.0
     , stm
     , streamly-core
     , tasty
