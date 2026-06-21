@@ -51,7 +51,7 @@ library
 
   build-depends:
     , aeson
-    , baikai
+    , baikai         >=0.2      && <0.3
     , base           >=4.20     && <5
     , bytestring
     , containers
@@ -84,7 +84,7 @@ test-suite shikumi-trace-test
   other-modules:  TraceFixtures
   build-depends:
     , aeson
-    , baikai
+    , baikai            >=0.2      && <0.3
     , base
     , bytestring
     , containers

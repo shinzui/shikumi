@@ -52,10 +52,10 @@ library
 
   build-depends:
     , aeson
-    , baikai
-    , baikai-claude
-    , baikai-effectful
-    , baikai-openai
+    , baikai             >=0.2  && <0.3
+    , baikai-claude      >=0.2  && <0.3
+    , baikai-effectful   >=0.2  && <0.3
+    , baikai-openai      >=0.2  && <0.3
     , base               >=4.20 && <5
     , base64-bytestring
     , bytestring
@@ -108,10 +108,10 @@ test-suite shikumi-test
 
   build-depends:
     , aeson
-    , baikai
-    , baikai-claude
-    , baikai-effectful
-    , baikai-openai
+    , baikai             >=0.2      && <0.3
+    , baikai-claude      >=0.2      && <0.3
+    , baikai-effectful   >=0.2      && <0.3
+    , baikai-openai      >=0.2      && <0.3
     , base
     , base64-bytestring
     , bytestring

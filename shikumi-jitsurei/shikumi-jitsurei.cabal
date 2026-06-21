@@ -43,7 +43,7 @@ library
   exposed-modules: Shikumi.Jitsurei.Stub
   build-depends:
     , aeson
-    , baikai
+    , baikai        >=0.2  && <0.3
     , base          >=4.20 && <5
     , effectful
     , generic-lens
@@ -79,7 +79,7 @@ executable jitsurei-compose
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai
+    , baikai            >=0.2  && <0.3
     , base              >=4.20 && <5
     , shikumi
     , shikumi-jitsurei
@@ -92,7 +92,7 @@ executable jitsurei-combinators
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai
+    , baikai            >=0.2  && <0.3
     , base              >=4.20 && <5
     , shikumi
     , shikumi-jitsurei
@@ -151,7 +151,7 @@ executable jitsurei-trace-replay
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai
+    , baikai            >=0.2  && <0.3
     , base              >=4.20 && <5
     , effectful
     , filepath
@@ -169,7 +169,7 @@ executable jitsurei-multimodal
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai
+    , baikai            >=0.2  && <0.3
     , base              >=4.20 && <5
     , bytestring
     , effectful
@@ -187,7 +187,7 @@ executable jitsurei-streaming
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai
+    , baikai        >=0.2  && <0.3
     , base          >=4.20 && <5
     , effectful
     , generic-lens
