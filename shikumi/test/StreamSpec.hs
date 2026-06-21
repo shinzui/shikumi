@@ -19,6 +19,7 @@ import Baikai
     StartPayload (..),
     StopReason (..),
     TerminalPayload (..),
+    doneTerminal,
     _Context,
     _Model,
     _Options,
@@ -106,7 +107,7 @@ mkResponse t =
 -- | The 'Response' assembled from a stream's terminal event.
 terminalResponse :: [AssistantMessageEvent] -> Response
 terminalResponse evs =
-  case [p | EventDone (TerminalPayload _ (AssistantMessage p)) <- evs] of
+  case [p | EventDone TerminalPayload {message = AssistantMessage p} <- evs] of
     (p : _) -> _Response & #message .~ p
     [] -> mkResponse ""
 
@@ -121,7 +122,7 @@ streamEventsFor deltas terminalText =
   ]
     ++ [TextDelta (DeltaPayload 0 d) | d <- deltas]
     ++ [ TextEnd (BlockEndPayload 0 (T.concat deltas)),
-         EventDone (TerminalPayload Stop (AssistantMessage (payloadWith terminalText)))
+         EventDone (doneTerminal Stop (AssistantMessage (payloadWith terminalText)))
        ]
   where
     payloadWith t = (_Response ^. #message) & #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))

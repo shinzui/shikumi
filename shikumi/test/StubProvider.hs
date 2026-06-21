@@ -95,7 +95,7 @@ stubEvents t =
     TextStart IndexPayload {contentIndex = 0},
     TextDelta DeltaPayload {contentIndex = 0, delta = t},
     TextEnd BlockEndPayload {contentIndex = 0, content = t},
-    EventDone TerminalPayload {reason = Stop, message = AssistantMessage (stubPayloadWith t)}
+    EventDone (doneTerminal Stop (AssistantMessage (stubPayloadWith t)))
   ]
 
 -- | Build an isolated registry from a @complete@ implementation, reusing the
@@ -122,7 +122,7 @@ costStubRegistry :: Rational -> Text -> IO ProviderRegistry
 costStubRegistry c t =
   mkRegistry t (\_ _ _ -> pure (stubResponse t & #message . #usage . #cost . #usd .~ c))
 
--- | A registry whose @complete@ throws 'ProviderError' (a transient failure) the
+-- | A registry whose @complete@ throws 'providerError' (a transient failure) the
 -- first @failTimes@ calls, then returns the given text. The 'IORef' records the
 -- total number of attempts (used by the retry tests).
 failingStubRegistry :: IORef Int -> Int -> Text -> IO ProviderRegistry
@@ -130,17 +130,17 @@ failingStubRegistry ref failTimes t =
   mkRegistry t $ \_ _ _ -> do
     n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
     if n <= failTimes
-      then throwIO (ProviderError ("stub transient failure #" <> T.pack (show n)))
+      then throwIO (providerError ("stub transient failure #" <> T.pack (show n)))
       else pure (stubResponse t)
 
--- | A registry whose @complete@ always throws 'RequestInvalid' (a non-transient
+-- | A registry whose @complete@ always throws 'invalidRequest' (a non-transient
 -- failure that maps to 'Shikumi.Error.SchemaMismatch'). The 'IORef' records the
 -- number of attempts (a retry must not increase it).
 invalidStubRegistry :: IORef Int -> IO ProviderRegistry
 invalidStubRegistry ref =
   mkRegistry "" $ \_ _ _ -> do
     _ <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
-    throwIO (RequestInvalid "stub bad request")
+    throwIO (invalidRequest "stub bad request")
 
 -- | A registry whose @complete@ records observed concurrency: it bumps @cur@ on
 -- entry (updating the running maximum in @mx@), sleeps briefly, and decrements on

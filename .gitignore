@@ -4,6 +4,7 @@
 CLAUDE.local.md
 
 # Haskell / cabal build artifacts
+cabal.project.local
 dist-newstyle/
 *.hi
 *.o
