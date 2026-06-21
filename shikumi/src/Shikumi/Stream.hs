@@ -183,8 +183,8 @@ reassemble evs = case terminalPayloads of
   [] -> synthResponse (fromMaybe "" (firstTextEnd evs))
   where
     terminalPayloads =
-      [p | EventDone (TerminalPayload _ (AssistantMessage p)) <- evs]
-        ++ [p | EventError (TerminalPayload _ (AssistantMessage p)) <- evs]
+      [p | EventDone TerminalPayload {message = AssistantMessage p} <- evs]
+        ++ [p | EventError TerminalPayload {message = AssistantMessage p} <- evs]
 
 -- | A response carrying @t@ as its single assistant text block.
 synthResponse :: Text -> Response

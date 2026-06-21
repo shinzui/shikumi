@@ -11,7 +11,7 @@ module Shikumi.Error
   )
 where
 
-import Baikai.Error (BaikaiError (..))
+import Baikai.Error (BaikaiError (..), ErrorCategory (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -37,19 +37,20 @@ data ShikumiError
   deriving stock (Eq, Show)
 
 -- | Total mapping from baikai's transport-level errors into shikumi's
--- vocabulary. baikai's constructors are 'ProviderError', 'RequestInvalid',
--- 'DecodeError', and 'ProcessError'.
---
--- 'RequestInvalid' maps to 'SchemaMismatch' because in baikai a malformed request
--- is almost always bad schema/parameters; 'DecodeError' maps to 'InvalidJSON'
--- because baikai's decode failures are JSON parse failures of the provider
--- response. These two judgments are the only non-mechanical choices.
+-- vocabulary. Invalid requests map to 'SchemaMismatch' because in baikai a
+-- malformed request is almost always bad schema/parameters; decode failures
+-- map to 'InvalidJSON' because baikai's decode failures are JSON parse
+-- failures of the provider response.
 fromBaikaiError :: BaikaiError -> ShikumiError
-fromBaikaiError = \case
-  ProviderError t -> ProviderFailure t
-  RequestInvalid t -> SchemaMismatch ("invalid request: " <> t)
-  DecodeError t -> InvalidJSON t
-  ProcessError n t -> ProviderFailure ("process exited " <> T.pack (show n) <> ": " <> t)
+fromBaikaiError e = case category e of
+  DecodeFailure -> InvalidJSON (message e)
+  InvalidRequest -> SchemaMismatch ("invalid request: " <> message e)
+  ProcessFailure ->
+    ProviderFailure $
+      case exitCode e of
+        Just n -> "process exited " <> T.pack (show n) <> ": " <> message e
+        Nothing -> message e
+  _ -> ProviderFailure (message e)
 
 -- | Which errors are worth retrying. Provider/transport failures and timeouts are
 -- transient; decode, schema, validation, and budget errors are deterministic and
