@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-optimize
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        The optimizer framework for shikumi LM programs (EP-10)
 category:        AI
 description:
@@ -64,10 +64,10 @@ library
     , base             >=4.20     && <5
     , containers
     , effectful
-    , shikumi          ^>=0.1.0.0
-    , shikumi-compile  ^>=0.1.0.0
-    , shikumi-eval     ^>=0.1.0.0
-    , shikumi-trace    ^>=0.1.0.0
+    , shikumi          ^>=0.1.0.1
+    , shikumi-compile  ^>=0.1.0.1
+    , shikumi-eval     ^>=0.1.0.1
+    , shikumi-trace    ^>=0.1.0.1
     , text             ^>=2.1
     , vector
 
@@ -100,11 +100,11 @@ test-suite shikumi-optimize-test
     , effectful
     , generic-lens
     , lens
-    , shikumi           ^>=0.1.0.0
-    , shikumi-compile   ^>=0.1.0.0
-    , shikumi-eval      ^>=0.1.0.0
-    , shikumi-optimize  ^>=0.1.0.0
-    , shikumi-trace     ^>=0.1.0.0
+    , shikumi           ^>=0.1.0.1
+    , shikumi-compile   ^>=0.1.0.1
+    , shikumi-eval      ^>=0.1.0.1
+    , shikumi-optimize  ^>=0.1.0.1
+    , shikumi-trace     ^>=0.1.0.1
     , tasty
     , tasty-hunit
     , text

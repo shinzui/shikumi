@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-tools
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:
   Typed tools and ReAct agents for shikumi LM programs (EP-11)
 
@@ -59,7 +59,7 @@ library
     , effectful
     , generic-lens
     , lens          ^>=5.3
-    , shikumi       ^>=0.1.0.0
+    , shikumi       ^>=0.1.0.1
     , text          ^>=2.1
     , vector
 
@@ -89,8 +89,8 @@ test-suite shikumi-tools-test
     , effectful
     , generic-lens
     , lens
-    , shikumi        ^>=0.1.0.0
-    , shikumi-tools  ^>=0.1.0.0
+    , shikumi        ^>=0.1.0.1
+    , shikumi-tools  ^>=0.1.0.1
     , tasty
     , tasty-hunit
     , text
