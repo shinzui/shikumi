@@ -100,7 +100,7 @@ qaDoc =
       tags = ["nlp"],
       declaredInputs = Nothing,
       declaredOutputs = Nothing,
-      program = SomeProgram qaProgram
+      program = Just (SomeProgram qaProgram)
     }
 
 noopDoc :: ProgramDoc
@@ -112,7 +112,7 @@ noopDoc =
       tags = [],
       declaredInputs = Just "Ignored trigger payload (JSON).",
       declaredOutputs = Just "A fixed summary digest (JSON).",
-      program = SomeProgram noopProgram
+      program = Just (SomeProgram noopProgram)
     }
 
 polishedDoc :: ProgramDoc
@@ -124,7 +124,21 @@ polishedDoc =
       tags = [],
       declaredInputs = Nothing,
       declaredOutputs = Nothing,
-      program = SomeProgram qaPolishedProgram
+      program = Just (SomeProgram qaPolishedProgram)
+    }
+
+-- | A metadata-only doc: no program value (the shape a handan task without an
+-- eval handle produces).
+metaOnlyDoc :: ProgramDoc
+metaOnlyDoc =
+  ProgramDoc
+    { name = "legacy-task",
+      title = Just "Legacy Task",
+      description = Just "A task with no recoverable program.",
+      tags = [],
+      declaredInputs = Nothing,
+      declaredOutputs = Nothing,
+      program = Nothing
     }
 
 demoApp :: AppInfo
@@ -201,7 +215,13 @@ tests =
             assertBool "first call" ("inputs (question) -> outputs (answer)" `T.isInfixOf` body)
             assertBool "second call" ("inputs (answer) -> outputs (answer)" `T.isInfixOf` body)
             assertBool "first instruction" ("  - Instruction: Answer the question." `T.isInfixOf` body)
-            assertBool "second instruction" ("  - Instruction: Polish the answer." `T.isInfixOf` body)
+            assertBool "second instruction" ("  - Instruction: Polish the answer." `T.isInfixOf` body),
+          testCase "metadata-only body (no program) states structure unavailable" $ do
+            let body = renderProgramBody metaOnlyDoc
+            assertBool "header" ("# Legacy Task" `T.isInfixOf` body)
+            assertBool
+              "structure note"
+              ("Documented from metadata only; program structure is not available." `T.isInfixOf` body)
         ],
       testGroup
         "Generate"

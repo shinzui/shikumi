@@ -52,9 +52,12 @@ interfaceSection doc =
         <> maybe [] (\t -> ["- Input: " <> t]) mi
         <> maybe [] (\t -> ["- Output: " <> t]) mo
 
--- | The structure section, derived from the program's run-free shape.
-structureSection :: SomeProgram -> [Text]
-structureSection (SomeProgram p) =
+-- | The structure section, derived from the program's run-free shape. A
+-- metadata-only doc ('Nothing') has no program to reflect, so it says so.
+structureSection :: Maybe SomeProgram -> [Text]
+structureSection Nothing =
+  ["## Structure", "", "Documented from metadata only; program structure is not available."]
+structureSection (Just (SomeProgram p)) =
   ["## Structure", ""] <> bodyLines
   where
     bodyLines = case programShape p of

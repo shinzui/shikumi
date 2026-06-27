@@ -72,7 +72,7 @@ manifest =
           tags = ["support", "classification"],
           declaredInputs = Nothing,
           declaredOutputs = Nothing,
-          program = SomeProgram classifyProgram
+          program = Just (SomeProgram classifyProgram)
         },
       ProgramDoc
         { name = "heartbeat",
@@ -81,7 +81,7 @@ manifest =
           tags = ["agent"],
           declaredInputs = Just "Trigger payload (ignored).",
           declaredOutputs = Just "A fixed heartbeat digest.",
-          program = SomeProgram heartbeatProgram
+          program = Just (SomeProgram heartbeatProgram)
         }
     ]
 

@@ -39,6 +39,12 @@ data SomeProgram where
 -- supplies. They carry the documentary weight for opaque programs: an @Embed@
 -- agent has no inspectable internal structure, so without them its document would
 -- describe almost nothing.
+--
+-- 'program' is optional. 'Just' wraps a program whose structure the renderer can
+-- reflect; 'Nothing' documents a program from metadata alone — used when a source
+-- (such as a @handan@ task with no eval handle) names a program it cannot hand
+-- over as a value. A metadata-only doc still produces a valid concept; its
+-- structure section says the structure is unavailable.
 data ProgramDoc = ProgramDoc
   { name :: !Text,
     title :: !(Maybe Text),
@@ -46,7 +52,7 @@ data ProgramDoc = ProgramDoc
     tags :: ![Text],
     declaredInputs :: !(Maybe Text),
     declaredOutputs :: !(Maybe Text),
-    program :: !SomeProgram
+    program :: !(Maybe SomeProgram)
   }
 
 -- | An application's catalogue of documented programs, in the order they should

@@ -180,6 +180,16 @@ Record every decision made while working on the plan.
   set property; asserting positional order would test an `okf-core` implementation detail.
   Date: 2026-06-27
 
+- Decision: `ProgramDoc.program` is `Maybe SomeProgram`, not `SomeProgram` (changed during
+  Milestone 5 part 2, while wiring the handan bridge).
+  Rationale: A documentation source can name a program it cannot hand over as a value — concretely a
+  `handan` task whose `taskEval` is `Nothing` exposes no `Program`. `Nothing` documents such a
+  program from metadata alone; the renderer's structure section then states the structure is
+  unavailable rather than fabricating an opaque node. This is a generic, reusable capability (any
+  source may have a prose-only program), so it lives in `shikumi-okf`, and the handan bridge reuses
+  the renderer instead of special-casing.
+  Date: 2026-06-27
+
 - Decision: Generation is deterministic — the timestamp is an explicit caller-supplied argument
   (`Maybe Text`, omitted by default), never read from the wall clock inside the generator.
   Rationale: The intended workflow includes a "regenerate and diff" CI check; a wall-clock
@@ -672,7 +682,9 @@ the byte). Everything in `Okf.Document`, `Okf.ConceptId`, `Okf.Bundle` (concept 
 data SomeProgram where SomeProgram :: Program i o -> SomeProgram
 data ProgramDoc = ProgramDoc
   { name :: Text, title :: Maybe Text, description :: Maybe Text, tags :: [Text]
-  , declaredInputs :: Maybe Text, declaredOutputs :: Maybe Text, program :: SomeProgram }
+  , declaredInputs :: Maybe Text, declaredOutputs :: Maybe Text, program :: Maybe SomeProgram }
+  -- program: Just = reflectable structure; Nothing = document from metadata only (e.g. a
+  -- handan task with no eval handle). See the Decision Log.
 newtype ProgramManifest = ProgramManifest { entries :: [ProgramDoc] }
 data AppInfo = AppInfo
   { appNamespace :: Text, appName :: Text, appTitle :: Maybe Text, appDescription :: Maybe Text }
