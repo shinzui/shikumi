@@ -56,6 +56,7 @@ module Shikumi.Program
     -- * Per-node field metadata (EP-16)
     NodeFields (..),
     nodeFieldsIndexed,
+    nodeInstructionsIndexed,
 
     -- * Execution internals (reused by alternative executors, e.g. @runProgramTraced@)
     retryWith,
@@ -470,6 +471,29 @@ nodeFieldsIndexed = go
     go :: forall x y. Program x y -> [NodeFields]
     go (Predict sig _) =
       [NodeFields (map fieldName (inputFields sig)) (map fieldName (outputFields sig))]
+    go (Compose a b) = go a ++ go b
+    go (FMap _ p) = go p
+    go (Map _ p) = go p
+    go (Parallel a b) = go a ++ go b
+    go (Retry _ p) = go p
+    go (RetryWhen _ _ p) = go p
+    go (Validate _ p) = go p
+    go (MajorityVote _ _ p) = go p
+    go (Ensemble ps _) = concatMap go ps
+    go (Embed _) = []
+
+-- | For every 'Predict' node, in 'foldParams' order, its signature instruction.
+-- Index-aligned with 'nodeFieldsIndexed' and 'foldParams': entry @n@ describes the
+-- same node those functions address, so the two lists can be zipped. Composite
+-- nodes carry no instruction and 'Embed' is opaque, so neither contributes an
+-- entry. This reads the /signature's/ base instruction (not any per-node 'Params'
+-- instruction override), which is the stable task description suitable for
+-- documentation (consumed by @shikumi-okf@'s program-doc renderer).
+nodeInstructionsIndexed :: Program i o -> [Text]
+nodeInstructionsIndexed = go
+  where
+    go :: forall x y. Program x y -> [Text]
+    go (Predict sig _) = [getInstruction sig]
     go (Compose a b) = go a ++ go b
     go (FMap _ p) = go p
     go (Map _ p) = go p

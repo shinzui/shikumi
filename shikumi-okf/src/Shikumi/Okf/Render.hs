@@ -22,6 +22,7 @@ import Shikumi.Program
   ( NodeFields (..),
     ProgramShape (..),
     nodeFieldsIndexed,
+    nodeInstructionsIndexed,
     programShape,
   )
 
@@ -60,7 +61,8 @@ structureSection (SomeProgram p) =
       ShapeEmbed ->
         ["Opaque embedded program (no inspectable internal structure)."]
       sh ->
-        renderShapeTree 0 sh <> modelCalls (nodeFieldsIndexed p)
+        renderShapeTree 0 sh
+          <> modelCalls (zip (nodeFieldsIndexed p) (nodeInstructionsIndexed p))
 
 -- | Render the constructor tree as a nested Markdown bullet list. Each level of
 -- nesting is indented two spaces.
@@ -82,20 +84,23 @@ renderShapeTree depth shape = case shape of
     descend = renderShapeTree (depth + 1)
 
 -- | A "Model calls" subsection listing, for each @Predict@ node in order, its
--- input and output field names. Omitted when the program has no model calls.
-modelCalls :: [NodeFields] -> [Text]
+-- input and output field names and its signature instruction (as a nested bullet).
+-- Omitted when the program has no model calls.
+modelCalls :: [(NodeFields, Text)] -> [Text]
 modelCalls [] = []
-modelCalls fields =
-  "" : "### Model calls" : "" : zipWith line [1 :: Int ..] fields
+modelCalls calls =
+  "" : "### Model calls" : "" : concat (zipWith entry [1 :: Int ..] calls)
   where
-    line idx nf =
-      "- "
-        <> tshow idx
-        <> ". inputs ("
-        <> commaSep (inputFieldNames nf)
-        <> ") -> outputs ("
-        <> commaSep (outputFieldNames nf)
-        <> ")"
+    entry idx (nf, instruction) =
+      [ "- "
+          <> tshow idx
+          <> ". inputs ("
+          <> commaSep (inputFieldNames nf)
+          <> ") -> outputs ("
+          <> commaSep (outputFieldNames nf)
+          <> ")",
+        "  - Instruction: " <> instruction
+      ]
 
 commaSep :: [Text] -> Text
 commaSep = T.intercalate ", "

@@ -29,6 +29,7 @@ import Shikumi.Program
     foldParams,
     mapParams,
     mapParamsAt,
+    nodeInstructionsIndexed,
     pipeline,
     runProgram,
   )
@@ -64,6 +65,11 @@ tests =
         out @?= Right (Outline {points = ["intro", "body", "end"]}),
       testCase "M2: foldParams returns nodes in stage order" $
         foldParams twoStage @?= [emptyParams, emptyParams],
+      testCase "M5: nodeInstructionsIndexed returns signature instructions in node order" $
+        nodeInstructionsIndexed twoStage
+          @?= ["Outline the topic into points", "Draft prose from the outline"],
+      testCase "M5: nodeInstructionsIndexed aligns one-to-one with foldParams" $
+        length (nodeInstructionsIndexed twoStage) @?= length (foldParams twoStage),
       testCase "M2: mapParams touches every node" $
         foldParams (mapParams (setInstr "X") twoStage)
           @?= [setInstr "X" emptyParams, setInstr "X" emptyParams],

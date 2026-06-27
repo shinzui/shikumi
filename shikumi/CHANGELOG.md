@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `Shikumi.Program.nodeInstructionsIndexed :: Program i o -> [Text]`: the signature
+  instruction of each `Predict` node, in `foldParams`/`nodeFieldsIndexed` order. Used
+  by `shikumi-okf` to document model calls (EP-31, Milestone 5).
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Fixed

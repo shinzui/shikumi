@@ -86,8 +86,8 @@ Milestone 4 — Ship the shared profile and wire mori (DONE 2026-06-27):
 
 Milestone 5 (optional) — Richer bodies and CLI bridge:
 
-- [ ] (Optional) Add `nodeInstructionsIndexed` to `Shikumi.Program` (core) and include instructions in the rendered body.
-- [ ] (Optional) Provide a `Registry`→`ProgramManifest` adapter as a separate optional surface.
+- [x] Add `nodeInstructionsIndexed :: Program i o -> [Text]` to `Shikumi.Program` (core) and include each model call's instruction in the rendered body. (2026-06-27)
+- [ ] (Optional) Provide a `Registry`→`ProgramManifest` adapter as a separate optional surface. (not done — deferred to real shikigami adoption)
 
 
 ## Surprises & Discoveries
@@ -423,12 +423,16 @@ example program runs and writes a bundle that `okf validate --profile profile/sh
 Scope: optional enrichments that are valuable but not required for the core outcome. Keep them
 clearly separable so they can be dropped without affecting Milestones 1–4.
 
-First option: add a public `nodeInstructionsIndexed :: Program i o -> [Maybe Text]` accessor to
-`Shikumi.Program` (core) that, structurally like `nodeFieldsIndexed`, returns each `Predict` node's
-instruction via `getInstruction`. Then include the instruction text per node in
-`renderProgramBody`. This is the only change that touches the core `shikumi` package; it is additive
-and guarded behind this optional milestone precisely so the core dependency stays untouched unless
-the richer body is wanted.
+First option (DONE 2026-06-27): add a public `nodeInstructionsIndexed :: Program i o -> [Text]`
+accessor to `Shikumi.Program` (core) that, structurally like `nodeFieldsIndexed`, returns each
+`Predict` node's signature instruction via `getInstruction`. Then include the instruction text per
+node in `renderProgramBody` (zipped with `nodeFieldsIndexed`, rendered as a nested
+`- Instruction: ...` bullet under each model call). This is the only change that touches the core
+`shikumi` package; it is additive (a new export) and was guarded behind this optional milestone so
+the core stayed untouched until the richer body was wanted. The originally-sketched `[Maybe Text]`
+return type was reduced to `[Text]`: every `Predict` node always has a signature instruction, so the
+`Maybe` conveyed nothing, and `[Text]` matches `nodeFieldsIndexed`'s one-entry-per-`Predict` shape so
+the two zip cleanly.
 
 Second option: demonstrate the app-side bridge by writing (in this plan as a documented snippet, or
 as a tiny example) how shikigami converts its named program bindings into a `ProgramManifest` —
@@ -613,7 +617,8 @@ nodeFieldsIndexed  :: Program i o -> [NodeFields]
 embed              :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
 ```
 
-(Optional Milestone 5 adds `nodeInstructionsIndexed :: Program i o -> [Maybe Text]` to this module.)
+Milestone 5 added `nodeInstructionsIndexed :: Program i o -> [Text]` to this module (one signature
+instruction per `Predict` node, index-aligned with `nodeFieldsIndexed`).
 
 **Consumed from `okf-core` (sibling repo, producer API — verified to exist):**
 

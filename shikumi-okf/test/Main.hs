@@ -156,7 +156,8 @@ expectedQaBody =
       "",
       "### Model calls",
       "",
-      "- 1. inputs (question) -> outputs (answer)"
+      "- 1. inputs (question) -> outputs (answer)",
+      "  - Instruction: Answer the question."
     ]
 
 expectedNoopBody :: Text
@@ -199,6 +200,8 @@ tests =
             assertBool "nests Predict" ("  - Predict — outputs: answer" `T.isInfixOf` body)
             assertBool "first call" ("inputs (question) -> outputs (answer)" `T.isInfixOf` body)
             assertBool "second call" ("inputs (answer) -> outputs (answer)" `T.isInfixOf` body)
+            assertBool "first instruction" ("  - Instruction: Answer the question." `T.isInfixOf` body)
+            assertBool "second instruction" ("  - Instruction: Polish the answer." `T.isInfixOf` body)
         ],
       testGroup
         "Generate"

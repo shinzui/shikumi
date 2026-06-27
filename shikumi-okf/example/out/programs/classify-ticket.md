@@ -19,3 +19,4 @@ Assigns a support ticket to a category.
 ### Model calls
 
 - 1. inputs (ticket) -> outputs (category)
+  - Instruction: Classify the support ticket.

@@ -11,3 +11,6 @@
 - Shared OKF profile `profile/shikumi.dhall`, a worked `shikumi-okf-example`
   executable, and the committed `example/out` bundle (Milestone 4). Verified with
   the standalone `okf` CLI: `validate`, `--profile-enforce`, and `graph --json`.
+- Model-call instructions in rendered bodies (Milestone 5): each `Predict` node's
+  signature instruction now appears under its model call, via the new core accessor
+  `Shikumi.Program.nodeInstructionsIndexed`.
