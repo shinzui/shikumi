@@ -64,17 +64,17 @@ Milestone 1 — Scaffold the `shikumi-okf` package (DONE 2026-06-27):
 - [x] Confirm `cabal build shikumi-okf` succeeds inside the dev shell. (2026-06-27)
 - [x] Confirm isolation: `cabal build --dry-run shikumi` does not mention `okf-core`. (2026-06-27)
 
-Milestone 2 — Reflect a program into OKF concepts (pure):
+Milestone 2 — Reflect a program into OKF concepts (pure) (DONE 2026-06-27):
 
-- [ ] Add `shikumi-okf/src/Shikumi/Okf/Render.hs` rendering a `SomeProgram` to a Markdown body from `programShape`/`nodeFieldsIndexed`.
-- [ ] Add `shikumi-okf/src/Shikumi/Okf/Generate.hs` with `programConcept`, `appConcept`, `generateBundle`.
-- [ ] Add a test asserting `validateBundle` returns `[]` for a generated bundle and a golden test pinning the rendered Markdown.
+- [x] Add `shikumi-okf/src/Shikumi/Okf/Render.hs` rendering a `SomeProgram` to a Markdown body from `programShape`/`nodeFieldsIndexed`. (2026-06-27)
+- [x] Add `shikumi-okf/src/Shikumi/Okf/Generate.hs` with `programConcept`, `appConcept`, `generateBundle`. (2026-06-27)
+- [x] Add a test asserting `validateBundle` returns `[]` for a generated bundle and inline-golden tests pinning the rendered Markdown for a typed `Predict`, an opaque `Embed`, and a `Compose` tree. (2026-06-27)
 
-Milestone 3 — Write the bundle and prove the round-trip:
+Milestone 3 — Write the bundle and prove the round-trip (DONE 2026-06-27 except CLI transcript):
 
-- [ ] Add `writeProgramBundle` to `Shikumi/Okf/Generate.hs`.
-- [ ] Add a test that writes to a temp dir, re-reads with `Okf.Bundle.walkBundle`, and asserts the app→program graph edges via `Okf.Graph.buildGraph`.
-- [ ] Capture an `okf validate` / `okf graph --json` transcript against the generated fixture.
+- [x] Add `writeProgramBundle` to `Shikumi/Okf/Generate.hs`. (2026-06-27)
+- [x] Add a test that writes to a temp dir, re-reads with `Okf.Bundle.walkBundle`, and asserts the app→program graph edges via `Okf.Graph.buildGraph`. (2026-06-27)
+- [ ] Capture an `okf validate` / `okf graph --json` transcript against the generated fixture. (deferred to the Milestone 4 example, which writes a bundle to a stable path)
 
 Milestone 4 — Ship the shared profile and wire mori:
 
@@ -153,6 +153,30 @@ Record every decision made while working on the plan.
   Rationale: Keeps the generator's dependency footprint minimal and avoids a dependency cycle
   (apps depend on shikumi-okf; shikumi-okf must not depend on apps). shikigami can build a manifest
   from its named program bindings (`noopSummaryProgram`, the per-agent programs) in a few lines.
+  Date: 2026-06-27
+
+- Decision: The pure builders return `Either GenerateError`, not a bare value, and
+  `writeProgramBundle` returns `IO (Either GenerateError ())` rather than the originally-sketched
+  `[Concept]` / `IO ()`.
+  Rationale: An OKF concept id can fail to parse (`Okf.ConceptId.parseConceptId` is partial on
+  malformed segments), so a manifest with an invalid `name`/`appName` is a real, reportable author
+  error. Surfacing it as a typed `GenerateError` (`InvalidConceptName Text ConceptIdError`) is
+  honest and total, where a partial `error` call would not be. `writeProgramBundle` also folds the
+  `okf-core` index-write failure into `IndexWriteError BundleError`. The Interfaces section records
+  the final signatures.
+  Date: 2026-06-27
+
+- Decision: Use inline expected-`Text` equality as the "golden" for rendered bodies rather than
+  `tasty-golden` files.
+  Rationale: The expected Markdown is small and self-contained; an inline literal pins the exact
+  format (including the structure tree and the "opaque embedded program" line for the `Embed` case)
+  without introducing golden-file management, and the plan must stay runnable from the file alone.
+  Date: 2026-06-27
+
+- Decision: The round-trip test compares the app→program edge set with `sort`, not by position.
+  Rationale: `Okf.Graph.buildGraph` orders edges by target concept id, which is not the manifest
+  order. The documentary guarantee is that an edge exists from the app to every program, which is a
+  set property; asserting positional order would test an `okf-core` implementation detail.
   Date: 2026-06-27
 
 - Decision: Generation is deterministic — the timestamp is an explicit caller-supplied argument
@@ -604,14 +628,22 @@ data AppInfo = AppInfo
   { appNamespace :: Text, appName :: Text, appTitle :: Maybe Text, appDescription :: Maybe Text }
 ```
 
-**Functions required by end of Milestones 2–3 (in `Shikumi.Okf.Render` / `Shikumi.Okf.Generate`):**
+**Functions delivered by Milestones 2–3 (in `Shikumi.Okf.Render` / `Shikumi.Okf.Generate`).** Final
+signatures (the builders are `Either`-returning because a concept id can fail to parse — see the
+Decision Log):
 
 ```haskell
+-- Shikumi.Okf.Render
 renderProgramBody  :: ProgramDoc -> Text
-programConcept     :: AppInfo -> Maybe Text -> ProgramDoc -> Concept
-appConcept         :: AppInfo -> Maybe Text -> ProgramManifest -> Concept
-generateBundle     :: AppInfo -> Maybe Text -> ProgramManifest -> [Concept]
-writeProgramBundle :: FilePath -> AppInfo -> Maybe Text -> ProgramManifest -> IO ()
+
+-- Shikumi.Okf.Generate
+data GenerateError = InvalidConceptName Text ConceptIdError | IndexWriteError BundleError
+programConceptId   :: ProgramDoc -> Either GenerateError ConceptId
+appConceptId       :: AppInfo -> Either GenerateError ConceptId
+programConcept     :: AppInfo -> Maybe Text -> ProgramDoc -> Either GenerateError Concept
+appConcept         :: AppInfo -> Maybe Text -> ProgramManifest -> Either GenerateError Concept
+generateBundle     :: AppInfo -> Maybe Text -> ProgramManifest -> Either GenerateError [Concept]
+writeProgramBundle :: FilePath -> AppInfo -> Maybe Text -> ProgramManifest -> IO (Either GenerateError ())
 ```
 
 **Profile artifact required by end of Milestone 4:** `shikumi-okf/profile/shikumi.dhall` declaring

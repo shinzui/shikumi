@@ -41,8 +41,31 @@ common common-options
 library
   import:          common-options
   hs-source-dirs:  src
-  exposed-modules: Shikumi.Okf.Types
+  exposed-modules:
+    Shikumi.Okf.Generate
+    Shikumi.Okf.Render
+    Shikumi.Okf.Types
+
   build-depends:
-    , base     >=4.20 && <5
+    , base      >=4.20 && <5
+    , okf-core  ^>=0.1
     , shikumi
-    , text     ^>=2.1
+    , text      ^>=2.1
+
+test-suite shikumi-okf-test
+  import:         common-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  ghc-options:    -threaded -with-rtsopts=-N
+  build-depends:
+    , base
+    , directory
+    , effectful
+    , filepath
+    , okf-core
+    , shikumi
+    , shikumi-okf
+    , tasty
+    , tasty-hunit
+    , text
