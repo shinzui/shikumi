@@ -87,7 +87,7 @@ Milestone 4 — Ship the shared profile and wire mori (DONE 2026-06-27):
 Milestone 5 (optional) — Richer bodies and CLI bridge:
 
 - [x] Add `nodeInstructionsIndexed :: Program i o -> [Text]` to `Shikumi.Program` (core) and include each model call's instruction in the rendered body. (2026-06-27)
-- [ ] (Optional) Provide a `Registry`→`ProgramManifest` adapter as a separate optional surface. (not done — deferred to real shikigami adoption)
+- [x] Provide a task-registry → `ProgramManifest` bridge. Landed as a new `handan-okf` package in the **handan** repo (`shinzui/handan`, commit `a09ded2`), not in shikigami — handan owns the `Task` type the whole fleet shares, so every handan app (shikigami included) gets it. Required `ProgramDoc.program` to become `Maybe SomeProgram` for handan tasks with no eval handle. (2026-06-27)
 
 
 ## Surprises & Discoveries
@@ -212,11 +212,13 @@ inventory of the programs an app ships.
 
 What remains (optional / downstream):
 
-- Milestone 5 (optional): a public `nodeInstructionsIndexed` accessor in core `shikumi` for richer
-  bodies, and a documented shikigami-side `[Handan.Task]`→`ProgramManifest` bridge. Not required for
-  the core outcome; deferred.
-- Real adoption: a consuming app (e.g. shikigami) builds its own manifest and declares the bundle in
-  its `mori.dhall`. The recipe is in `shikumi-okf/example/README.md`.
+- Milestone 5 is now also complete: `nodeInstructionsIndexed` (part 1) and the registry bridge
+  (part 2) both landed. Part 2 became a real `handan-okf` package in the handan repo rather than a
+  shikigami snippet, so the whole handan fleet is covered.
+- Real adoption: a consuming app (e.g. shikigami) calls `Handan.Okf.writeTaskBundle` over its task
+  registry, commits the bundle, and declares it in its `mori.dhall` (recipe in
+  `shikumi-okf/example/README.md`). shikigami should give its hand-rolled tasks (e.g. the noop
+  summary) eval handles so they document with structure rather than metadata only.
 - Publishing `shikumi.dhall` to a pinned `okf-profiles` URL so the profile import is reproducible in
   CI rather than resolved from the sibling checkout.
 
@@ -444,11 +446,20 @@ return type was reduced to `[Text]`: every `Predict` node always has a signature
 `Maybe` conveyed nothing, and `[Text]` matches `nodeFieldsIndexed`'s one-entry-per-`Predict` shape so
 the two zip cleanly.
 
-Second option: demonstrate the app-side bridge by writing (in this plan as a documented snippet, or
-as a tiny example) how shikigami converts its named program bindings into a `ProgramManifest` —
-e.g. `ProgramDoc { name = "noop-summary", description = Just "...", program = SomeProgram
-noopSummaryProgram, ... }`. This stays in shikigami (or the example), never in `shikumi-okf`, per the
-dependency-direction decision.
+Second option (DONE 2026-06-27, landed in the handan repo): rather than a shikigami-only snippet,
+the bridge was built one layer down as a new `handan-okf` package in `shinzui/handan` (at
+`/Users/shinzui/Keikaku/bokuno/handan/handan-okf`, commit `a09ded2`). handan owns the `Handan.Task`
+type that the whole mori fleet shares, and that type already exposes the inner shikumi program via
+its eval handle (`taskEval :: Maybe (EvalHandle i o)`, `evalProgram :: Program i o`) plus `taskName`
+and `taskSummary`. So `Handan.Okf.taskManifest`/`writeTaskBundle` document any `[Handan.Task]` — and
+every handan app, shikigami included, gets program docs without bespoke code. `handan-okf` depends on
+`handan-core` + `shikumi-okf` (and resolves `shikumi-okf`/`okf-core` from sibling checkouts), keeping
+okf-core out of handan-core. Tasks with no eval handle are documented from metadata
+(`ProgramDoc.program = Nothing`) and reported by `metadataOnlyTaskNames`, per the user's chosen
+"metadata-only doc + warn" behaviour. This is strictly better than the shikigami-only snippet and
+avoided editing shikigami while it was being changed. The `Shikumi.Cli.Registry` adapter mentioned in
+the original sketch was not built — handan is the relevant registry for the fleet, not the
+shikumi-cli example registry.
 
 
 ## Concrete Steps
