@@ -51,6 +51,7 @@ import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error, catchError)
 import Effectful.Prim (Prim)
+import GHC.Generics (Generic)
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval
@@ -111,7 +112,7 @@ data Miprov2Config = Miprov2Config
     -- | hard LM-call / candidate ceiling (V1's 'Budget')
     budget :: !Budget
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 -- | Turn a preset into a concrete config. Values are small enough for hermetic tests
 -- yet keep DSPy's monotonic ordering (heavier => more candidates, more trials).

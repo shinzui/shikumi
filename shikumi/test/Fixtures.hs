@@ -36,8 +36,8 @@ instance ToSchema Author
 instance FromModel Author
 
 data Article = Article
-  { title :: Field "The article's headline" Text,
-    body :: Field "The full article text" Text
+  { title :: !(Field "The article's headline" Text),
+    body :: !(Field "The full article text" Text)
   }
   deriving stock (Generic, Show, Eq)
 
@@ -48,11 +48,11 @@ instance FromModel Article
 instance ToPrompt Article
 
 data Summary = Summary
-  { headline :: Field "A one-line summary" Text,
-    bullets :: Field "Three to five key points" [Text],
-    author :: Author,
-    sentiment :: Sentiment,
-    note :: Maybe Text
+  { headline :: !(Field "A one-line summary" Text),
+    bullets :: !(Field "Three to five key points" [Text]),
+    author :: !Author,
+    sentiment :: !Sentiment,
+    note :: !(Maybe Text)
   }
   deriving stock (Generic, Show, Eq)
 

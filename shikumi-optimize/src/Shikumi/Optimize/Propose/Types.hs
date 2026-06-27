@@ -57,8 +57,8 @@ moduleSignatureAt k prog = case drop k (programFieldNames prog) of
 
 -- | One past attempt for a node: the instruction text and the score it earned.
 data PastInstruction = PastInstruction
-  { pastInstruction :: !Text,
-    pastScore :: !Double
+  { instruction :: !Text,
+    score :: !Double
   }
   deriving stock (Eq, Show, Generic)
 

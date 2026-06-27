@@ -15,12 +15,14 @@ module Shikumi.Optimize.RandomSearch
   )
 where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (ToJSON)
+import Data.Generics.Labels ()
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Shikumi.Compile.Types (compiledProgram)
 import Shikumi.Eval (Dataset, dataset, datasetExamples)
-import Shikumi.Optimize.Bootstrap (BootstrapConfig (..), bootstrapFewShotWith, defaultBootstrapConfig)
+import Shikumi.Optimize.Bootstrap (bootstrapFewShotWith, defaultBootstrapConfig)
 import Shikumi.Optimize.Search (freezeProgram, scoreOn, selectBest)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), Scored (..))
 import Shikumi.Program (Program)
@@ -77,7 +79,7 @@ bootstrapRandomSearchWith ::
 bootstrapRandomSearchWith cfg teacher numCandidates budget = Optimizer $ \train metric student -> do
   let seeds = [1 .. max 1 numCandidates]
       candidateFor seed = do
-        let cfg' = defaultBootstrapConfig {maxBootstrappedDemos = sizeFor cfg seed}
+        let cfg' = defaultBootstrapConfig & #maxBootstrappedDemos .~ sizeFor cfg seed
             opt = bootstrapFewShotWith cfg' teacher budget
         compiledProgram <$> runOptimizer opt (shuffle seed train) metric student
   seeded <- mapM candidateFor seeds

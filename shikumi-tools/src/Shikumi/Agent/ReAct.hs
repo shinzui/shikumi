@@ -246,10 +246,10 @@ mkToolCall nm args = _ToolCall & #name .~ nm & #arguments .~ args
 -- and the prompt implementations satisfy this interface, so the loop body is
 -- identical under either seam.
 data ProtocolImpl i o = ProtocolImpl
-  { renderPropose :: i -> Trajectory -> (Context, Options),
-    parsePropose :: Response -> Either Text (Text, Action),
-    renderExtract :: i -> Trajectory -> (Context, Options),
-    parseExtract :: Response -> Either ShikumiError o
+  { renderPropose :: !(i -> Trajectory -> (Context, Options)),
+    parsePropose :: !(Response -> Either Text (Text, Action)),
+    renderExtract :: !(i -> Trajectory -> (Context, Options)),
+    parseExtract :: !(Response -> Either ShikumiError o)
   }
 
 -- | Resolve a (possibly 'ProtocolAuto') selection to a concrete kind for a model.

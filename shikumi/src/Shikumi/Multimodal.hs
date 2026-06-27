@@ -58,15 +58,15 @@ import System.FilePath (takeExtension)
 -- | A typed image usable as a /signature input/ field. Stores decoded bytes and a
 -- MIME type; base64 is a wire detail handled by baikai when the image is sent.
 data Image = Image
-  { imageBytes :: !ByteString,
-    imageMime :: !Text
+  { bytes :: !ByteString,
+    mime :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
 -- | Build an image from already-decoded bytes and an explicit MIME type. The
 -- primitive constructor; the others normalise into it.
 imageFromBytes :: Text -> ByteString -> Image
-imageFromBytes mime bs = Image {imageBytes = bs, imageMime = mime}
+imageFromBytes mime bs = Image {bytes = bs, mime = mime}
 
 -- | Read an image file from disk, inferring the MIME type from the extension.
 -- Returns 'Left' a 'SchemaMismatch' if the extension is unrecognised (checked
@@ -89,7 +89,7 @@ imageFromBase64 mime b64 =
 -- | Lower an 'Image' into baikai's wire image block. Bytes pass through decoded;
 -- baikai base64-encodes them only when serialising to the wire.
 imageToContent :: Image -> ImageContent
-imageToContent img = ImageContent {imageData = imageBytes img, mimeType = imageMime img}
+imageToContent img = ImageContent {imageData = bytes img, mimeType = mime img}
 
 -- | A tiny fixed extension-to-MIME table (case-insensitive). Deliberately not a
 -- MIME database: the supported image media types are few and stable.

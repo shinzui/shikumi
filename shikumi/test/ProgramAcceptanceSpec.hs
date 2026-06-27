@@ -8,7 +8,9 @@
 --     wire), while node 1 is untouched.
 module ProgramAcceptanceSpec (tests) where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -71,7 +73,7 @@ tests =
         let rewritten =
               mapParamsAt
                 0
-                (\p -> p {instructionOverride = Just "NEW INSTRUCTION", demos = [sampleDemo]})
+                (\p -> p & #instructionOverride .~ Just "NEW INSTRUCTION" & #demos .~ [sampleDemo])
                 essay
             params = foldParams rewritten
         length params @?= 2
@@ -84,7 +86,7 @@ tests =
         let rewritten =
               mapParamsAt
                 0
-                (\p -> p {instructionOverride = Just "NEW INSTRUCTION", demos = [sampleDemo]})
+                (\p -> p & #instructionOverride .~ Just "NEW INSTRUCTION" & #demos .~ [sampleDemo])
                 essay
         out <-
           runEff . runErrorNoCallStack @ShikumiError . runRecordingLLM capture ref $

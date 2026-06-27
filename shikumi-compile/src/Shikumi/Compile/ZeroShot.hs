@@ -7,9 +7,11 @@ module Shikumi.Compile.ZeroShot
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Shikumi.Compile.Types (Compiler (..))
-import Shikumi.Program (Params (..), mapParams)
+import Shikumi.Program (mapParams)
 
 -- | Override every node's instruction with @instr@ and remove all demos. Reaches
 -- every 'Shikumi.Program.Predict' node in the program — including nodes nested
@@ -17,10 +19,10 @@ import Shikumi.Program (Params (..), mapParams)
 zeroShot :: Text -> Compiler
 zeroShot instr =
   Compiler $
-    mapParams (\ps -> ps {instructionOverride = Just instr, demos = []})
+    mapParams (\ps -> ps & #instructionOverride .~ Just instr & #demos .~ [])
 
 -- | Clear demos at every node but keep each node's existing instruction override
 -- (i.e. fall back to the signature default where none was set). Useful to strip a
 -- few-shot program back to zero-shot without choosing a new instruction.
 zeroShotClear :: Compiler
-zeroShotClear = Compiler $ mapParams (\ps -> ps {demos = []})
+zeroShotClear = Compiler $ mapParams (\ps -> ps & #demos .~ [])

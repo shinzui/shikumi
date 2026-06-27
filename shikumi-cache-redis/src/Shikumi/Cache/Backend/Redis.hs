@@ -30,8 +30,8 @@ import Shikumi.Cache (Cache (..), CacheKey (unCacheKey))
 -- | An open Redis-backed cache: a connection plus the TTL (seconds) applied to
 -- every stored entry.
 data RedisCache = RedisCache
-  { redisConn :: !R.Connection,
-    redisTTL :: !Integer
+  { conn :: !R.Connection,
+    ttl :: !Integer
   }
 
 -- | The default entry TTL: 7 days (in seconds).
@@ -51,7 +51,7 @@ openRedisCacheWithTTL ttl ci = do
 
 -- | Close the Redis connection.
 closeRedisCache :: RedisCache -> IO ()
-closeRedisCache = R.disconnect . redisConn
+closeRedisCache = R.disconnect . conn
 
 -- | The operational Redis key for a content-addressed 'CacheKey'.
 redisKey :: CacheKey -> ByteString
@@ -63,10 +63,10 @@ redisKey k = TE.encodeUtf8 ("shikumi:cache:" <> unCacheKey k)
 runCacheRedis :: (IOE :> es) => RedisCache -> Eff (Cache : es) a -> Eff es a
 runCacheRedis cache = interpret $ \_ -> \case
   LookupCache k -> liftIO $ do
-    r <- R.runRedis (redisConn cache) (R.get (redisKey k))
+    r <- R.runRedis (conn cache) (R.get (redisKey k))
     pure $ case r of
       Right (Just bs) -> decodeStrict' bs
       _ -> Nothing
   StoreCache k v -> liftIO $ do
-    _ <- R.runRedis (redisConn cache) (R.setex (redisKey k) (redisTTL cache) (BL.toStrict (encode v)))
+    _ <- R.runRedis (conn cache) (R.setex (redisKey k) (ttl cache) (BL.toStrict (encode v)))
     pure ()

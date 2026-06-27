@@ -9,11 +9,11 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base64 qualified as Base64
 import Data.Text.Encoding (decodeUtf8)
 import Shikumi.Multimodal
-  ( imageBytes,
+  ( bytes,
     imageFromBase64,
     imageFromFile,
-    imageMime,
     imageToContent,
+    mime,
   )
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.IO (hClose, openTempFile)
@@ -28,7 +28,7 @@ tests =
         let raw = BS.pack [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] -- PNG magic
             b64 = decodeUtf8 (Base64.encode raw)
         img <- either (assertFailure . show) pure (imageFromBase64 "image/png" b64)
-        imageBytes img @?= raw
+        bytes img @?= raw
         let ic = imageToContent img
         imageData ic @?= raw
         mimeType ic @?= "image/png",
@@ -40,7 +40,7 @@ tests =
         hClose h
         res <- imageFromFile fp
         img <- either (assertFailure . show) pure res
-        imageBytes img @?= raw
-        imageMime img @?= "image/png"
+        bytes img @?= raw
+        mime img @?= "image/png"
         removeFile fp
     ]

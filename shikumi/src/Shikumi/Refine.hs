@@ -166,8 +166,8 @@ bestOfNWith n failCount sched threshold reward inner = embed $ \i ->
 -- wrapper). Mirrors DSPy's @OfferFeedback@ predictor, scoped to the whole inner
 -- program.
 data AdviceIn = AdviceIn
-  { achievedReward :: Text,
-    targetThreshold :: Text
+  { achievedReward :: !Text,
+    targetThreshold :: !Text
   }
   deriving stock (Generic, Show, Eq)
 
@@ -293,9 +293,9 @@ appendHint adv ctx =
 -- @Generic@-derived) because @attempts@ is polymorphic in @o@ — the same reason
 -- 'WithReasoning'\'s instances are hand-written.
 data MultiChainInput i o = MultiChainInput
-  { original :: i,
+  { original :: !i,
     -- | length @M@; each rendered as "Student Attempt #k"
-    attempts :: [WithReasoning o]
+    attempts :: ![WithReasoning o]
   }
 
 -- | Render the original input, then each attempt as a "Student Attempt #k" line:

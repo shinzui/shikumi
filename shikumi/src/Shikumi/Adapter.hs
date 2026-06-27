@@ -61,7 +61,7 @@ import Baikai
     _Context,
     _Options,
   )
-import Control.Lens ((&), (.~), (^.))
+import Control.Lens (at, (&), (.~), (?~), (^.))
 import Data.Aeson (Object, Value (..), eitherDecodeStrict, toJSON)
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
@@ -156,8 +156,8 @@ instance (PromptValue a) => PromptValue (Constrained cs a) where
 
 -- | A record of two functions: format a request, parse a response.
 data Adapter i o = Adapter
-  { render :: Signature i o -> i -> (Context, Options),
-    parse :: Signature i o -> Response -> Either ShikumiError o
+  { render :: !(Signature i o -> i -> (Context, Options)),
+    parse :: !(Signature i o -> Response -> Either ShikumiError o)
   }
 
 -- | Whether a model supports provider-native structured output.
@@ -204,7 +204,7 @@ metaTemperatureKey = "shikumi.temperature"
 -- simply stripped.)
 attachSchema :: Value -> Options -> Options
 attachSchema schema opts =
-  opts & #metadata .~ Map.insert metaResponseSchemaKey schema (opts ^. #metadata)
+  opts & #metadata . at metaResponseSchemaKey ?~ schema
 
 -- | Stamp a per-sample temperature onto a request's private metadata channel under
 -- 'metaTemperatureKey'. Used by 'Shikumi.Program.runProgram' to thread a
@@ -212,7 +212,7 @@ attachSchema schema opts =
 -- the router turns it into @Options.temperature@.
 stampTemperature :: Double -> Options -> Options
 stampTemperature t opts =
-  opts & #metadata .~ Map.insert metaTemperatureKey (toJSON t) (opts ^. #metadata)
+  opts & #metadata . at metaTemperatureKey ?~ toJSON t
 
 -- | The native-schema adapter. @render@ stamps the derived schema onto the request
 -- metadata channel (see 'attachSchema'); @parse@ reads the structured JSON from the

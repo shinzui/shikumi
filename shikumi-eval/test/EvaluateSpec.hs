@@ -4,6 +4,8 @@
 -- completes; and the same error aborting the run under 'FailAbort'.
 module EvaluateSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -72,7 +74,7 @@ tests =
         -- example fails, the rest succeed.
         let ds = dataset [example (Question "q0") (Answer "a"), example (Question "q1") (Answer "ok")]
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
-            cfg = defaultEvalConfig {concurrency = 1}
+            cfg = defaultEvalConfig & #concurrency .~ 1
         report <-
           runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $
@@ -93,7 +95,7 @@ tests =
       testCase "FailAbort surfaces the error" $ do
         let ds = dataset [example (Question "q0") (Answer "a"), example (Question "q1") (Answer "ok")]
             replies = [MockFail providerErr, MockOk (answerResponse "ok")]
-            cfg = defaultEvalConfig {concurrency = 1, failurePolicy = FailAbort}
+            cfg = defaultEvalConfig & #concurrency .~ 1 & #failurePolicy .~ FailAbort
         report <-
           runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
             runScriptedLLM replies $

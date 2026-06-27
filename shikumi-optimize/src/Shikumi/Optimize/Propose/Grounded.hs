@@ -49,15 +49,15 @@ import Shikumi.Signature (mkSignature)
 -- | The grounded proposer's input: every signal about the optimization target,
 -- rendered into the prompt under its field name by the generic 'ToPrompt'.
 data GenerateInstructionIn = GenerateInstructionIn
-  { datasetDescription :: Text,
-    programCode :: Text,
-    programDescription :: Text,
-    moduleSignature :: Text,
-    moduleDescription :: Text,
-    taskDemos :: Text,
-    previousInstructions :: Text,
-    basicInstruction :: Text,
-    tip :: Text
+  { datasetDescription :: !Text,
+    programCode :: !Text,
+    programDescription :: !Text,
+    moduleSignature :: !Text,
+    moduleDescription :: !Text,
+    taskDemos :: !Text,
+    previousInstructions :: !Text,
+    basicInstruction :: !Text,
+    tip :: !Text
   }
   deriving stock (Generic, Show)
 

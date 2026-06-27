@@ -32,6 +32,7 @@ where
 import Data.Maybe (isJust, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import GHC.Generics (Generic)
 import Numeric (showFFloat)
 import Numeric.Natural (Natural)
 import Shikumi.Eval.Types (Score, scoreZero, unScore)
@@ -96,7 +97,7 @@ data EvalConfig = EvalConfig
     -- | samples per example for multi-sample metrics (forced to @>= 1@)
     numSamples :: !Int
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 -- | The default: four-way concurrency, score failures @0@ and keep going, one
 -- sample per example.

@@ -60,7 +60,7 @@ import Baikai
     Response,
     flattenAssistantBlocks,
   )
-import Control.Lens ((^.))
+import Control.Lens (at, ix, (%~), (&), (.~), (?~), (^.))
 import Data.Aeson (FromJSON, FromJSONKey, ToJSON, ToJSONKey, Value, toJSON)
 import Data.Generics.Labels ()
 import Data.List (sortOn)
@@ -187,9 +187,9 @@ data TraceTree = TraceTree
 -- by span id).
 childrenOf :: TraceTree -> SpanId -> [SpanId]
 childrenOf t sid =
-  map spanId $
-    sortOn (\s -> (startedAt s, spanId s)) $
-      [s | s <- Map.elems (spans t), parent s == Just sid]
+  map (^. #spanId) $
+    sortOn (\s -> (s ^. #startedAt, s ^. #spanId)) $
+      [s | s <- Map.elems (t ^. #spans), (s ^. #parent) == Just sid]
 
 -- ---------------------------------------------------------------------------
 -- The effect
@@ -233,11 +233,12 @@ annotateSpan = send . AnnotateSpan
 
 -- | Mutable building state for one trace, all in 'IORef's.
 data TraceState = TraceState
-  { tsCounter :: !(IORef Int),
-    tsStack :: !(IORef [SpanId]),
-    tsSpans :: !(IORef (Map SpanId Span)),
-    tsRoot :: !(IORef (Maybe SpanId))
+  { counter :: !(IORef Int),
+    stack :: !(IORef [SpanId]),
+    spans :: !(IORef (Map SpanId Span)),
+    root :: !(IORef (Maybe SpanId))
   }
+  deriving stock (Generic)
 
 -- | Run a traced computation, returning its result and the finished tree.
 --
@@ -251,9 +252,9 @@ runTrace act = do
   a <-
     interpret
       ( \env -> \case
-          CurrentSpanId -> safeHead <$> readIORef (tsStack st)
-          BumpRetry -> modifyActive st (\a' -> a' {retries = retries a' + 1})
-          RecordToolCall tc -> modifyActive st (\a' -> a' {toolCalls = toolCalls a' ++ [tc]})
+          CurrentSpanId -> safeHead <$> readIORef (st ^. #stack)
+          BumpRetry -> modifyActive st (\a' -> a' & #retries %~ (+ 1))
+          RecordToolCall tc -> modifyActive st (\a' -> a' & #toolCalls %~ (++ [tc]))
           AnnotateSpan f -> modifyActive st f
           WithSpan k lbl inner ->
             bracket
@@ -274,15 +275,15 @@ newTraceState =
 -- first parentless span.
 openSpan :: (Prim :> es, Time :> es) => TraceState -> SpanKind -> Text -> Eff es SpanId
 openSpan st k lbl = do
-  n <- atomicModifyIORef' (tsCounter st) (\i -> (i + 1, i + 1))
+  n <- atomicModifyIORef' (st ^. #counter) (\i -> (i + 1, i + 1))
   let sid = SpanId ("span-" <> T.pack (show n))
-  par <- safeHead <$> readIORef (tsStack st)
+  par <- safeHead <$> readIORef (st ^. #stack)
   now <- getCurrentTime
   let s = Span sid par k lbl now Nothing emptyAttrs
-  modifyIORef' (tsSpans st) (Map.insert sid s)
-  modifyIORef' (tsStack st) (sid :)
+  modifyIORef' (st ^. #spans) (at sid ?~ s)
+  modifyIORef' (st ^. #stack) (sid :)
   case par of
-    Nothing -> modifyIORef' (tsRoot st) (Just . fromMaybe sid)
+    Nothing -> modifyIORef' (st ^. #root) (Just . fromMaybe sid)
     Just _ -> pure ()
   pure sid
 
@@ -290,22 +291,22 @@ openSpan st k lbl = do
 closeSpan :: (Prim :> es, Time :> es) => TraceState -> SpanId -> Eff es ()
 closeSpan st sid = do
   now <- getCurrentTime
-  modifyIORef' (tsSpans st) (Map.adjust (\s -> s {endedAt = Just now}) sid)
-  modifyIORef' (tsStack st) (drop 1)
+  modifyIORef' (st ^. #spans) (ix sid . #endedAt ?~ now)
+  modifyIORef' (st ^. #stack) (drop 1)
 
 -- | Apply a function to the active span's attributes (a no-op with no active span).
 modifyActive :: (Prim :> es) => TraceState -> (SpanAttrs -> SpanAttrs) -> Eff es ()
 modifyActive st f = do
-  stk <- readIORef (tsStack st)
+  stk <- readIORef (st ^. #stack)
   case stk of
-    (sid : _) -> modifyIORef' (tsSpans st) (Map.adjust (\s -> s {attrs = f (attrs s)}) sid)
+    (sid : _) -> modifyIORef' (st ^. #spans) (ix sid . #attrs %~ f)
     [] -> pure ()
 
 -- | Freeze the building state into an immutable 'TraceTree'.
 freezeTree :: (Prim :> es) => TraceState -> Eff es TraceTree
 freezeTree st = do
-  sp <- readIORef (tsSpans st)
-  r <- readIORef (tsRoot st)
+  sp <- readIORef (st ^. #spans)
+  r <- readIORef (st ^. #root)
   pure (TraceTree (fromMaybe (SpanId "") r) sp)
 
 safeHead :: [a] -> Maybe a
@@ -337,17 +338,16 @@ llmLabel m = (m ^. #provider) <> "/" <> (m ^. #modelId)
 llmAttrs :: Model -> Context -> Options -> Response -> SpanAttrs
 llmAttrs m c o resp =
   emptyAttrs
-    { model = Just (m ^. #modelId),
-      provider = Just (m ^. #provider),
-      prompt = Just (requestToCanonicalValue m c o),
-      response = Just (toJSON resp),
-      latencyMs = Just (resp ^. #latencyMs),
-      inputTokens = Just (resp ^. #message . #usage . #inputTokens),
-      outputTokens = Just (resp ^. #message . #usage . #outputTokens),
-      costUsd = Just (realToFrac (resp ^. #message . #usage . #cost . #usd :: Rational)),
-      toolCalls = toolCallsOf resp,
-      cacheKey = Just (unCacheKey (Key.cacheKey m c o))
-    }
+    & #model ?~ (m ^. #modelId)
+    & #provider ?~ (m ^. #provider)
+    & #prompt ?~ requestToCanonicalValue m c o
+    & #response ?~ toJSON resp
+    & #latencyMs ?~ (resp ^. #latencyMs)
+    & #inputTokens ?~ (resp ^. #message . #usage . #inputTokens)
+    & #outputTokens ?~ (resp ^. #message . #usage . #outputTokens)
+    & #costUsd ?~ realToFrac (resp ^. #message . #usage . #cost . #usd :: Rational)
+    & #toolCalls .~ toolCallsOf resp
+    & #cacheKey ?~ unCacheKey (Key.cacheKey m c o)
 
 -- | Extract the tool calls from a response's assistant content blocks.
 toolCallsOf :: Response -> [ToolCallRecord]
@@ -364,10 +364,10 @@ toolCallsOf resp =
 -- label, wall-clock duration, and (for LM-call spans) tokens and cost.
 renderTree :: TraceTree -> Text
 renderTree t
-  | Map.null (spans t) = "(empty trace)\n"
-  | otherwise = T.concat (go (0 :: Int) (root t))
+  | Map.null (t ^. #spans) = "(empty trace)\n"
+  | otherwise = T.concat (go (0 :: Int) (t ^. #root))
   where
-    go depth sid = case Map.lookup sid (spans t) of
+    go depth sid = case Map.lookup sid (t ^. #spans) of
       Nothing -> []
       Just s -> line depth s : concatMap (go (depth + 1)) (childrenOf t sid)
     line depth s =

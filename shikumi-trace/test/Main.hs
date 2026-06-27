@@ -471,12 +471,12 @@ nodeTests =
         map inputFieldNames nf @?= [["cell"], ["cell"]]
         map outputFieldNames nf @?= [["cell"], ["cell"]],
       testCase "mapParamsAt k edits the node at programNodePaths !! k (index law)" $ do
-        let edited = mapParamsAt 1 (\ps -> ps {instructionOverride = Just "x"}) chain2
+        let edited = mapParamsAt 1 (\ps -> ps & #instructionOverride .~ Just "x") chain2
         map instructionOverride (foldParams edited) @?= [Nothing, Just "x"],
       testCase "NodePath and a nodePath-bearing SpanAttrs round-trip as JSON" $ do
         let np = NodePath [StepComposeL, StepEnsemble 2]
         decode (encode np) @?= Just np
-        let a = emptyAttrs {nodePath = Just np}
+        let a = emptyAttrs & #nodePath .~ Just np
         decode (encode a) @?= Just a
     ]
 

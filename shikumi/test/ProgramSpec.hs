@@ -2,6 +2,8 @@
 -- @foldParams@ / @mapParams@ / @mapParamsAt@ and the ordering law).
 module ProgramSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef)
 import Data.List (foldl1')
 import Data.Text (Text)
@@ -21,7 +23,7 @@ import ProgramFixtures
   )
 import Shikumi.Error (ShikumiError)
 import Shikumi.Program
-  ( Params (..),
+  ( Params,
     Program (Compose, Predict),
     emptyParams,
     foldParams,
@@ -39,7 +41,7 @@ twoStage :: Program Topic Draft
 twoStage = pipeline (Predict topicToOutline emptyParams) (Predict outlineToDraft emptyParams)
 
 setInstr :: Text -> Params -> Params
-setInstr t p = p {instructionOverride = Just t}
+setInstr t p = p & #instructionOverride .~ Just t
 
 -- | A list update mirroring @mapParamsAt@'s contract, used to state the ordering
 -- law executably.

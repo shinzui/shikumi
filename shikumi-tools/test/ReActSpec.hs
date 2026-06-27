@@ -3,6 +3,8 @@
 -- never finishes stops at @maxIters@ and still extracts a best-effort answer.
 module ReActSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Vector qualified as V
 import Fixtures
   ( WeatherResp,
@@ -16,7 +18,6 @@ import Fixtures
 import MockLLM (runAgent)
 import Shikumi.Agent.ReAct
   ( Action (..),
-    ReActConfig (..),
     Step (..),
     Termination (..),
     Trajectory (..),
@@ -51,7 +52,7 @@ tests =
               _ -> assertFailure "expected exactly two steps"
           Left e -> assertFailure ("agent failed: " <> show e),
       testCase "stops at maxIters with TerminatedMaxIters" $ do
-        let cfg = defaultReActConfig {maxIters = 1}
+        let cfg = defaultReActConfig & #maxIters .~ 1
         res <-
           runAgent
             maxItersScript

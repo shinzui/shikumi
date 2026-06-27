@@ -21,8 +21,7 @@ import Fixtures
   )
 import MockLLM (runAgent)
 import Shikumi.Agent.ReAct
-  ( ReActConfig (..),
-    Termination (..),
+  ( Termination (..),
     ToolProtocol (..),
     Trajectory (..),
     defaultReActConfig,
@@ -40,12 +39,12 @@ tests =
         nat <-
           runAgent
             nativeScript
-            (reactWithTrajectory weatherSignature weatherRegistry defaultReActConfig {protocol = ProtocolNative})
+            (reactWithTrajectory weatherSignature weatherRegistry (defaultReActConfig & #protocol .~ ProtocolNative))
             weatherQuestion
         pro <-
           runAgent
             promptScript
-            (reactWithTrajectory weatherSignature weatherRegistry defaultReActConfig {protocol = ProtocolPrompt})
+            (reactWithTrajectory weatherSignature weatherRegistry (defaultReActConfig & #protocol .~ ProtocolPrompt))
             weatherQuestion
         case (nat, pro) of
           (Right (oN :: WeatherResp, tN), Right (oP, tP)) -> do

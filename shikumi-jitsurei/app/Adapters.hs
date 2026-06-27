@@ -36,8 +36,8 @@ newtype Ask = Ask {question :: Text}
   deriving anyclass (ToPrompt)
 
 data Memo = Memo
-  { headline :: Field "A one-line summary" Text,
-    bullets :: Field "Key points" [Text]
+  { headline :: !(Field "A one-line summary" Text),
+    bullets :: !(Field "Key points" [Text])
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
@@ -50,8 +50,8 @@ memoSig = mkSignature "Summarise the question into a headline and key points."
 -- ---------------------------------------------------------------------------
 
 data Bio = Bio
-  { tagline :: Constrained '[ 'MinLen 10] Text,
-    score :: Constrained '[ 'MinVal "0", 'MaxVal "100"] Int
+  { tagline :: !(Constrained '[ 'MinLen 10] Text),
+    score :: !(Constrained '[ 'MinVal "0", 'MaxVal "100"] Int)
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel)

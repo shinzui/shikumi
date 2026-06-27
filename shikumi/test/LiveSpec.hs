@@ -10,6 +10,7 @@ import Baikai hiding (complete)
 import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Baikai.Prelude
 import Baikai.Provider.OpenAI.Api qualified as OpenAI
+import Data.Generics.Labels ()
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful (runEff)

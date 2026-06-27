@@ -25,29 +25,29 @@ import Shikumi.Signature (mkSignature)
 -- ---------------------------------------------------------------------------
 
 data RawEmail = RawEmail
-  { subject :: Field "The email subject line" Text,
-    bodyText :: Field "The email body" Text
+  { subject :: !(Field "The email subject line" Text),
+    bodyText :: !(Field "The email body" Text)
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
 data Invoice = Invoice
-  { vendor :: Text,
-    amount :: Double
+  { vendor :: !Text,
+    amount :: !Double
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
 data EnrichedInvoice = EnrichedInvoice
-  { vendorTier :: Text,
-    amountUsd :: Double
+  { vendorTier :: !Text,
+    amountUsd :: !Double
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
 data Decision = Decision
-  { approved :: Bool,
-    reason :: Text
+  { approved :: !Bool,
+    reason :: !Text
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)

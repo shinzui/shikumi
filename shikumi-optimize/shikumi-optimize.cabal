@@ -64,6 +64,8 @@ library
     , base             >=4.20     && <5
     , containers
     , effectful
+    , generic-lens     ^>=2.2
+    , lens             ^>=5.3
     , shikumi          ^>=0.1.0.1
     , shikumi-compile  ^>=0.1.0.1
     , shikumi-eval     ^>=0.1.0.1

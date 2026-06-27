@@ -5,6 +5,8 @@
 -- and the serialization round-trip — the breadth/depth control the MasterPlan tracks.
 module CoproSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
@@ -18,7 +20,6 @@ import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
   ( Budget (..),
-    CoproConfig (..),
     copro,
     defaultCoproConfig,
     optimize,
@@ -67,7 +68,7 @@ tests = testGroup "Copro" [breadthSurfacesMagic, depthMonotone, budgetRespected,
 breadthSurfacesMagic :: TestTree
 breadthSurfacesMagic =
   testCase "breadth surfaces and selects the magic RULE instruction" $ do
-    res <- runStub (optimize (copro defaultCoproConfig {depth = 1}) trainset exactMatch sentimentProg)
+    res <- runStub (optimize (copro (defaultCoproConfig & #depth .~ 1)) trainset exactMatch sentimentProg)
     case res of
       Left e -> assertFailure ("unexpected error: " <> show e)
       Right cp -> case programParams (compiledProgram cp) of
@@ -79,9 +80,9 @@ depthMonotone =
   testCase "deeper depth never scores worse than shallower on held-out" $ do
     res <-
       runStub $ do
-        cp1 <- optimize (copro defaultCoproConfig {depth = 1}) trainset exactMatch sentimentProg
+        cp1 <- optimize (copro (defaultCoproConfig & #depth .~ 1)) trainset exactMatch sentimentProg
         s1 <- scoreOn heldout exactMatch (compiledProgram cp1)
-        cp3 <- optimize (copro defaultCoproConfig {depth = 3}) trainset exactMatch sentimentProg
+        cp3 <- optimize (copro (defaultCoproConfig & #depth .~ 3)) trainset exactMatch sentimentProg
         s3 <- scoreOn heldout exactMatch (compiledProgram cp3)
         pure (s1, s3)
     case res of
@@ -92,7 +93,7 @@ budgetRespected :: TestTree
 budgetRespected =
   testCase "respects the LM-call budget" $ do
     ref <- newIORef (0 :: Int)
-    let cfg = defaultCoproConfig {budget = Budget {maxLmCalls = 8, maxCandidates = 32}}
+    let cfg = defaultCoproConfig & #budget .~ Budget {maxLmCalls = 8, maxCandidates = 32}
     res <-
       runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
         runStubLMCounting ref (optimize (copro cfg) trainset exactMatch sentimentProg)

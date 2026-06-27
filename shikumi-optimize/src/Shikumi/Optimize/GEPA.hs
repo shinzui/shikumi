@@ -33,7 +33,9 @@ module Shikumi.Optimize.GEPA
   )
 where
 
+import Control.Lens ((&), (?~))
 import Control.Monad (forM, forM_, when)
+import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -87,11 +89,11 @@ type FeedbackMetric o = o -> Prediction o -> (Score, Text)
 -- | The reflective proposer's input: the node's current instruction, its accumulated
 -- critiques, program/dataset summaries, and the node's field names.
 data ReflectIn = ReflectIn
-  { currentInstruction :: Text,
-    feedback :: Text,
-    programSummary :: Text,
-    datasetSummary :: Text,
-    fieldSummary :: Text
+  { currentInstruction :: !Text,
+    feedback :: !Text,
+    programSummary :: !Text,
+    datasetSummary :: !Text,
+    fieldSummary :: !Text
   }
   deriving stock (Generic, Show)
 
@@ -179,7 +181,7 @@ mutateNode proposer progSummary dataSummary fields fblog paths idx prog =
                   fb = T.intercalate "\n" crits
               ReflectOut newInstr <-
                 runProgram proposer (ReflectIn cur fb progSummary dataSummary fldSummary)
-              pure (mapParamsAt idx (\ps -> ps {instructionOverride = Just newInstr}) prog)
+              pure (mapParamsAt idx (\ps -> ps & #instructionOverride ?~ newInstr) prog)
 
 -- | The 'Params' at a node index (empty if out of range).
 paramsAt :: Int -> Program i o -> Params
@@ -216,7 +218,7 @@ gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
       dataSummary = fallbackDatasetSummary (datasetSize train)
       maxCalls = maxLmCalls budget
       maxCands = maxCandidates budget
-      rebuild cand = either (const student) id (setProgramParams (candParams cand) student)
+      rebuild cand = either (const student) id (setProgramParams (params cand) student)
 
   seedRpt <- evaluatePure train metric student
   let seedCand = Candidate (foldParams student) (perEx seedRpt) (aggregateScore seedRpt)
@@ -259,7 +261,7 @@ perEx rpt = [unScore s | ExampleResult {score = s} <- results rpt]
 bestOf :: Candidate -> [Candidate] -> Candidate
 bestOf seedCand cs = case cs of
   [] -> seedCand
-  (x : xs) -> foldl' (\b c -> if candAggregate c > candAggregate b then c else b) x xs
+  (x : xs) -> foldl' (\b c -> if aggregate c > aggregate b then c else b) x xs
 
 -- | A minimal program summary (EP-19's program describer is the richer source).
 fallbackProgramSummary :: Int -> Text

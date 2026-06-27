@@ -29,6 +29,7 @@ where
 
 import Data.Aeson (ToJSON, toJSON)
 import Effectful.Error.Static (catchError)
+import GHC.Generics (Generic)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Example (..), datasetExamples, prediction, unScore)
 import Shikumi.Optimize.LabeledFewShot (withDemos)
@@ -44,7 +45,7 @@ data BootstrapConfig = BootstrapConfig
     -- | cap on the demos attached, so prompts stay bounded (default @4@)
     maxBootstrappedDemos :: !Int
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 -- | Keep only perfectly-correct teacher runs; attach at most four demos.
 defaultBootstrapConfig :: BootstrapConfig

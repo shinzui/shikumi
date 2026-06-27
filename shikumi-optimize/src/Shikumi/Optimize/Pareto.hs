@@ -17,9 +17,9 @@ import Shikumi.Program (Params)
 -- | A candidate program, identified by its @foldParams@-order node parameters, with
 -- its per-example scores (dataset order) and their mean.
 data Candidate = Candidate
-  { candParams :: ![Params],
-    candPerExample :: ![Double],
-    candAggregate :: !Double
+  { params :: ![Params],
+    perExample :: ![Double],
+    aggregate :: !Double
   }
   deriving stock (Eq, Show)
 
@@ -27,8 +27,8 @@ data Candidate = Candidate
 -- Equal vectors are NOT domination, so equal candidates coexist on the frontier.
 dominates :: Candidate -> Candidate -> Bool
 dominates a b =
-  let pa = candPerExample a
-      pb = candPerExample b
+  let pa = perExample a
+      pb = perExample b
    in length pa == length pb && and (zipWith (>=) pa pb) && or (zipWith (>) pa pb)
 
 -- | The non-dominated subset, preserving input order (so the frontier is
@@ -44,9 +44,9 @@ sampleParent :: Int -> [Candidate] -> Maybe (Candidate, Int)
 sampleParent _ [] = Nothing
 sampleParent seed cands@(c0 : _) = Just (go r (zip cands weights), seed')
   where
-    cols = length (candPerExample c0)
-    colMax j = maximum [candPerExample c !! j | c <- cands]
-    weightOf c = max 1 (length [() | j <- [0 .. cols - 1], (candPerExample c !! j) >= colMax j])
+    cols = length (perExample c0)
+    colMax j = maximum [perExample c !! j | c <- cands]
+    weightOf c = max 1 (length [() | j <- [0 .. cols - 1], (perExample c !! j) >= colMax j])
     weights = map weightOf cands
     total = max 1 (sum weights)
     seed' = lcg seed

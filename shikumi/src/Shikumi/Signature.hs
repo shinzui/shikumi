@@ -19,6 +19,8 @@ module Shikumi.Signature
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import GHC.Generics (Generic, Rep)
 import Shikumi.Schema (GFieldMetas, fieldMetasOf)
@@ -27,8 +29,8 @@ import Shikumi.Schema.Types (FieldMeta)
 -- | A worked input -> output example shown to the model. Optimizers select and
 -- rewrite these.
 data Demo i o = Demo
-  { input :: i,
-    output :: o
+  { input :: !i,
+    output :: !o
   }
   deriving stock (Generic, Show, Eq)
 
@@ -37,13 +39,13 @@ data Demo i o = Demo
 -- the compiler enforces the input/output types.
 data Signature i o = Signature
   { -- | optimizable: the task description
-    instruction :: Text,
+    instruction :: !Text,
     -- | optimizable: worked examples
-    demos :: [Demo i o],
+    demos :: ![Demo i o],
     -- | derived metadata: the input record's fields
-    inputFields :: [FieldMeta],
+    inputFields :: ![FieldMeta],
     -- | derived metadata: the output record's fields
-    outputFields :: [FieldMeta]
+    outputFields :: ![FieldMeta]
   }
   deriving stock (Generic, Show)
 
@@ -68,7 +70,7 @@ getInstruction = instruction
 
 -- | Replace the (optimizable) instruction.
 setInstruction :: Text -> Signature i o -> Signature i o
-setInstruction t sig = sig {instruction = t}
+setInstruction t sig = sig & #instruction .~ t
 
 -- | Read the (optimizable) demonstrations.
 getDemos :: Signature i o -> [Demo i o]
@@ -76,4 +78,4 @@ getDemos = demos
 
 -- | Replace the (optimizable) demonstrations.
 setDemos :: [Demo i o] -> Signature i o -> Signature i o
-setDemos ds sig = sig {demos = ds}
+setDemos ds sig = sig & #demos .~ ds

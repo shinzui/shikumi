@@ -29,6 +29,7 @@ import Control.Concurrent.STM
     readTVar,
   )
 import Control.Exception (bracket_, throwIO)
+import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef')
 import Data.Text qualified as T
 import Data.Vector qualified as V

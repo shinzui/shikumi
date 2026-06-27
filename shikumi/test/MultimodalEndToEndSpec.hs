@@ -43,8 +43,8 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
 data Describe = Describe
-  { image :: Image,
-    question :: Field "What to ask about the image" Text
+  { image :: !Image,
+    question :: !(Field "What to ask about the image" Text)
   }
   deriving stock (Generic, Show)
   deriving anyclass (ToPrompt)

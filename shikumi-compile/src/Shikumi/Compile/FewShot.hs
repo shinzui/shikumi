@@ -15,16 +15,18 @@ module Shikumi.Compile.FewShot
   )
 where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (ToJSON, toJSON)
+import Data.Generics.Labels ()
 import Shikumi.Compile.Types (Compiler (..))
-import Shikumi.Program (Demo (..), Params (..), mapParams)
+import Shikumi.Program (Demo (..), mapParams)
 
 -- | Inject the given demos at every node, /replacing/ (not appending) the node's
 -- demo list so that re-compiling is idempotent — compiling twice yields the same
 -- demos, never duplicates. (If append semantics are ever wanted that is a separate
 -- combinator, deliberately out of scope here.)
 fewShot :: [Demo] -> Compiler
-fewShot ds = Compiler $ mapParams (\ps -> ps {demos = ds})
+fewShot ds = Compiler $ mapParams (\ps -> ps & #demos .~ ds)
 
 -- | Build a few-shot compiler from typed input/output pairs, serializing each to a
 -- JSON 'Demo'. This is the recommended path when demos must line up with a node's

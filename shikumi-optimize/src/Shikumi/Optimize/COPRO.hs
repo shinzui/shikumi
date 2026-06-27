@@ -27,6 +27,7 @@ import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
 import Effectful.Prim (Prim)
+import GHC.Generics (Generic)
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric, datasetSize)
@@ -50,7 +51,7 @@ data CoproConfig = CoproConfig
     -- | LM-call / candidate ceilings
     budget :: !Budget
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 -- | Breadth 4, depth 3, the default budget.
 defaultCoproConfig :: CoproConfig

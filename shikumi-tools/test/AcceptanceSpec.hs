@@ -7,6 +7,8 @@
 module AcceptanceSpec (tests) where
 
 import Baikai (Response)
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Vector qualified as V
@@ -25,7 +27,6 @@ import Fixtures
 import MockLLM (runAgent)
 import Shikumi.Agent.ReAct
   ( Action (..),
-    ReActConfig (..),
     Step (..),
     Termination (..),
     ToolProtocol (..),
@@ -51,7 +52,7 @@ tests =
         res <-
           runAgent
             badArgsPromptScript
-            (reactWithTrajectory weatherSignature weatherRegistry defaultReActConfig {protocol = ProtocolPrompt})
+            (reactWithTrajectory weatherSignature weatherRegistry (defaultReActConfig & #protocol .~ ProtocolPrompt))
             weatherQuestion
         case res of
           Right (o :: WeatherResp, traj) -> do
@@ -68,7 +69,7 @@ endToEnd proto script = do
   res <-
     runAgent
       script
-      (reactWithTrajectory weatherSignature weatherRegistry defaultReActConfig {protocol = proto})
+      (reactWithTrajectory weatherSignature weatherRegistry (defaultReActConfig & #protocol .~ proto))
       weatherQuestion
   case res of
     Right (o :: WeatherResp, traj) -> do

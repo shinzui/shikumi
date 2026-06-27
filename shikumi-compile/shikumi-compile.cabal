@@ -49,11 +49,13 @@ library
 
   build-depends:
     , aeson
-    , base        >=4.20     && <5
+    , base          >=4.20     && <5
     , bytestring
     , effectful
-    , shikumi     ^>=0.1.0.1
-    , text        ^>=2.1
+    , generic-lens  ^>=2.2
+    , lens          ^>=5.3
+    , shikumi       ^>=0.1.0.1
+    , text          ^>=2.1
 
 test-suite shikumi-compile-test
   import:         common-options

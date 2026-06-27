@@ -24,7 +24,7 @@ module Shikumi.Trace.Replay
 where
 
 import Baikai (Context, Model, Response)
-import Control.Lens ((^.))
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Result (Error, Success), Value, fromJSON)
 import Data.Generics.Labels ()
 import Data.Map.Strict (Map)
@@ -68,11 +68,11 @@ runLLMReplay idx = interpret $ \_ -> \case
       Just v -> case fromJSON v of
         Success r -> pure (r :: Response)
         Error e ->
-          throwIO
-            (divergence key m c) {promptSummary = "recorded response failed to decode: " <> T.pack e}
+          throwIO $
+            (divergence key m c) & #promptSummary .~ ("recorded response failed to decode: " <> T.pack e)
   Stream m c o ->
-    throwIO
-      (divergence (cacheKey m c o) m c) {promptSummary = "replay does not support streaming completions"}
+    throwIO $
+      (divergence (cacheKey m c o) m c) & #promptSummary .~ "replay does not support streaming completions"
 
 -- | Build a 'ReplayDivergence' for a request.
 divergence :: CacheKey -> Model -> Context -> ReplayDivergence

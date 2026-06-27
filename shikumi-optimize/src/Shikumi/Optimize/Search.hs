@@ -16,6 +16,8 @@ module Shikumi.Optimize.Search
   )
 where
 
+import Control.Lens ((&), (?~))
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
@@ -73,7 +75,7 @@ freezeProgram = CompiledProgram
 -- | Set node @idx@'s instruction override (in @foldParams@ order). Shared by
 -- @instructionSearch@ and @copro@.
 setNodeInstr :: Int -> Text -> Program i o -> Program i o
-setNodeInstr idx instr = mapParamsAt idx (\ps -> ps {instructionOverride = Just instr})
+setNodeInstr idx instr = mapParamsAt idx (\ps -> ps & #instructionOverride ?~ instr)
 
 -- | The instruction override stored at node @idx@ (in @foldParams@ order), if any.
 instructionAt :: Int -> Program i o -> Maybe Text

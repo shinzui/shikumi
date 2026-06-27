@@ -108,8 +108,8 @@ encodeJsonText = TL.toStrict . encodeToLazyText
 -- ---------------------------------------------------------------------------
 
 data ProgramDescribeIn = ProgramDescribeIn
-  { programCode :: Text,
-    programExample :: Text
+  { programCode :: !Text,
+    programExample :: !Text
   }
   deriving stock (Generic, Show)
 
@@ -215,9 +215,9 @@ datasetSummary viewBatch ds = do
 -- ---------------------------------------------------------------------------
 
 data ModuleDescribeIn = ModuleDescribeIn
-  { programCode :: Text,
-    programDescription :: Text,
-    moduleSignature :: Text
+  { programCode :: !Text,
+    programDescription :: !Text,
+    moduleSignature :: !Text
   }
   deriving stock (Generic, Show)
 

@@ -86,7 +86,7 @@ defaultBudget = Budget {maxLmCalls = 200, maxCandidates = 32}
 -- | A candidate paired with its score. Threaded as a plain value through the pure
 -- selection fold; there is no mutable search state.
 data Scored a = Scored
-  { candidate :: a,
+  { candidate :: !a,
     score :: !Double
   }
   deriving stock (Eq, Show)

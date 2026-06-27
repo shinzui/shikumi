@@ -14,11 +14,13 @@ module Shikumi.Optimize.LabeledFewShot
   )
 where
 
+import Control.Lens ((&), (.~))
 import Data.Aeson (ToJSON, toJSON)
+import Data.Generics.Labels ()
 import Shikumi.Eval (Dataset, Example (..), datasetExamples)
 import Shikumi.Optimize.Search (freezeProgram, scoreOn, selectBest)
 import Shikumi.Optimize.Types (Optimizer (..), Scored (..), defaultBudget)
-import Shikumi.Program (Demo (..), Params (..), Program, mapParams)
+import Shikumi.Program (Demo (..), Program, mapParams)
 
 -- | Select the best size-@k@ set of labelled demonstrations from the training set.
 -- Multi-node programs receive the same demo set at every node (the DSPy default).
@@ -44,7 +46,7 @@ labeledCandidateSets k train = combinations k allDemos
 
 -- | Attach a demo set to every node, leaving each node's instruction untouched.
 withDemos :: [Demo] -> Program i o -> Program i o
-withDemos ds = mapParams (\ps -> ps {demos = ds})
+withDemos ds = mapParams (\ps -> ps & #demos .~ ds)
 
 -- | All size-@k@ sub-lists of a list, preserving relative order
 -- (@combinations 2 [a,b,c] = [[a,b],[a,c],[b,c]]@).

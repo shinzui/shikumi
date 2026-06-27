@@ -43,8 +43,8 @@ import Shikumi.Signature (Signature, mkSignature)
 -- ---------------------------------------------------------------------------
 
 data Describe = Describe
-  { photo :: Image, -- an input-only image field
-    question :: Field "What to ask about the image" Text
+  { photo :: !Image, -- an input-only image field
+    question :: !(Field "What to ask about the image" Text)
   }
   deriving stock (Generic, Show)
   deriving anyclass (ToPrompt) -- the generic default discovers the image field

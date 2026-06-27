@@ -208,9 +208,9 @@ cosineScore a b
 -- | The judge's input: the grading rubric plus the reference and candidate texts
 -- (plain fields so the rendered prompt stays clean).
 data JudgeInput = JudgeInput
-  { rubric :: Text,
-    reference :: Text,
-    candidate :: Text
+  { rubric :: !Text,
+    reference :: !Text,
+    candidate :: !Text
   }
   deriving stock (Generic, Show)
 

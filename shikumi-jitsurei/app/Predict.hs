@@ -33,8 +33,8 @@ import Shikumi.Signature (Signature, mkSignature)
 -- ---------------------------------------------------------------------------
 
 data Article = Article
-  { title :: Field "The article's headline" Text,
-    body :: Field "The full article text" Text
+  { title :: !(Field "The article's headline" Text),
+    body :: !(Field "The full article text" Text)
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
@@ -48,11 +48,11 @@ newtype Author = Author {name :: Field "Author full name" Text}
   deriving anyclass (ToSchema, FromModel)
 
 data Summary = Summary
-  { headline :: Field "A one-line summary" Text,
-    bullets :: Field "Three to five key points" [Text],
-    author :: Author, -- a nested record
-    sentiment :: Sentiment, -- an enum-like sum
-    note :: Maybe Text -- optional
+  { headline :: !(Field "A one-line summary" Text),
+    bullets :: !(Field "Three to five key points" [Text]),
+    author :: !Author, -- a nested record
+    sentiment :: !Sentiment, -- an enum-like sum
+    note :: !(Maybe Text) -- optional
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)

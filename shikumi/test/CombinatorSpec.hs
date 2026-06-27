@@ -7,6 +7,8 @@
 -- shape and parameter vector round-trip).
 module CombinatorSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -48,8 +50,7 @@ import Shikumi.LLM (Response)
 import Shikumi.LLM.Mock (MockReply (..), runMockLLM, runMockLLMCounting)
 import Shikumi.Module (predict)
 import Shikumi.Program
-  ( Params (..),
-    Program,
+  ( Program,
     ProgramShape (..),
     ProgramShapeError (..),
     emptyParams,
@@ -300,7 +301,7 @@ crossCuttingTests =
         length (foldParams deepProg) @?= 2,
       testCase "an instruction written through the traversal reaches the deepest leaf at run time" $ do
         let sentinel = "SENTINEL-INSTRUCTION"
-            rewritten = mapParams (\p -> p {instructionOverride = Just sentinel}) deepProg
+            rewritten = mapParams (\p -> p & #instructionOverride .~ Just sentinel) deepProg
         -- stage 1 samples the MajorityVote leaf 3×, stage 2 the Validate leaf 1×.
         prompts <-
           runRec
@@ -311,8 +312,8 @@ crossCuttingTests =
           ("expected the sentinel in every captured prompt; got: " <> show prompts)
           (length prompts == 4 && all (T.isInfixOf sentinel) prompts),
       testCase "the structural shape is parameter-independent and round-trips the parameter vector" $ do
-        let p1 = emptyParams {instructionOverride = Just "one"}
-            p2 = emptyParams {instructionOverride = Just "two"}
+        let p1 = emptyParams & #instructionOverride .~ Just "one"
+            p2 = emptyParams & #instructionOverride .~ Just "two"
         programParams deepProg @?= [emptyParams, emptyParams]
         case setProgramParams [p1, p2] deepProg of
           Left e -> assertBool ("unexpected setProgramParams failure: " <> show e) False

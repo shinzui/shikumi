@@ -42,6 +42,8 @@ module Shikumi.Trace.Program
   )
 where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, localSeqUnlift, send)
 import Effectful.Error.Static (Error)
@@ -72,8 +74,7 @@ import Shikumi.Program
     withSampleTemp,
   )
 import Shikumi.Trace
-  ( SpanAttrs (..),
-    SpanKind (CombinatorSpan, LlmCallSpan, ModuleSpan),
+  ( SpanKind (CombinatorSpan, LlmCallSpan, ModuleSpan),
     Trace,
     annotateSpan,
     llmAttrs,
@@ -137,7 +138,7 @@ tracedNodeLLM = interpose $ \_ -> \case
   Complete m c o -> withSpan LlmCallSpan (llmLabel m) $ do
     resp <- complete m c o
     mp <- askNode
-    annotateSpan (\_ -> (llmAttrs m c o resp) {nodePath = mp})
+    annotateSpan (\_ -> llmAttrs m c o resp & #nodePath .~ mp)
     pure resp
   Stream m c o -> withSpan LlmCallSpan (llmLabel m) (stream m c o)
 

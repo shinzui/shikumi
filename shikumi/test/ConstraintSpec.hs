@@ -21,8 +21,8 @@ import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 -- A small constrained record: a tagline of at least 10 characters and a score in
 -- the inclusive range [0, 100].
 data Bio = Bio
-  { tagline :: Constrained '[ 'MinLen 10] Text,
-    score :: Constrained '[ 'MinVal "0", 'MaxVal "100"] Int
+  { tagline :: !(Constrained '[ 'MinLen 10] Text),
+    score :: !(Constrained '[ 'MinVal "0", 'MaxVal "100"] Int)
   }
   deriving stock (Generic, Show, Eq)
 
@@ -34,8 +34,8 @@ instance Validatable Bio
 
 -- The same shape with no constraints, to prove the constraint does the rejecting.
 data BioUnchecked = BioUnchecked
-  { tagline :: Text,
-    score :: Int
+  { tagline :: !Text,
+    score :: !Int
   }
   deriving stock (Generic, Show, Eq)
 

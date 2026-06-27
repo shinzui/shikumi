@@ -42,7 +42,7 @@ import Shikumi.Cache (Cache (..), CacheKey (unCacheKey), CachedResponse (..))
 
 -- | A handle to an open SQLite-backed cache. The 'Database' is behind an 'MVar'
 -- so all access through the 'Cache' effect is serialized.
-newtype SQLiteCache = SQLiteCache {sqliteDb :: MVar Database}
+newtype SQLiteCache = SQLiteCache {db :: MVar Database}
 
 -- | The schema. The @key@ is the 64-hex 'CacheKey' (already version-namespaced
 -- via the @version@ field baked into the hash). @value@ is the UTF-8 JSON of

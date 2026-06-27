@@ -34,7 +34,7 @@ import Shikumi.Cache (Cache (..), CacheKey (unCacheKey), CachedResponse)
 
 -- | An open Postgres-backed cache: a single connection behind an 'MVar' (hasql
 -- connections are not safe for concurrent use), with the schema ensured at open.
-newtype PostgresCache = PostgresCache {pgConn :: MVar Connection}
+newtype PostgresCache = PostgresCache {conn :: MVar Connection}
 
 -- | Connect using the given hasql settings (e.g. @EphemeralPg.connectionSettings@
 -- for tests, or @Hasql.Connection.Settings@ builders in production), ensuring the

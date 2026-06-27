@@ -8,6 +8,8 @@
 -- joint selection), and M3 the lift plus the serialization round-trip.
 module Miprov2Spec (tests) where
 
+import Control.Lens ((&), (.~), (?~))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
@@ -33,7 +35,7 @@ import Shikumi.Optimize
     scoreOn,
     searchJoint,
   )
-import Shikumi.Program (Params (..), mapParamsAt)
+import Shikumi.Program (mapParamsAt)
 import StubLM
   ( Label (..),
     Sentence (..),
@@ -129,7 +131,7 @@ search =
               scoreOn
                 jointHeldout
                 exactMatch
-                (mapParamsAt 0 (\ps -> ps {instructionOverride = Just ruleInstruction}) sentimentProg)
+                (mapParamsAt 0 (\ps -> ps & #instructionOverride ?~ ruleInstruction) sentimentProg)
             pure (joint, ruleOnly)
         case res of
           Left e -> assertFailure ("unexpected error: " <> show e)
@@ -139,7 +141,7 @@ search =
             joint @?= 1.0,
       testCase "searchJoint honors the LM-call budget" $ do
         ref <- newIORef (0 :: Int)
-        let cfg = cfgLight {numTrials = 5, minibatchSize = 2, budget = Budget {maxLmCalls = 8, maxCandidates = 32}}
+        let cfg = cfgLight & #numTrials .~ 5 & #minibatchSize .~ 2 & #budget .~ Budget {maxLmCalls = 8, maxCandidates = 32}
             instrCands = [["", ruleInstruction]]
             demoCands = [[[], []]]
         res <-

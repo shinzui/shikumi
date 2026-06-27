@@ -4,6 +4,8 @@
 -- underlying node's parameters stay reachable via @mapParamsAt@.
 module ModuleSpec (tests) where
 
+import Control.Lens ((&), (.~))
+import Data.Generics.Labels ()
 import Data.IORef (newIORef)
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -17,7 +19,7 @@ import ProgramFixtures
   )
 import Shikumi.Error (ShikumiError)
 import Shikumi.Module (WithReasoning (..), chainOfThought, chainOfThoughtRaw, predict)
-import Shikumi.Program (Params (..), emptyParams, foldParams, mapParamsAt, runProgram)
+import Shikumi.Program (emptyParams, foldParams, mapParamsAt, runProgram)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -58,6 +60,6 @@ tests =
             runProgram (chainOfThought topicToOutline) (Topic "haskell")
         out @?= Right (Outline {points = ["x", "y"]}),
       testCase "the chain-of-thought node's params are reachable via mapParamsAt 0" $
-        foldParams (mapParamsAt 0 (\p -> p {instructionOverride = Just "cot"}) (chainOfThought topicToOutline))
-          @?= [emptyParams {instructionOverride = Just "cot"}]
+        foldParams (mapParamsAt 0 (\p -> p & #instructionOverride .~ Just "cot") (chainOfThought topicToOutline))
+          @?= [emptyParams & #instructionOverride .~ Just "cot"]
     ]
