@@ -76,12 +76,13 @@ Milestone 3 — Write the bundle and prove the round-trip (DONE 2026-06-27 excep
 - [x] Add a test that writes to a temp dir, re-reads with `Okf.Bundle.walkBundle`, and asserts the app→program graph edges via `Okf.Graph.buildGraph`. (2026-06-27)
 - [ ] Capture an `okf validate` / `okf graph --json` transcript against the generated fixture. (deferred to the Milestone 4 example, which writes a bundle to a stable path)
 
-Milestone 4 — Ship the shared profile and wire mori:
+Milestone 4 — Ship the shared profile and wire mori (DONE 2026-06-27):
 
-- [ ] Add `shikumi-okf/profile/shikumi.dhall` (an OKF profile descriptor).
-- [ ] Add a test that profile-validates the generated bundle with zero deviations.
-- [ ] Add a worked example manifest under `shikumi-okf/example/` and document the generation command.
-- [ ] Document the `okfBundles` declaration to add to a consuming app's `mori.dhall`.
+- [x] Add `shikumi-okf/profile/shikumi.dhall` (an OKF profile descriptor for `Shikumi App` / `Shikumi Program`). (2026-06-27)
+- [x] Add a hermetic in-suite Conformance test asserting the profile invariants (types + `shikumi://` scheme); the `.dhall` profile itself is enforced end-to-end by `okf validate --profile-enforce`. (2026-06-27)
+- [x] Add a worked example (`shikumi-okf-example` executable + committed `example/out` bundle) and `example/README.md` documenting the generation command. (2026-06-27)
+- [x] Document the `okfBundles` declaration to add to a consuming app's `mori.dhall` (in `example/README.md`). (2026-06-27)
+- [x] Capture `okf validate` / `--profile-enforce` / `graph --json` transcripts against the example bundle (deferred from Milestone 3). (2026-06-27)
 
 Milestone 5 (optional) — Richer bodies and CLI bridge:
 
@@ -188,10 +189,31 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+Milestones 1–4 (the required scope) are complete as of 2026-06-27. The `shikumi-okf`
+package exists, builds in the dev shell, and isolates `okf-core` so core shikumi users do not
+depend on it (verified: `cabal build --dry-run shikumi` does not mention okf-core). Given a
+`ProgramManifest`, it generates an OKF bundle — one `Shikumi App` concept linking to one
+`Shikumi Program` concept per program — that the standalone `okf` CLI validates (`OK: 3 concepts`),
+profile-enforces against the shipped `profile/shikumi.dhall` (exit 0), and renders as an app→program
+graph. The 7-case test suite passes and covers both program shapes that matter: typed `Predict`
+pipelines (rich structure) and opaque `Embed` programs (the shikigami shape, documented from declared
+metadata). This matches the original purpose: a generated, human-readable, machine-validatable
+inventory of the programs an app ships.
 
-(To be filled during and after implementation.)
+What remains (optional / downstream):
+
+- Milestone 5 (optional): a public `nodeInstructionsIndexed` accessor in core `shikumi` for richer
+  bodies, and a documented shikigami-side `[Handan.Task]`→`ProgramManifest` bridge. Not required for
+  the core outcome; deferred.
+- Real adoption: a consuming app (e.g. shikigami) builds its own manifest and declares the bundle in
+  its `mori.dhall`. The recipe is in `shikumi-okf/example/README.md`.
+- Publishing `shikumi.dhall` to a pinned `okf-profiles` URL so the profile import is reproducible in
+  CI rather than resolved from the sibling checkout.
+
+Lesson: the constraint-free `SomeProgram` existential was the load-bearing design choice — it let the
+same generator accept typed and opaque programs without special-casing, which is exactly what made
+shikigami compatibility fall out for free. The only real friction was build plumbing (resolving the
+sibling `okf-core` and the cross-repo dhall import), not the program model.
 
 
 ## Context and Orientation
@@ -457,42 +479,65 @@ shikumi-okf-test
 All N tests passed
 ```
 
-Milestone 3 — human-visible proof with the standalone `okf` binary. Build it once from the sibling
-repo, then point it at a generated fixture directory (the test can be made to write to a stable
-path under the repo, or copy the temp output):
+Milestone 4 — generate the example bundle:
 
 ```bash
-cd /Users/shinzui/Keikaku/bokuno/okf && nix develop --command cabal build okf
-cd /Users/shinzui/Keikaku/bokuno/okf && nix develop --command \
-  cabal run okf -- validate /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out
+cabal run shikumi-okf-example -- shikumi-okf/example/out
 ```
 
-Expected:
+Observed:
+
+```text
+Wrote OKF bundle to shikumi-okf/example/out
+```
+
+producing `apps/example-app.md`, `programs/classify-ticket.md`, `programs/heartbeat.md`, and
+generated `index.md` files.
+
+Milestone 4 — human-visible proof with the standalone `okf` binary (built once from the sibling
+repo). These were run and their real output captured:
+
+```bash
+cd /Users/shinzui/Keikaku/bokuno/okf
+nix develop --command cabal build okf
+nix develop --command cabal run -v0 okf -- \
+  validate /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out
+```
 
 ```text
 OK: 3 concepts
 ```
 
-```bash
-cd /Users/shinzui/Keikaku/bokuno/okf && nix develop --command \
-  cabal run okf -- graph /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out --json
-```
-
-Expected (shape): nodes include `apps/<app>`, `programs/<p1>`, `programs/<p2>`; edges run from
-`apps/<app>` to each `programs/<...>`.
-
-Milestone 4 — profile enforcement:
+Profile enforcement (the `.dhall` profile resolves its schema across the sibling repo and the
+bundle conforms, exit 0):
 
 ```bash
-cd /Users/shinzui/Keikaku/bokuno/okf && nix develop --command \
-  cabal run okf -- validate /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out \
+nix develop --command cabal run -v0 okf -- \
+  validate /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out \
   --profile /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/profile/shikumi.dhall --profile-enforce
 ```
 
-Expected: exit code 0 and no deviation lines.
+```text
+OK: 3 concepts
+```
 
-(Transcripts above are expected shapes to compare against; replace `<app>`/`<p1>` with the example's
-actual names and paste real output here as each milestone completes.)
+Graph (the app→program edges are exactly what answers "which programs does this app use?"):
+
+```bash
+nix develop --command cabal run -v0 okf -- \
+  graph /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/example/out --json
+```
+
+```json
+{"edges":[{"source":"apps/example-app","target":"programs/classify-ticket"},
+          {"source":"apps/example-app","target":"programs/heartbeat"}],
+ "nodes":[{"id":"apps/example-app","label":"Example Application","type":"Shikumi App",
+           "resource":"shikumi://shinzui/example-app","tags":[]},
+          {"id":"programs/classify-ticket","label":"Classify Ticket","type":"Shikumi Program",
+           "resource":"shikumi://shinzui/example-app/programs/classify-ticket"},
+          {"id":"programs/heartbeat","label":"Heartbeat","type":"Shikumi Program",
+           "resource":"shikumi://shinzui/example-app/programs/heartbeat"}]}
+```
 
 
 ## Validation and Acceptance

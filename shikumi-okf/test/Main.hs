@@ -14,7 +14,7 @@ import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
-import Okf.Bundle (conceptIdOf, walkBundle)
+import Okf.Bundle (conceptIdOf, conceptResource, conceptType, walkBundle)
 import Okf.ConceptId (ConceptId, parseConceptId, renderConceptId)
 import Okf.Graph (Edge (..), Graph (..), buildGraph)
 import Okf.Validation (ValidationProfile (PermissiveConformance), validateBundle)
@@ -216,6 +216,23 @@ tests =
                   "concept ids"
                   ["apps/demo", "programs/qa", "programs/noop-summary", "programs/qa-polished"]
                   ids
+        ],
+      testGroup
+        "Conformance"
+        -- Hermetic invariants matching profile/shikumi.dhall (the .dhall profile
+        -- itself is enforced end-to-end by `okf validate --profile-enforce`; this
+        -- asserts the same conventions in-process without dhall or a file path).
+        [ testCase "types and resource scheme match the shikumi profile" $
+            case generateBundle demoApp Nothing demoManifest of
+              Left err -> fail (show err)
+              Right (appC : programCs) -> do
+                conceptType appC @?= "Shikumi App"
+                mapM_ (\c -> conceptType c @?= "Shikumi Program") programCs
+                let resources = map conceptResource (appC : programCs)
+                assertBool
+                  "every resource uses the shikumi:// scheme"
+                  (all (maybe False ("shikumi://" `T.isPrefixOf`)) resources)
+              Right [] -> fail "expected at least the app concept"
         ],
       testGroup
         "RoundTrip"

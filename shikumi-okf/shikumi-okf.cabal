@@ -52,6 +52,16 @@ library
     , shikumi
     , text      ^>=2.1
 
+executable shikumi-okf-example
+  import:         common-options
+  hs-source-dirs: example
+  main-is:        Main.hs
+  build-depends:
+    , base
+    , shikumi
+    , shikumi-okf
+    , text
+
 test-suite shikumi-okf-test
   import:         common-options
   type:           exitcode-stdio-1.0
