@@ -223,6 +223,9 @@ one-shot compact-then-retry recovery. That path is best-effort: the proactive to
 threshold is the dependable guard, because some providers surface oversized requests as a
 generic invalid request instead of `ContextOverflow`.
 
+For tuning guidance, recovery details, and trajectory inspection, see
+[Agent working-context compaction](./agent-context-compaction.md).
+
 ### The trajectory
 
 ```haskell
