@@ -12,6 +12,7 @@ import RestrictedSpec qualified
 import SchemaSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import ToolSpec qualified
+import WebSpec qualified
 
 main :: IO ()
 main =
@@ -21,6 +22,7 @@ main =
       [ SchemaSpec.tests,
         ToolSpec.tests,
         EnvSpec.tests,
+        WebSpec.tests,
         ReActSpec.tests,
         ProtocolSpec.tests,
         AcceptanceSpec.tests,

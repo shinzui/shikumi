@@ -57,9 +57,9 @@ This section must always reflect the actual current state of the work.
 - [x] M1: add the `Shikumi.Tool.Env` module — value types (`Path`, `ExecRequest`, `ExecResult`, `FileStat`, `DirEntry`), the `EnvRow` constraint synonym, the `ToolEnv` record of functions, and `localToolEnv` (process/filesystem-backed). Completed 2026-06-28T16:33:11Z.
 - [x] M1: add `directory`, `filepath`, `process` (GHC boot libraries) to `shikumi-tools.cabal` and expose `Shikumi.Tool.Env`. Completed 2026-06-28T16:33:11Z.
 - [x] M1: unit-test `localToolEnv` against a temporary directory (write → read → stat → readdir → exists → mkdir → rm → exec) under the mock-LLM effect stack. Completed 2026-06-28T16:33:11Z; `nix develop --command cabal test shikumi-tools` passed with all 30 tests green.
-- [ ] M2: add the `Shikumi.Tool.Web` module — the `WebClient` record (`webFetch`, `webSearch`), value types (`FetchResult`, `SearchResult`, `SearchHit`), and `localWebClient` over `http-client` + `http-client-tls`; add those two deps.
-- [ ] M2: add `Shikumi.Tool.Builtin.Web` — `webFetchTool` and `webSearchTool` typed `Tool`s built over a `WebClient`.
-- [ ] M2: unit-test the web tools against a *stub* `WebClient` (no network); add a manual, network-gated check for `web_fetch` against a live URL.
+- [x] M2: add the `Shikumi.Tool.Web` module — the `WebClient` record (`webFetch`, `webSearch`), value types (`FetchResult`, `SearchResult`, `SearchHit`), and `localWebClient` over `http-client` + `http-client-tls`; add those two deps. Completed 2026-06-28T16:39:14Z.
+- [x] M2: add `Shikumi.Tool.Builtin.Web` — `webFetchTool` and `webSearchTool` typed `Tool`s built over a `WebClient`. Completed 2026-06-28T16:39:14Z.
+- [x] M2: unit-test the web tools against a *stub* `WebClient` (no network); add a manual, network-gated check for `web_fetch` against a live URL. Completed 2026-06-28T16:39:14Z; `nix develop --command cabal test shikumi-tools` and `nix develop --command env SHIKUMI_NET_TESTS=1 cabal test shikumi-tools` both passed with all 34 tests green.
 - [ ] M3: add `Shikumi.Tool.Builtin.Fs` — `readTool`, `writeTool`, `editTool`, `grepTool`, `globTool`, each `:: ToolEnv -> Tool i o`, with their input/output records. `grep`/`glob` are the hybrid: hardened in-process baseline (skip-list, binary detection, size/match/depth caps) using `regex-tdfa`, an `rg`/`fd` fast path via `envExec` when present, with `bash` as the escape hatch.
 - [ ] M3: add `regex-tdfa` to `shikumi-tools.cabal`'s `library` `build-depends`; add `ripgrep` and `fd` to the nix dev shell (`nix/haskell.nix`).
 - [ ] M3: unit-test the fs tools end-to-end against `localToolEnv` in a temp directory; run grep/glob **twice** (fast path via `localToolEnv`, in-process baseline via a stub `ToolEnv` reporting `rg`/`fd` absent), and add a hardening-bounds test (skips `.git`/`node_modules`/binary files).
@@ -239,6 +239,24 @@ Record every decision made while working on the plan.
   `ExecResult` values, so only launch faults and elapsed wall-clock limits become typed errors.
   Date: 2026-06-28 (implementation)
 
+- Decision: add `http-types` as an explicit `shikumi-tools` library dependency alongside
+  `http-client` and `http-client-tls`.
+  Rationale: `http-client` returns response statuses and headers whose accessor types are owned by
+  `http-types`; `localWebClient` needs `statusCode` and the `ResponseHeaders` type directly to
+  implement `FetchResult.status` and `FetchResult.contentType`. Depending on `http-types`
+  explicitly is clearer and more robust than relying on a transitive dependency leaking through
+  `http-client`.
+  Date: 2026-06-28 (implementation)
+
+- Decision: configured `localWebClient.webSearch` uses a minimal GET convention of `q`, `key`, and
+  `limit` query parameters and expects a JSON body matching `SearchResult`.
+  Rationale: the plan intentionally leaves provider shape "TBD per provider"; the important M2
+  contract is that `web_search` is swappable and throws `ProviderFailure "web_search: no search
+  provider configured"` when no provider exists. The simple query convention gives callers a
+  working implementation point without coupling the core tool catalog to a specific commercial
+  search API, while the tests stay deterministic through a stub `WebClient`.
+  Date: 2026-06-28 (implementation)
+
 
 ## Outcomes & Retrospective
 
@@ -249,6 +267,10 @@ Compare the result against the original purpose.
   `localToolEnv`, and `EnvSpec` proves the local implementation can write, read, stat, list, create,
   remove, report cwd, and execute a shell command through the mock-LLM effect stack. Milestones 2–5
   remain to implement the web tools, filesystem tools, shell tool, and builtin registry/catalog.
+- 2026-06-28: Milestone 2 is complete. `Shikumi.Tool.Web` provides the `WebClient` seam,
+  `localWebClient`, and `newTlsManager`; `Shikumi.Tool.Builtin.Web` provides `web_fetch` and
+  `web_search`; `WebSpec` proves stubbed 200, stubbed 404-as-value, stubbed search hits, and the
+  network-gated live `https://example.com` fetch. Milestones 3–5 remain.
 
 
 ## Context and Orientation
@@ -671,6 +693,21 @@ SHIKUMI_NET_TESTS=1 cabal test shikumi-tools 2>&1 | tail -n 20
 Expected when the env var is set and the network is up: the live `web_fetch` case runs and passes
 (`status == 200`, non-empty body). Without the env var, that case is skipped and printed as such.
 
+Actual 2026-06-28T16:39:14Z:
+
+```text
+$ nix develop --command env SHIKUMI_NET_TESTS=1 cabal test shikumi-tools
+Tool.Web
+  web_fetch returns a stubbed 200 observation: OK
+  web_fetch surfaces a 404 status as a value:  OK
+  web_search returns stubbed hits:             OK
+  live web_fetch is gated by SHIKUMI_NET_TESTS: OK (0.17s)
+
+All 34 tests passed (0.17s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
+
 Run the full repository test matrix once at the end:
 
 ```bash
@@ -743,9 +780,10 @@ New library dependencies added to `shikumi-tools/shikumi-tools.cabal` (`library`
 `filepath`, `process` (GHC boot libraries, present in the pinned toolchain), `http-client` +
 `http-client-tls` (the web tools' HTTP/TLS stack — **new third-party deps**: contrary to an earlier
 draft, these are *not* in the baikai *library*'s dependency closure — only baikai's executable/test
-stanzas use them — so adding them here is a real, if small, surface addition), and `regex-tdfa`
-(in-process `grep`'s regex engine — also a new dep). `bytestring`, `text`, `aeson`, `vector`,
-`containers`, `effectful`, `lens`, `generic-lens`, `baikai`, and `shikumi` are already present.
+stanzas use them — so adding them here is a real, if small, surface addition), `http-types` (direct
+status-code and response-header access for `localWebClient`), and `regex-tdfa` (in-process `grep`'s
+regex engine — also a new dep). `bytestring`, `text`, `aeson`, `vector`, `containers`, `effectful`,
+`lens`, `generic-lens`, `baikai`, and `shikumi` are already present.
 
 New **runtime** (non-cabal) dependencies, supplied by nix in the dev shell and in sandbox images via
 `nix/haskell.nix`: `ripgrep` (`rg`) and `fd`. These are optional at the contract level — `grep`/`glob`

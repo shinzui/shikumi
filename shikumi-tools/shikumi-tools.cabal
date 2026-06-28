@@ -49,22 +49,27 @@ library
     Shikumi.CodeExec.ProgramOfThought
     Shikumi.CodeExec.Prompt
     Shikumi.Tool
+    Shikumi.Tool.Builtin.Web
     Shikumi.Tool.Env
+    Shikumi.Tool.Web
 
   build-depends:
     , aeson
-    , baikai        >=0.2      && <0.3
-    , base          >=4.20     && <5
+    , baikai           >=0.2      && <0.3
+    , base             >=4.20     && <5
     , bytestring
     , containers
     , directory
     , effectful
     , filepath
     , generic-lens
-    , lens          ^>=5.3
+    , http-client
+    , http-client-tls
+    , http-types
+    , lens             ^>=5.3
     , process
-    , shikumi       ^>=0.1.0.1
-    , text          ^>=2.1
+    , shikumi          ^>=0.1.0.1
+    , text             ^>=2.1
     , vector
 
 test-suite shikumi-tools-test
@@ -85,6 +90,7 @@ test-suite shikumi-tools-test
     RestrictedSpec
     SchemaSpec
     ToolSpec
+    WebSpec
 
   build-depends:
     , aeson
