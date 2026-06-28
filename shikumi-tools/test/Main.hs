@@ -11,6 +11,7 @@ import ProtocolSpec qualified
 import ReActSpec qualified
 import RestrictedSpec qualified
 import SchemaSpec qualified
+import ShellSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import ToolSpec qualified
 import WebSpec qualified
@@ -25,6 +26,7 @@ main =
         EnvSpec.tests,
         WebSpec.tests,
         FsSpec.tests,
+        ShellSpec.tests,
         ReActSpec.tests,
         ProtocolSpec.tests,
         AcceptanceSpec.tests,

@@ -63,8 +63,8 @@ This section must always reflect the actual current state of the work.
 - [x] M3: add `Shikumi.Tool.Builtin.Fs` — `readTool`, `writeTool`, `editTool`, `grepTool`, `globTool`, each `:: ToolEnv -> Tool i o`, with their input/output records. `grep`/`glob` are the hybrid: hardened in-process baseline (skip-list, binary detection, size/match/depth caps) using `regex-tdfa`, an `rg`/`fd` fast path via `envExec` when present, with `bash` as the escape hatch. Completed 2026-06-28T16:55:40Z.
 - [x] M3: add `regex-tdfa` to `shikumi-tools.cabal`'s `library` `build-depends`; add `ripgrep` and `fd` to the nix dev shell (`nix/haskell.nix`). Completed 2026-06-28T16:55:40Z; `rg --version` reported ripgrep 15.1.0 and `fd --version` reported fd 10.4.2 inside `nix develop`.
 - [x] M3: unit-test the fs tools end-to-end against `localToolEnv` in a temp directory; run grep/glob **twice** (fast path via `localToolEnv`, in-process baseline via a stub `ToolEnv` reporting `rg`/`fd` absent), and add a hardening-bounds test (skips `.git`/`node_modules`/binary files). Completed 2026-06-28T16:55:40Z; `nix develop --command cabal test shikumi-tools` passed with all 37 tests green.
-- [ ] M4: add `Shikumi.Tool.Builtin.Shell` — `bashTool :: ToolEnv -> Tool BashReq BashResp` over `ToolEnv`'s `exec`.
-- [ ] M4: unit-test `bashTool` (exit code, stdout, stderr, non-zero exit as a value).
+- [x] M4: add `Shikumi.Tool.Builtin.Shell` — `bashTool :: ToolEnv -> Tool BashReq BashResp` over `ToolEnv`'s `exec`. Completed 2026-06-28T16:59:47Z.
+- [x] M4: unit-test `bashTool` (exit code, stdout, stderr, non-zero exit as a value). Completed 2026-06-28T16:59:47Z; `nix develop --command cabal test shikumi-tools` passed with all 39 tests green.
 - [ ] M5: add `Shikumi.Tool.Builtin` — `builtinFsTools`, `builtinWebTools`, `builtinTools`, and `builtinRegistry`, assembling the erased catalog.
 - [ ] M5: write the end-to-end acceptance test: a scripted ReAct agent that reads → edits → bash-verifies → greps → web-fetches through `builtinRegistry`, asserting each observation.
 - [ ] Wire the new test modules into `shikumi-tools.cabal`'s `other-modules` and confirm `cabal test shikumi-tools` is green.
@@ -298,6 +298,9 @@ Compare the result against the original purpose.
   bounded in-process traversal. `FsSpec` proves read/write/edit round-trip behavior, matching
   fast-path and fallback grep/glob results, hardening skips for `.git`/`node_modules`/binary files,
   and malformed regex reporting as `ValidationFailure`. Milestones 4–5 remain.
+- 2026-06-28: Milestone 4 is complete. `Shikumi.Tool.Builtin.Shell` provides `bashTool`, and
+  `ShellSpec` proves stdout capture for a zero exit and stderr/non-zero exit returned as a normal
+  `BashResp` value. Milestone 5 remains.
 
 
 ## Context and Orientation
@@ -727,6 +730,19 @@ Tool.Fs
   fallback grep reports malformed regex as ValidationFailure:     OK
 
 All 37 tests passed (0.10s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
+
+After Milestone 4, `bashTool` was validated:
+
+```text
+$ nix develop --command cabal test shikumi-tools
+Tool.Shell
+  bash captures stdout and zero exit:               OK
+  bash returns stderr and non-zero exit as a value: OK (0.01s)
+
+All 39 tests passed (0.09s)
 Test suite shikumi-tools-test: PASS
 1 of 1 test suites (1 of 1 test cases) passed.
 ```

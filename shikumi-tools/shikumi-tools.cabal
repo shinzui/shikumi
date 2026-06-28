@@ -50,6 +50,7 @@ library
     Shikumi.CodeExec.Prompt
     Shikumi.Tool
     Shikumi.Tool.Builtin.Fs
+    Shikumi.Tool.Builtin.Shell
     Shikumi.Tool.Builtin.Web
     Shikumi.Tool.Env
     Shikumi.Tool.Web
@@ -92,6 +93,7 @@ test-suite shikumi-tools-test
     ReActSpec
     RestrictedSpec
     SchemaSpec
+    ShellSpec
     ToolSpec
     WebSpec
 
