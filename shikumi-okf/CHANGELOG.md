@@ -1,6 +1,10 @@
-# Changelog for shikumi-okf
+# Changelog
 
-## 0.1.0.0 (unreleased)
+## Unreleased
+
+## 0.1.0.0 - 2026-06-28
+
+### Added
 
 - Initial package scaffold (EP-31, Milestone 1): `Shikumi.Okf.Types` defining
   `SomeProgram`, `ProgramDoc`, `ProgramManifest`, and `AppInfo`.

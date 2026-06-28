@@ -26,13 +26,9 @@ packages:
   shikumi-trace-otel
 
 -- shikumi-okf (EP-31) documents shikumi programs as OKF bundles and therefore
--- depends on the `okf-core` library, which lives in the sibling repository at
--- ../okf and is not published to Hackage. We resolve it from disk by adding its
--- package directory below. This keeps okf-core OUT of every other package's build
--- plan: only shikumi-okf lists it under build-depends, so `cabal build shikumi`
--- (core) never compiles it. For a reproducible CI build, replace this local path
--- with a `source-repository-package` pinned to a shinzui/okf commit.
-  ../okf/okf-core
+-- depends on the published `okf-core` library. This keeps okf-core OUT of every
+-- other package's build plan: only shikumi-okf lists it under build-depends, so
+-- `cabal build shikumi` (core) never compiles it.
 
 -- blake3 (EP-6 cache key) vendors SIMD C/asm. Its non-x86 fallback for the SSE
 -- flags still compiles x86 intrinsics (mmintrin.h), which fails under clang on

@@ -47,9 +47,9 @@ library
     Shikumi.Okf.Types
 
   build-depends:
-    , base      >=4.20 && <5
-    , okf-core  ^>=0.1
-    , shikumi
+    , base      >=4.20     && <5
+    , okf-core  ^>=0.1.0.0
+    , shikumi   ^>=0.2.0.0
     , text      ^>=2.1
 
 executable shikumi-okf-example
@@ -58,8 +58,8 @@ executable shikumi-okf-example
   main-is:        Main.hs
   build-depends:
     , base
-    , shikumi
-    , shikumi-okf
+    , shikumi      ^>=0.2.0.0
+    , shikumi-okf  ^>=0.1.0.0
     , text
 
 test-suite shikumi-okf-test
@@ -73,9 +73,9 @@ test-suite shikumi-okf-test
     , directory
     , effectful
     , filepath
-    , okf-core
-    , shikumi
-    , shikumi-okf
+    , okf-core     ^>=0.1.0.0
+    , shikumi      ^>=0.2.0.0
+    , shikumi-okf  ^>=0.1.0.0
     , tasty
     , tasty-hunit
     , text
