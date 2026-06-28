@@ -54,9 +54,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add the `Shikumi.Tool.Env` module — value types (`Path`, `ExecRequest`, `ExecResult`, `FileStat`, `DirEntry`), the `EnvRow` constraint synonym, the `ToolEnv` record of functions, and `localToolEnv` (process/filesystem-backed).
-- [ ] M1: add `directory`, `filepath`, `process` (GHC boot libraries) to `shikumi-tools.cabal` and expose `Shikumi.Tool.Env`.
-- [ ] M1: unit-test `localToolEnv` against a temporary directory (write → read → stat → readdir → exists → mkdir → rm → exec) under the mock-LLM effect stack.
+- [x] M1: add the `Shikumi.Tool.Env` module — value types (`Path`, `ExecRequest`, `ExecResult`, `FileStat`, `DirEntry`), the `EnvRow` constraint synonym, the `ToolEnv` record of functions, and `localToolEnv` (process/filesystem-backed). Completed 2026-06-28T16:33:11Z.
+- [x] M1: add `directory`, `filepath`, `process` (GHC boot libraries) to `shikumi-tools.cabal` and expose `Shikumi.Tool.Env`. Completed 2026-06-28T16:33:11Z.
+- [x] M1: unit-test `localToolEnv` against a temporary directory (write → read → stat → readdir → exists → mkdir → rm → exec) under the mock-LLM effect stack. Completed 2026-06-28T16:33:11Z; `nix develop --command cabal test shikumi-tools` passed with all 30 tests green.
 - [ ] M2: add the `Shikumi.Tool.Web` module — the `WebClient` record (`webFetch`, `webSearch`), value types (`FetchResult`, `SearchResult`, `SearchHit`), and `localWebClient` over `http-client` + `http-client-tls`; add those two deps.
 - [ ] M2: add `Shikumi.Tool.Builtin.Web` — `webFetchTool` and `webSearchTool` typed `Tool`s built over a `WebClient`.
 - [ ] M2: unit-test the web tools against a *stub* `WebClient` (no network); add a manual, network-gated check for `web_fetch` against a live URL.
@@ -230,13 +230,25 @@ Record every decision made while working on the plan.
   this is the one decision to revisit.
   Date: 2026-06-28
 
+- Decision: `localToolEnv` applies a 60-second default timeout when `ExecRequest.timeoutMs` is
+  `Nothing`, and an elapsed timeout is thrown as the existing `Timeout` `ShikumiError` with a
+  `tool env: exec timed out` message.
+  Rationale: `ExecRequest` already carries an optional timeout, and an unbounded `bash -c` would be
+  too easy for a tool call or test to hang indefinitely. The existing `Timeout` constructor is the
+  right framework-level vocabulary for this failure. Explicit non-zero exit codes remain normal
+  `ExecResult` values, so only launch faults and elapsed wall-clock limits become typed errors.
+  Date: 2026-06-28 (implementation)
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-06-28: Milestone 1 is complete. `Shikumi.Tool.Env` now provides the `ToolEnv` seam and
+  `localToolEnv`, and `EnvSpec` proves the local implementation can write, read, stat, list, create,
+  remove, report cwd, and execute a shell command through the mock-LLM effect stack. Milestones 2–5
+  remain to implement the web tools, filesystem tools, shell tool, and builtin registry/catalog.
 
 
 ## Context and Orientation
@@ -620,6 +632,18 @@ cabal test shikumi-tools 2>&1 | tail -n 20
 Expected: the `Env` group passes (write/read round-trip, stat, readdir, exists, mkdir, rm, exec).
 A failing read round-trip prints the asserted vs. actual bytes; a missing dependency prints a
 cabal "unknown package" error — fix the `build-depends` list and rebuild.
+
+Actual 2026-06-28T16:33:11Z:
+
+```text
+$ nix develop --command cabal test shikumi-tools
+Tool.Env
+  localToolEnv can perform filesystem operations and exec: OK (0.01s)
+
+All 30 tests passed (0.01s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
 
 Repeat the same `cabal build shikumi-tools && cabal test shikumi-tools` cycle at the end of each
 milestone.

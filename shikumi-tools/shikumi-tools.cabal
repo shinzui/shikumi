@@ -49,6 +49,7 @@ library
     Shikumi.CodeExec.ProgramOfThought
     Shikumi.CodeExec.Prompt
     Shikumi.Tool
+    Shikumi.Tool.Env
 
   build-depends:
     , aeson
@@ -56,9 +57,12 @@ library
     , base          >=4.20     && <5
     , bytestring
     , containers
+    , directory
     , effectful
+    , filepath
     , generic-lens
     , lens          ^>=5.3
+    , process
     , shikumi       ^>=0.1.0.1
     , text          ^>=2.1
     , vector
@@ -72,6 +76,7 @@ test-suite shikumi-tools-test
   other-modules:
     AcceptanceSpec
     CodeActSpec
+    EnvSpec
     Fixtures
     MockLLM
     ProgramOfThoughtSpec
@@ -85,8 +90,11 @@ test-suite shikumi-tools-test
     , aeson
     , baikai         >=0.2      && <0.3
     , base
+    , bytestring
     , containers
+    , directory
     , effectful
+    , filepath
     , generic-lens
     , lens
     , shikumi        ^>=0.1.0.1

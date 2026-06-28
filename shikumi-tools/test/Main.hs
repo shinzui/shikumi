@@ -4,6 +4,7 @@ module Main (main) where
 
 import AcceptanceSpec qualified
 import CodeActSpec qualified
+import EnvSpec qualified
 import ProgramOfThoughtSpec qualified
 import ProtocolSpec qualified
 import ReActSpec qualified
@@ -19,6 +20,7 @@ main =
       "shikumi-tools"
       [ SchemaSpec.tests,
         ToolSpec.tests,
+        EnvSpec.tests,
         ReActSpec.tests,
         ProtocolSpec.tests,
         AcceptanceSpec.tests,
