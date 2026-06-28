@@ -86,6 +86,7 @@ test-suite shikumi-tools-test
     AcceptanceSpec
     BuiltinAcceptanceSpec
     CodeActSpec
+    CompactionSpec
     EnvSpec
     Fixtures
     FsSpec

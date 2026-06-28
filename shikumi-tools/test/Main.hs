@@ -5,6 +5,7 @@ module Main (main) where
 import AcceptanceSpec qualified
 import BuiltinAcceptanceSpec qualified
 import CodeActSpec qualified
+import CompactionSpec qualified
 import EnvSpec qualified
 import FsSpec qualified
 import ProgramOfThoughtSpec qualified
@@ -34,5 +35,6 @@ main =
         BuiltinAcceptanceSpec.tests,
         RestrictedSpec.tests,
         ProgramOfThoughtSpec.tests,
-        CodeActSpec.tests
+        CodeActSpec.tests,
+        CompactionSpec.tests
       ]

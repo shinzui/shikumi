@@ -223,5 +223,6 @@ shikumiErrorText = \case
   SchemaMismatch t -> t
   ValidationFailure t -> t
   ProviderFailure t -> t
+  ContextWindowExceeded t -> t
   Timeout t -> t
   BudgetExceeded t -> t

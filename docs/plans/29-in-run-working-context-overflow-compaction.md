@@ -54,23 +54,34 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `ContextWindowExceeded` to `Shikumi.Error.ShikumiError`; map baikai's
+- [x] M1: Add `ContextWindowExceeded` to `Shikumi.Error.ShikumiError`; map baikai's
       `ContextOverflow` category to it in `fromBaikaiError`; keep `isTransient` returning
-      `False` for it. Unit test the mapping.
-- [ ] M1: Create `Shikumi.Compaction` with `CompactionConfig`,
+      `False` for it. Unit test the mapping. Completed 2026-06-28; verified by
+      `nix develop -c cabal test shikumi --test-options='--pattern ErrorSpec'`.
+- [x] M1: Create `Shikumi.Compaction` with `CompactionConfig`,
       `defaultCompactionConfig`, and `usageExceedsWindow`. Unit-test the threshold around
-      the boundary.
-- [ ] M2: Implement `compactTail` (generic summarize-tail) in `Shikumi.Compaction`.
+      the boundary. Completed 2026-06-28; `CompactionSpec` covers the threshold,
+      disabled config, saturating nonzero windows, and the `_Model` zero-window placeholder.
+- [x] M2: Implement `compactTail` (generic summarize-tail) in `Shikumi.Compaction`.
       Unit-test that older items fold into one summary item and the recent tail is preserved
-      verbatim.
-- [ ] M3: Thread `CompactionConfig` into `ReActConfig`; wire the proactive trigger into
+      verbatim. Completed 2026-06-28; `CompactionSpec` asserts `[summary, e5, e6]`.
+- [x] M3: Thread `CompactionConfig` into `ReActConfig`; wire the proactive trigger into
       `reactLoop`. Acceptance test: agent on a tiny-window mock compacts and completes.
-- [ ] M4: Add the reactive overflow-recovery path (catch `ContextWindowExceeded`, compact,
-      retry once). Acceptance test: mock that throws once then succeeds.
-- [ ] M4: Extend the reactive recovery to the final `extract` completion (also an unguarded
-      `complete _Model` site), with its own one-shot compact-then-retry.
-- [ ] M5: Export the compaction surface for `shikigami` reuse; extend `MockLLM` with a
-      usage/window-carrying response builder; document the feature.
+      Completed 2026-06-28; the test asserts `TerminatedFinish`, a visible summary step,
+      and the recent tool step after it.
+- [x] M4: Add the reactive overflow-recovery path (catch `ContextWindowExceeded`, compact,
+      retry once). Acceptance test: mock that throws once then succeeds. Completed
+      2026-06-28; `CompactionSpec` throws on the second propose completion, verifies the
+      run succeeds with a summary step, and includes a retry-throws negative control.
+- [x] M4: Extend the reactive recovery to the final `extract` completion (also an unguarded
+      `complete _Model` site), with its own one-shot compact-then-retry. Completed
+      2026-06-28; `CompactionSpec` throws on the extract completion and verifies the
+      returned trajectory contains the recovery summary.
+- [x] M5: Export the compaction surface for `shikigami` reuse; extend `MockLLM` with a
+      usage/window-carrying response builder; document the feature. Completed 2026-06-28;
+      `Shikumi.Compaction` is exposed by core `shikumi`, `MockLLM` has
+      `mkUsageResponse` plus throwing interpreters, and `docs/user/tools-and-agents.md`
+      documents defaults, disabling, long-run requirements, and reactive limits.
 
 
 ## Surprises & Discoveries
@@ -145,6 +156,16 @@ implementation. Provide concise evidence.
   `Shikumi.Program (Program, embed)` — there is no message/skill loop to reuse `compactTail`
   yet. The generic primitive was therefore moved to core `shikumi` (`Shikumi.Compaction`)
   and the reuse goal reframed as readiness. See the Decision Log.
+
+- **Implementation pass (2026-06-28): zero context windows in mock responses are
+  placeholders, not tiny real windows.** The first full `shikumi-tools` run failed
+  `BuiltinAcceptanceSpec`: ordinary `mkTextResponse` fixtures carry `_Response.model =
+  _Model`, whose `contextWindow = 0`, so the initial threshold predicate treated every
+  successful tool turn as overflow and consumed an extra scripted response for summarizing.
+  Evidence: `nix develop -c cabal test shikumi-tools` failed with
+  `InvalidJSON "Unexpected end-of-input, expecting JSON value"` in
+  `BuiltinAcceptanceSpec` before the trigger ignored `contextWindow = 0`. The final run
+  passed all 46 `shikumi-tools` tests. See the Decision Log.
 
 
 ## Decision Log
@@ -249,13 +270,47 @@ Record every decision made while working on the plan.
   to claim readiness rather than an existing integration.
   Date: 2026-06-28
 
+- Decision: Treat a response model with `contextWindow = 0` as an unknown placeholder for
+  proactive triggering, not as a real zero-token context window.
+  Rationale: baikai's `_Model` deliberately uses `contextWindow = 0` as a blank default, and
+  many existing network-free fixtures build responses from `_Response` without setting a
+  resolved model. Triggering compaction for that placeholder made short, previously stable
+  tests consume an unexpected summarization response. Real tiny windows still compact:
+  `overflowThreshold` remains saturating, and `usageExceedsWindow` still triggers for
+  nonzero windows smaller than the reserve. This keeps production behavior keyed to actual
+  provider metadata while preserving existing fixture semantics.
+  Date: 2026-06-28
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Implemented on 2026-06-28. Long ReAct runs now have both proactive and reactive in-run
+working-context compaction: the loop watches provider-reported `inputTokens` against the
+resolved response model's nonzero `contextWindow`, folds older steps into a visible summary
+step when the safety threshold is crossed, preserves the recent tail, and keeps running.
+`ContextOverflow` from baikai now maps to `ContextWindowExceeded`, and the propose and
+extract completion sites both do a bounded compact-then-retry on that error.
+
+Validation evidence:
+
+```text
+nix develop -c cabal test shikumi --test-options='--pattern ErrorSpec'
+All 6 tests passed
+
+nix develop -c cabal test shikumi-tools --test-options='--pattern Compaction'
+All 6 tests passed
+
+nix develop -c cabal test shikumi-tools
+All 46 tests passed
+```
+
+One pragmatic refinement landed during implementation: the proactive trigger ignores a
+response `contextWindow` of `0`, because that is the `_Model` placeholder used by existing
+fixtures, not a real provider limit. Nonzero tiny windows still exercise the saturating
+threshold behavior.
 
 
 ## Context and Orientation
@@ -629,9 +684,11 @@ classify by status alone surface `SchemaMismatch`, which is not caught here. The
 M3 trigger is the primary defense and does not depend on this classification.
 
 Verification (acceptance): a mock interpreter that throws `ContextWindowExceeded` on its
-first `Complete` and then serves a normal scripted response thereafter. The run completes,
-and the trajectory shows the summary step (proof that a compaction happened before the
-successful retry).
+next propose `Complete` after at least one recorded step and then serves a normal scripted
+response thereafter. The run completes, and the trajectory shows the summary step (proof
+that a compaction happened before the successful retry). A first-turn overflow is still
+retried once, but with no recorded steps there is no summary step to inject; if the original
+input alone is too large, the bounded retry will honestly rethrow.
 
 ### M5 — Expose for shikigami, test harness, and docs
 
@@ -763,11 +820,13 @@ existing `MockLLM` interpreter extended in M5.
    `keepRecent` real steps appear verbatim *after* that summary step (assert their `action`
    tool names and observations equal the most recent scripted turns).
 
-4. **Reactive recovery (acceptance).** Use `runMockLLMThrowingOnce`: the first `Complete`
-   throws `ContextWindowExceeded "context length exceeded"`; subsequent completions are
-   served from the script. Run the same agent. The run returns `Right` (it did not abort
-   with `Left (ContextWindowExceeded ...)`), and the trajectory shows the summary step,
-   proving the loop compacted and retried rather than crashing. As a negative control,
+4. **Reactive recovery (acceptance).** Use the throwing mock to throw
+   `ContextWindowExceeded "context length exceeded"` on the next propose completion after
+   at least one step has been recorded; subsequent completions are served from the script.
+   Run the same agent. The run returns `Right` (it did not abort with
+   `Left (ContextWindowExceeded ...)`), and the trajectory shows the summary step, proving
+   the loop compacted and retried rather than crashing. Also test the final `extract`
+   completion the same way, because it is a separate `complete` site. As a negative control,
    make the *retry* also throw and assert the run returns
    `Left (ContextWindowExceeded ...)` — recovery is bounded to one retry, not an infinite
    loop. Note the boundary this does *not* cover: recovery only triggers when baikai

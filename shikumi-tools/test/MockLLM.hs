@@ -7,15 +7,19 @@
 -- exhausted script yields an empty text response (specs always script enough).
 module MockLLM
   ( runMockLLM,
+    runMockLLMThrowingOnce,
+    runMockLLMThrowingOn,
     runEffMock,
     runAgent,
     mkTextResponse,
+    mkUsageResponse,
     mkToolCallResponse,
   )
 where
 
 import Baikai
   ( AssistantContent (..),
+    Model,
     Response,
     _Response,
     _TextContent,
@@ -29,7 +33,8 @@ import Data.Text (Text)
 import Data.Vector qualified as V
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Effectful.Error.Static (Error, runErrorNoCallStack)
+import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
+import Numeric.Natural (Natural)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
@@ -42,6 +47,38 @@ runMockLLM script act = do
   interpret
     ( \_ -> \case
         Complete {} -> liftIO (pop ref)
+        Stream {} -> pure []
+    )
+    act
+
+-- | Interpret @LLM@ like 'runMockLLM', but throw once on the first completion.
+runMockLLMThrowingOnce ::
+  (IOE :> es, Error ShikumiError :> es) =>
+  ShikumiError ->
+  [Response] ->
+  Eff (LLM : es) a ->
+  Eff es a
+runMockLLMThrowingOnce = runMockLLMThrowingOn [1]
+
+-- | Interpret @LLM@ like 'runMockLLM', but throw on selected 1-based completion
+-- calls. Useful for bounded-retry tests.
+runMockLLMThrowingOn ::
+  (IOE :> es, Error ShikumiError :> es) =>
+  [Int] ->
+  ShikumiError ->
+  [Response] ->
+  Eff (LLM : es) a ->
+  Eff es a
+runMockLLMThrowingOn throwAt err script act = do
+  ref <- liftIO (newIORef script)
+  countRef <- liftIO (newIORef (0 :: Int))
+  interpret
+    ( \_ -> \case
+        Complete {} -> do
+          n <- liftIO (atomicModifyIORef' countRef (\n0 -> let n1 = n0 + 1 in (n1, n1)))
+          if n `elem` throwAt
+            then throwError err
+            else liftIO (pop ref)
         Stream {} -> pure []
     )
     act
@@ -73,6 +110,14 @@ pop ref = atomicModifyIORef' ref step
 mkTextResponse :: Text -> Response
 mkTextResponse t =
   _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+
+-- | A text response that also carries a resolved model and input-token usage.
+mkUsageResponse :: Model -> Natural -> Text -> Response
+mkUsageResponse model inputTokens text =
+  mkTextResponse text
+    & #model .~ model
+    & #message . #usage . #inputTokens .~ inputTokens
+    & #message . #usage . #totalTokens .~ inputTokens
 
 -- | An assistant 'Response' carrying a single native tool-call block.
 mkToolCallResponse :: Text -> Text -> Value -> Response

@@ -193,15 +193,35 @@ structurally inspectable (`ShapeEmbed`), and serializable.
 ### Configuration
 
 ```haskell
-data ReActConfig   = ReActConfig { maxIters :: Int, protocol :: ToolProtocol }
+data ReActConfig   = ReActConfig
+  { maxIters :: Int, protocol :: ToolProtocol, compaction :: CompactionConfig }
 data ToolProtocol  = ProtocolNative | ProtocolPrompt | ProtocolAuto
-defaultReActConfig = ReActConfig { maxIters = 6, protocol = ProtocolAuto }
+defaultReActConfig = ReActConfig
+  { maxIters = 6, protocol = ProtocolAuto, compaction = defaultCompactionConfig }
 ```
 
 `ProtocolAuto` resolves per model via the same `capabilityFor` used by the adapters: a model
 with native function-calling uses the native protocol; everything else falls back to a
 prompt-based action grammar parsed from the model's text. The loop body is identical under
 either — only the rendering/parsing differs (the `ProtocolImpl` seam).
+
+### Working-context compaction
+
+Long ReAct runs compact their in-flight history before it exceeds the model context window.
+After each tool turn, the loop reads the provider-reported input-token usage and resolved
+model window from the `Response`; when usage reaches `contextWindow - reserveTokens`, it
+summarizes older steps into one visible summary step and keeps the most recent
+`keepRecent` steps verbatim. The defaults are `reserveTokens = 16384`, `keepRecent = 4`,
+and `enabled = True`.
+
+Under the default `maxIters = 6`, normal short agents usually never reach the threshold. To
+benefit from compaction, run a longer agent by raising `maxIters`. Disable the behavior with
+`compaction = defaultCompactionConfig { enabled = False }`.
+
+If a provider reports an overflow as baikai's `ContextOverflow`, the loop also performs a
+one-shot compact-then-retry recovery. That path is best-effort: the proactive token
+threshold is the dependable guard, because some providers surface oversized requests as a
+generic invalid request instead of `ContextOverflow`.
 
 ### The trajectory
 

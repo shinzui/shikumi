@@ -30,6 +30,8 @@ data ShikumiError
     ValidationFailure !Text
   | -- | the provider/transport failed (mapped from baikai)
     ProviderFailure !Text
+  | -- | the prompt exceeded the model's context window
+    ContextWindowExceeded !Text
   | -- | the call exceeded its time budget
     Timeout !Text
   | -- | the running cost ceiling was reached; the call was refused
@@ -45,6 +47,7 @@ fromBaikaiError :: BaikaiError -> ShikumiError
 fromBaikaiError e = case category e of
   DecodeFailure -> InvalidJSON (message e)
   InvalidRequest -> SchemaMismatch ("invalid request: " <> message e)
+  ContextOverflow -> ContextWindowExceeded (message e)
   ProcessFailure ->
     ProviderFailure $
       case exitCode e of

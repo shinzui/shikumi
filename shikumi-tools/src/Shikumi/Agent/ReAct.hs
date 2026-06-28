@@ -58,6 +58,7 @@ import Baikai
     Tool,
     ToolCall,
     ToolChoice (..),
+    Usage,
     flattenAssistantBlocks,
     user,
     _Context,
@@ -77,9 +78,10 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Effectful (Eff, (:>))
-import Effectful.Error.Static (Error, throwError)
+import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ModelCapability (..), ToPrompt (toPrompt), attachSchema, capabilityFor)
+import Shikumi.Compaction (CompactionConfig, compactTail, defaultCompactionConfig, usageExceedsWindow)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Program (Program (FMap), embed)
@@ -139,13 +141,19 @@ data ToolProtocol
 -- | How an agent runs: the hard iteration cap and the protocol selector.
 data ReActConfig = ReActConfig
   { maxIters :: !Int,
-    protocol :: !ToolProtocol
+    protocol :: !ToolProtocol,
+    compaction :: !CompactionConfig
   }
   deriving stock (Show, Eq, Generic)
 
 -- | Six iterations, protocol auto-selected.
 defaultReActConfig :: ReActConfig
-defaultReActConfig = ReActConfig {maxIters = 6, protocol = ProtocolAuto}
+defaultReActConfig =
+  ReActConfig
+    { maxIters = 6,
+      protocol = ProtocolAuto,
+      compaction = defaultCompactionConfig
+    }
 
 -- ---------------------------------------------------------------------------
 -- Building agents
@@ -184,8 +192,8 @@ reactLoop ::
   i ->
   Eff es (o, Trajectory)
 reactLoop sig reg cfg i = do
-  traj <- loop 0 []
-  o <- extract traj
+  traj0 <- loop 0 []
+  (o, traj) <- extract traj0
   pure (o, traj)
   where
     impl :: ProtocolImpl i o
@@ -197,24 +205,62 @@ reactLoop sig reg cfg i = do
       | iter >= maxIters cfg =
           pure (Trajectory (V.fromList (reverse acc)) (TerminatedMaxIters iter))
       | otherwise = do
-          let (ctx, opts) = renderPropose impl i (soFar acc)
-          resp <- complete _Model ctx opts
+          (accForPrompt, resp) <- completeProposeRecover acc
           case parsePropose impl resp of
-            Left perr -> loop (iter + 1) (correctiveStep perr : acc)
+            Left perr -> loop (iter + 1) (correctiveStep perr : accForPrompt)
             Right (th, Finish) ->
-              pure (Trajectory (V.fromList (reverse (Step th Finish Nothing : acc))) TerminatedFinish)
+              pure (Trajectory (V.fromList (reverse (Step th Finish Nothing : accForPrompt))) TerminatedFinish)
             Right (th, CallTool nm args) -> do
               res <- runToolCall reg (mkToolCall nm args)
               let obs = either renderToolError id res
-              loop (iter + 1) (Step th (CallTool nm args) (Just obs) : acc)
+                  acc' = Step th (CallTool nm args) (Just obs) : accForPrompt
+              acc'' <- compactAcc (resp ^. #model) (resp ^. #message . #usage) acc'
+              loop (iter + 1) acc''
 
     -- The final extract call: render, issue, decode into @o@ (a decode failure
     -- here is the agent's final-answer failure, surfaced as a 'ShikumiError').
-    extract :: Trajectory -> Eff es o
+    extract :: Trajectory -> Eff es (o, Trajectory)
     extract traj = do
       let (ctx, opts) = renderExtract impl i traj
-      resp <- complete _Model ctx opts
-      either throwError pure (parseExtract impl resp)
+      (trajForExtract, resp) <-
+        catchError
+          ((traj,) <$> complete _Model ctx opts)
+          ( \_cs -> \case
+              ContextWindowExceeded {} -> do
+                compacted <- forceCompactTrajectory traj
+                let (ctx', opts') = renderExtract impl i compacted
+                (compacted,) <$> complete _Model ctx' opts'
+              e -> throwError e
+          )
+      o <- either throwError pure (parseExtract impl resp)
+      pure (o, trajForExtract)
+
+    completeProposeRecover :: [Step] -> Eff es ([Step], Response)
+    completeProposeRecover acc = do
+      let (ctx, opts) = renderPropose impl i (soFar acc)
+      catchError
+        ((acc,) <$> complete _Model ctx opts)
+        ( \_cs -> \case
+            ContextWindowExceeded {} -> do
+              compacted <- forceCompactAcc acc
+              let (ctx', opts') = renderPropose impl i (soFar compacted)
+              (compacted,) <$> complete _Model ctx' opts'
+            e -> throwError e
+        )
+
+    compactAcc :: Model -> Usage -> [Step] -> Eff es [Step]
+    compactAcc model usage acc
+      | usageExceedsWindow (compaction cfg) model usage = forceCompactAcc acc
+      | otherwise = pure acc
+
+    forceCompactAcc :: [Step] -> Eff es [Step]
+    forceCompactAcc acc =
+      reverse <$> compactTail (compaction cfg) _Model renderStepLine summaryStep (reverse acc)
+
+    forceCompactTrajectory :: Trajectory -> Eff es Trajectory
+    forceCompactTrajectory traj = do
+      compacted <- compactTail (compaction cfg) _Model renderStepLine summaryStep (V.toList (steps traj))
+      pure (traj {steps = V.fromList compacted})
 
     -- A trajectory view of the steps gathered so far (termination is irrelevant
     -- for the propose render).
@@ -232,6 +278,17 @@ correctiveStep perr =
       observation =
         Just ("Your previous reply was not a valid action JSON object: " <> perr <> ". Reply with exactly one action object.")
     }
+
+summaryStep :: Text -> Step
+summaryStep summaryText =
+  Step
+    { thought = "(compacted summary of earlier steps)",
+      action = CallTool "" Null,
+      observation = Just summaryText
+    }
+
+renderStepLine :: Step -> Text
+renderStepLine s = renderTrajectory (Trajectory (V.singleton s) TerminatedFinish)
 
 -- | A baikai 'ToolCall' built from a name and a raw arguments object (the call id
 -- is irrelevant on the prompt path and synthesized on the native path).

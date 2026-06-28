@@ -3,7 +3,7 @@
 -- to 'ProviderFailure') makes this group fail.
 module ErrorSpec (tests) where
 
-import Baikai.Error (decodeError, invalidRequest, processError, providerError)
+import Baikai.Error (BaikaiError (..), ErrorCategory (..), decodeError, invalidRequest, processError, providerError)
 import Shikumi.Error
   ( ShikumiError (..),
     fromBaikaiError,
@@ -24,9 +24,20 @@ tests =
         fromBaikaiError (invalidRequest "z") @?= SchemaMismatch "invalid request: z",
       testCase "maps processError -> ProviderFailure" $
         fromBaikaiError (processError 2 "boom") @?= ProviderFailure "process exited 2: boom",
+      testCase "maps ContextOverflow -> ContextWindowExceeded" $
+        fromBaikaiError
+          BaikaiError
+            { category = ContextOverflow,
+              message = "context length exceeded",
+              httpStatus = Just 400,
+              retryAfterSeconds = Nothing,
+              exitCode = Nothing
+            }
+          @?= ContextWindowExceeded "context length exceeded",
       testCase "isTransient classification" $ do
         isTransient (ProviderFailure "") @?= True
         isTransient (Timeout "") @?= True
+        isTransient (ContextWindowExceeded "") @?= False
         isTransient (BudgetExceeded "") @?= False
         isTransient (SchemaMismatch "") @?= False
         isTransient (InvalidJSON "") @?= False
