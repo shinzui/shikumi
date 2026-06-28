@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.2.0.0 - 2026-06-28
+
+### Added
+
+- `Generic` instances for `BootstrapConfig`, `CoproConfig`, and `Miprov2Config`.
+
+### Changed
+
+- Renamed exported `Candidate` record selectors to `params`, `perExample`, and
+  `aggregate`.
+- Renamed exported `PastInstruction` record selectors to `instruction` and
+  `score`.
+- Refreshed internal `shikumi`, `shikumi-compile`, `shikumi-eval`, and
+  `shikumi-trace` bounds for the current package set.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

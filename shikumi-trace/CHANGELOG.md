@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.1.0 - 2026-06-28
+
+### Changed
+
+- Refreshed internal `shikumi` and `shikumi-cache` bounds for the current package
+  set.
+- Updated tracing and replay internals to use label-based record access.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

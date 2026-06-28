@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+## 0.2.0.0 - 2026-06-28
+
 ### Added
 
+- `Shikumi.Compaction`, with helpers for compacting older working context when a
+  model approaches its context window.
 - `Shikumi.Program.nodeInstructionsIndexed :: Program i o -> [Text]`: the signature
   instruction of each `Predict` node, in `foldParams`/`nodeFieldsIndexed` order. Used
   by `shikumi-okf` to document model calls (EP-31, Milestone 5).
+
+### Changed
+
+- `ShikumiError` now distinguishes provider context-window failures with the new
+  `ContextWindowExceeded` constructor.
 
 ## 0.1.0.1 - 2026-06-21
 

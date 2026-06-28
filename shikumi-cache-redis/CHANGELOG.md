@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.1.1.0 - 2026-06-28
+
+### Changed
+
+- Refreshed internal `shikumi` and `shikumi-cache` bounds for the current package
+  set.
+- Updated Redis backend internals to match the record-patterns conventions used
+  across the package set.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

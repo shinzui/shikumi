@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.1.0 - 2026-06-28
+
+### Added
+
+- `EvalConfig` now derives `Generic`.
+
+### Changed
+
+- Refreshed the internal `shikumi` bound for the `0.2` series.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

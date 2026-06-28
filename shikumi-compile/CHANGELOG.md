@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.1.0 - 2026-06-28
+
+### Changed
+
+- Refreshed the internal `shikumi` bound for the `0.2` series.
+- Updated compiler internals to use label-based record updates.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.1.0 - 2026-06-28
+
+### Changed
+
+- Refreshed the internal `shikumi` bound for the `0.2` series.
+- Updated SQLite backend internals to match the record-patterns conventions used
+  across the package set.
+
 ## 0.1.0.1 - 2026-06-21
 
 ### Changed

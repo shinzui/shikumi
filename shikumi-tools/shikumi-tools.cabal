@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-tools
-version:         0.1.0.1
+version:         0.2.0.0
 synopsis:
   Typed tools and ReAct agents for shikumi LM programs (EP-11)
 
@@ -72,7 +72,7 @@ library
     , lens             ^>=5.3
     , process
     , regex-tdfa
-    , shikumi          ^>=0.1.0.1
+    , shikumi          ^>=0.2.0.0
     , text             ^>=2.1
     , vector
 
@@ -111,8 +111,8 @@ test-suite shikumi-tools-test
     , filepath
     , generic-lens
     , lens
-    , shikumi        ^>=0.1.0.1
-    , shikumi-tools  ^>=0.1.0.1
+    , shikumi        ^>=0.2.0.0
+    , shikumi-tools  ^>=0.2.0.0
     , tasty
     , tasty-hunit
     , text
