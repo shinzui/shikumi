@@ -89,7 +89,7 @@ The repository is split into focused Cabal packages:
 | `shikumi-eval` | Typed datasets, metrics, reports, and golden helpers |
 | `shikumi-compile` | Zero-shot, few-shot, chain-of-thought, and RAG compilation |
 | `shikumi-optimize` | Demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN, bootstrap random search, ensemble search |
-| `shikumi-tools` | Typed tools, ReAct agents, `programOfThought`, and `codeAct` |
+| `shikumi-tools` | Typed tools, built-in work tools, ReAct agents, `programOfThought`, and `codeAct` |
 | `shikumi-cli` | Offline-capable CLI for eval, trace, optimize, and replay |
 | `shikumi-jitsurei` | Runnable worked examples |
 
@@ -109,8 +109,8 @@ The implemented surface includes:
 - Hierarchical traces, node-correlated spans, live OTel export, and fail-closed
   replay.
 - Typed evaluation reports and optimizers that rewrite program parameters.
-- Typed tools, ReAct agents, reward-driven self-refinement, program-level
-  streaming, and hermetic code-execution modules.
+- Typed tools, built-in work tools, ReAct agents, reward-driven self-refinement,
+  program-level streaming, and hermetic code-execution modules.
 
 ## Try It Offline
 
@@ -203,7 +203,7 @@ Start with the [user guide](docs/user/README.md):
 | [Effects & runtime](docs/user/effects-and-runtime.md) | `LLM`, routing, retries, rate limits, budgets, streaming |
 | [Caching, tracing & replay](docs/user/caching-tracing-replay.md) | Cache keys, trace trees, OTel, deterministic replay |
 | [Evaluation & optimization](docs/user/evaluation-and-optimization.md) | Datasets, metrics, reports, compilers, optimizers |
-| [Tools & agents](docs/user/tools-and-agents.md) | Typed tools, ReAct agents, code execution |
+| [Tools & agents](docs/user/tools-and-agents.md) | Typed tools, built-in work tools, ReAct agents, code execution |
 | [CLI](docs/user/cli.md) | Registry wiring and offline subcommands |
 
 The implementation history lives under [docs/plans](docs/plans) and

@@ -28,7 +28,7 @@ you want, jump straight to the relevant reference.
 | 6 | [Effects & the runtime](./effects-and-runtime.md) | The `LLM` effect over baikai, resilience (retries/rate-limit/budget), the effect stack, program-level streaming (`streamProgram`), and *why shikumi code never carries `IOE`*. |
 | 7 | [Caching, tracing & replay](./caching-tracing-replay.md) | The `interpose` pattern, content-addressed cache keys, the span tree, and deterministic replay. |
 | 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the nine optimizers (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN) — with serialization. |
-| 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, an agent loop that is itself a `Program`, and code-execution modules (`programOfThought` / `codeAct`) that run model-emitted code in a sandbox. |
+| 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, built-in work tools (`read`, `write`, `edit`, `grep`, `glob`, `bash`, `web_fetch`, `web_search`), and agent/code-execution loops that are themselves `Program`s. |
 | 10 | [The CLI](./cli.md) | `eval` / `trace` / `optimize` / `replay`, all runnable offline. |
 
 ---

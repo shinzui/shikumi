@@ -1,9 +1,9 @@
 # Tools & ReAct agents — under the covers
 
-`shikumi-tools` adds typed tools and a ReAct agent loop. The two ideas that make it fit the
-rest of the framework: **a tool's argument schema is derived from its input record** (same
-`ToSchema` engine as everything else), and **a ReAct agent is itself a `Program`**, so it
-composes, traces, caches, and optimizes like any other node.
+`shikumi-tools` adds typed tools, a built-in work-tool catalog, and a ReAct agent loop. The
+two ideas that make it fit the rest of the framework: **a tool's argument schema is derived
+from its input record** (same `ToSchema` engine as everything else), and **a ReAct agent is
+itself a `Program`**, so it composes, traces, caches, and optimizes like any other node.
 
 ---
 
@@ -75,6 +75,104 @@ body, and encodes `o` to text — **totally**. A decode failure becomes `ToolArg
 throwing `ShikumiError` becomes `ToolRunFailed`. It never throws for a tool-level fault. The
 agent feeds the *rendered* `ToolError` back to the model as an observation, so the model can
 recover; only genuine infrastructure faults bubble up as a `ShikumiError`.
+
+---
+
+## Built-in work tools
+
+The typed tool layer is intentionally small, but `shikumi-tools` also ships a practical
+catalog for file, shell, and web work:
+
+```haskell
+module Shikumi.Tool.Builtin
+  ( builtinFsTools
+  , builtinWebTools
+  , builtinTools
+  , builtinRegistry
+  )
+
+builtinFsTools  :: ToolEnv -> [SomeTool]
+builtinWebTools :: WebClient -> [SomeTool]
+builtinTools    :: ToolEnv -> WebClient -> [SomeTool]
+builtinRegistry :: ToolEnv -> WebClient -> ToolRegistry
+```
+
+`builtinRegistry` is the one-call entry point for a ReAct agent or `codeAct` loop that should
+be able to inspect and edit local files, run commands, and fetch web pages:
+
+```haskell
+import Shikumi.Tool.Builtin (builtinRegistry)
+import Shikumi.Tool.Env     (localToolEnv)
+import Shikumi.Tool.Web     (localWebClient, newTlsManager)
+
+main :: IO ()
+main = do
+  manager <- newTlsManager
+  let web      = localWebClient manager Nothing
+      registry = builtinRegistry localToolEnv web
+      agent    = react agentSig registry defaultReActConfig
+  -- runProgram agent ...
+```
+
+With `localWebClient manager Nothing`, `web_fetch` works and `web_search` returns a recoverable
+tool failure observation saying no search provider is configured. Supplying a `SearchConfig`
+enables `web_search` against a provider endpoint that accepts `q`, `key`, and `limit` query
+parameters and returns a JSON `SearchResult`.
+
+### Tool catalog
+
+| Tool | Arguments | Result |
+|---|---|---|
+| `read` | `path`, optional `offset`, optional `limit` | UTF-8 file text, selected line count, and `truncated`. |
+| `write` | `path`, `content` | Written path and byte count. |
+| `edit` | `path`, `oldString`, `newString`, optional `replaceAll` | Written path and replacement count. Empty or missing `oldString` is a tool failure observation. |
+| `grep` | `pattern`, optional `path`, optional `glob`, optional `ignoreCase` | Up to 1000 `{file,line,text}` regex matches plus `truncated`. |
+| `glob` | `pattern`, optional `path` | Up to 1000 matching paths plus `truncated`. |
+| `bash` | `command`, optional `cwd`, optional `timeoutMs`, optional `stdin` | Exit code, stdout, and stderr. A non-zero exit is a normal result, not an exception. |
+| `web_fetch` | `url`, optional `maxBytes` | HTTP status, content type, decoded body, and `truncated`. |
+| `web_search` | `query`, optional `maxResults` | Provider search hits with title, URL, and snippet. |
+
+The JSON field for both search tools is `pattern`; the Haskell record selector is
+`patternText`, because `pattern` conflicts with the `PatternSynonyms` extension used in the
+package.
+
+`grep` and `glob` prefer host tools when they are available: `rg` for grep and `fd` for glob.
+If either command is missing or returns an unusable result, the tool falls back to a bounded
+in-process traversal through the same `ToolEnv`. The fallback skips noisy directories
+(`.git`, `node_modules`, `dist-newstyle`, `.stack-work`, `.direnv`), skips binary files, caps
+file size at 5 MiB, caps depth at 25, and caps results at 1000.
+
+### Environment seams
+
+The built-ins do not call the host directly; they call two swappable records:
+
+```haskell
+data ToolEnv = ToolEnv
+  { envExec      :: forall es. EnvRow es => ExecRequest -> Eff es ExecResult
+  , envReadFile  :: forall es. EnvRow es => Path -> Eff es ByteString
+  , envWriteFile :: forall es. EnvRow es => Path -> ByteString -> Eff es ()
+  , envStat      :: forall es. EnvRow es => Path -> Eff es (Maybe FileStat)
+  , envReaddir   :: forall es. EnvRow es => Path -> Eff es [DirEntry]
+  , envExists    :: forall es. EnvRow es => Path -> Eff es Bool
+  , envMkdir     :: forall es. EnvRow es => Path -> Eff es ()
+  , envRm        :: forall es. EnvRow es => Path -> Eff es ()
+  , envCwd       :: forall es. EnvRow es => Eff es Path
+  }
+
+localToolEnv :: ToolEnv
+
+data WebClient = WebClient
+  { webFetch  :: forall es. EnvRow es => Text -> Maybe Int -> Eff es FetchResult
+  , webSearch :: forall es. EnvRow es => Text -> Maybe Int -> Eff es SearchResult
+  }
+
+localWebClient :: Manager -> Maybe SearchConfig -> WebClient
+```
+
+`localToolEnv` is a real local filesystem and shell environment. It is useful for local agents
+and tests that deliberately exercise real commands, but it is not a sandbox. To restrict an
+agent, provide a different `ToolEnv`: for example, one rooted in a scratch directory, one that
+denies `bash`, or one that records writes for review. The tool definitions stay unchanged.
 
 ---
 
@@ -203,3 +301,7 @@ cabal run jitsurei-codeexec   # programOfThought + codeAct over the hermetic san
 `jitsurei-codeexec` shows the model write code that the sandbox runs (including an
 error-then-fix recovery) and a `codeAct` snippet calling a provided tool — all driven by a
 scripted offline stub, no network.
+
+The built-in work-tool catalog is exercised by the `shikumi-tools` test suite, including
+filesystem edits, `grep`/`glob` fallback behavior, shell command capture, `web_fetch`, and the
+configured/unconfigured `web_search` paths.

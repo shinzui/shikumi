@@ -27,7 +27,7 @@ The packages, at a glance:
 | `shikumi-eval` | `Dataset` / `Metric` / `Report` and the evaluation runner. |
 | `shikumi-compile` | Prompting strategies (zero-shot / few-shot / CoT / RAG) compiled into a program. |
 | `shikumi-optimize` | Nine optimizers that search for better demos and instructions (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN). |
-| `shikumi-tools` | Typed tools and the ReAct agent loop. |
+| `shikumi-tools` | Typed tools, the built-in work-tool catalog, and ReAct/code-execution agent loops. |
 | `shikumi-cli` | The `shikumi` executable: `eval` / `trace` / `optimize` / `replay`. |
 | `shikumi-jitsurei` | 実例 — runnable, offline worked examples of everything above. |
 
