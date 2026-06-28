@@ -42,6 +42,8 @@
             pkgs.openssl
             pkgs.redis
             pkgs.process-compose
+            pkgs.ripgrep
+            pkgs.fd
           ]
           ++ config.haskellProject.extraDevPackages;
         shellHook = ''

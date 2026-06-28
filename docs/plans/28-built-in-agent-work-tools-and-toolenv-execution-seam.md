@@ -60,9 +60,9 @@ This section must always reflect the actual current state of the work.
 - [x] M2: add the `Shikumi.Tool.Web` module — the `WebClient` record (`webFetch`, `webSearch`), value types (`FetchResult`, `SearchResult`, `SearchHit`), and `localWebClient` over `http-client` + `http-client-tls`; add those two deps. Completed 2026-06-28T16:39:14Z.
 - [x] M2: add `Shikumi.Tool.Builtin.Web` — `webFetchTool` and `webSearchTool` typed `Tool`s built over a `WebClient`. Completed 2026-06-28T16:39:14Z.
 - [x] M2: unit-test the web tools against a *stub* `WebClient` (no network); add a manual, network-gated check for `web_fetch` against a live URL. Completed 2026-06-28T16:39:14Z; `nix develop --command cabal test shikumi-tools` and `nix develop --command env SHIKUMI_NET_TESTS=1 cabal test shikumi-tools` both passed with all 34 tests green.
-- [ ] M3: add `Shikumi.Tool.Builtin.Fs` — `readTool`, `writeTool`, `editTool`, `grepTool`, `globTool`, each `:: ToolEnv -> Tool i o`, with their input/output records. `grep`/`glob` are the hybrid: hardened in-process baseline (skip-list, binary detection, size/match/depth caps) using `regex-tdfa`, an `rg`/`fd` fast path via `envExec` when present, with `bash` as the escape hatch.
-- [ ] M3: add `regex-tdfa` to `shikumi-tools.cabal`'s `library` `build-depends`; add `ripgrep` and `fd` to the nix dev shell (`nix/haskell.nix`).
-- [ ] M3: unit-test the fs tools end-to-end against `localToolEnv` in a temp directory; run grep/glob **twice** (fast path via `localToolEnv`, in-process baseline via a stub `ToolEnv` reporting `rg`/`fd` absent), and add a hardening-bounds test (skips `.git`/`node_modules`/binary files).
+- [x] M3: add `Shikumi.Tool.Builtin.Fs` — `readTool`, `writeTool`, `editTool`, `grepTool`, `globTool`, each `:: ToolEnv -> Tool i o`, with their input/output records. `grep`/`glob` are the hybrid: hardened in-process baseline (skip-list, binary detection, size/match/depth caps) using `regex-tdfa`, an `rg`/`fd` fast path via `envExec` when present, with `bash` as the escape hatch. Completed 2026-06-28T16:55:40Z.
+- [x] M3: add `regex-tdfa` to `shikumi-tools.cabal`'s `library` `build-depends`; add `ripgrep` and `fd` to the nix dev shell (`nix/haskell.nix`). Completed 2026-06-28T16:55:40Z; `rg --version` reported ripgrep 15.1.0 and `fd --version` reported fd 10.4.2 inside `nix develop`.
+- [x] M3: unit-test the fs tools end-to-end against `localToolEnv` in a temp directory; run grep/glob **twice** (fast path via `localToolEnv`, in-process baseline via a stub `ToolEnv` reporting `rg`/`fd` absent), and add a hardening-bounds test (skips `.git`/`node_modules`/binary files). Completed 2026-06-28T16:55:40Z; `nix develop --command cabal test shikumi-tools` passed with all 37 tests green.
 - [ ] M4: add `Shikumi.Tool.Builtin.Shell` — `bashTool :: ToolEnv -> Tool BashReq BashResp` over `ToolEnv`'s `exec`.
 - [ ] M4: unit-test `bashTool` (exit code, stdout, stderr, non-zero exit as a value).
 - [ ] M5: add `Shikumi.Tool.Builtin` — `builtinFsTools`, `builtinWebTools`, `builtinTools`, and `builtinRegistry`, assembling the erased catalog.
@@ -75,7 +75,21 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-28: Fourmolu is invoked with `-XPatternSynonyms`, which makes a Haskell record selector
+  literally named `pattern` fail to parse even though the module compiles under the package's normal
+  extension set. Evidence:
+
+  ```text
+  ERRO formatter | fourmolu: failed to apply with options
+  '[-i -c --ghc-opt -XBangPatterns --ghc-opt -XPatternSynonyms --ghc-opt -XTypeApplications]'
+  shikumi-tools/src/Shikumi/Tool/Builtin/Fs.hs:109:5-11
+    The GHC parser (in Haddock mode) failed:
+    [GHC-58481] parse error on input `pattern'
+  ```
+
+  The implementation therefore uses internal selectors `patternText` on `GrepReq` and `GlobReq`,
+  with manual `ToSchema`/`FromModel` instances that keep the public JSON tool argument named
+  `pattern`.
 
 
 ## Decision Log
@@ -257,6 +271,14 @@ Record every decision made while working on the plan.
   search API, while the tests stay deterministic through a stub `WebClient`.
   Date: 2026-06-28 (implementation)
 
+- Decision: use internal selector names `patternText` for `GrepReq` and `GlobReq`, while preserving
+  the external JSON field name `pattern` through manual `ToSchema` and `FromModel` instances.
+  Rationale: the plan's desired public interface is still `pattern`, but the repository formatter
+  forces `PatternSynonyms` during parsing, making a selector named `pattern` unformattable. The
+  manual instances keep the model-facing schema and decoder aligned with the plan and avoid
+  formatter breakage. This is a narrow implementation workaround, not a public API change.
+  Date: 2026-06-28 (implementation)
+
 
 ## Outcomes & Retrospective
 
@@ -271,6 +293,11 @@ Compare the result against the original purpose.
   `localWebClient`, and `newTlsManager`; `Shikumi.Tool.Builtin.Web` provides `web_fetch` and
   `web_search`; `WebSpec` proves stubbed 200, stubbed 404-as-value, stubbed search hits, and the
   network-gated live `https://example.com` fetch. Milestones 3–5 remain.
+- 2026-06-28: Milestone 3 is complete. `Shikumi.Tool.Builtin.Fs` provides `read`, `write`, `edit`,
+  `grep`, and `glob`; the search tools prefer `rg`/`fd` through `ToolEnv.exec` and fall back to a
+  bounded in-process traversal. `FsSpec` proves read/write/edit round-trip behavior, matching
+  fast-path and fallback grep/glob results, hardening skips for `.git`/`node_modules`/binary files,
+  and malformed regex reporting as `ValidationFailure`. Milestones 4–5 remain.
 
 
 ## Context and Orientation
@@ -683,6 +710,26 @@ Expected: both print a version. The `FsSpec` grep/glob tests run the fast path a
 `localToolEnv` (which now finds `rg`/`fd`) and the in-process baseline against a stub `ToolEnv`,
 asserting identical results; a missing `rg`/`fd` would make the fast-path case silently fall back to
 the baseline, so this version check is how you confirm the fast path is actually exercised.
+
+Actual 2026-06-28T16:55:40Z:
+
+```text
+$ nix develop --command rg --version
+ripgrep 15.1.0
+
+$ nix develop --command fd --version
+fd 10.4.2
+
+$ nix develop --command cabal test shikumi-tools
+Tool.Fs
+  read/write/edit/grep/glob work through fast and fallback paths: OK (0.10s)
+  fallback grep skips noisy directories and binary files:         OK
+  fallback grep reports malformed regex as ValidationFailure:     OK
+
+All 37 tests passed (0.10s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
 
 For the network-gated web check in Milestone 2:
 

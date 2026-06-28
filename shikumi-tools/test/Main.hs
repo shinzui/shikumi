@@ -5,6 +5,7 @@ module Main (main) where
 import AcceptanceSpec qualified
 import CodeActSpec qualified
 import EnvSpec qualified
+import FsSpec qualified
 import ProgramOfThoughtSpec qualified
 import ProtocolSpec qualified
 import ReActSpec qualified
@@ -23,6 +24,7 @@ main =
         ToolSpec.tests,
         EnvSpec.tests,
         WebSpec.tests,
+        FsSpec.tests,
         ReActSpec.tests,
         ProtocolSpec.tests,
         AcceptanceSpec.tests,

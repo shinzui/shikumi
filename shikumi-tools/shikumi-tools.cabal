@@ -49,6 +49,7 @@ library
     Shikumi.CodeExec.ProgramOfThought
     Shikumi.CodeExec.Prompt
     Shikumi.Tool
+    Shikumi.Tool.Builtin.Fs
     Shikumi.Tool.Builtin.Web
     Shikumi.Tool.Env
     Shikumi.Tool.Web
@@ -68,6 +69,7 @@ library
     , http-types
     , lens             ^>=5.3
     , process
+    , regex-tdfa
     , shikumi          ^>=0.1.0.1
     , text             ^>=2.1
     , vector
@@ -83,6 +85,7 @@ test-suite shikumi-tools-test
     CodeActSpec
     EnvSpec
     Fixtures
+    FsSpec
     MockLLM
     ProgramOfThoughtSpec
     ProtocolSpec
