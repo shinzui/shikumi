@@ -49,6 +49,7 @@ library
     Shikumi.CodeExec.ProgramOfThought
     Shikumi.CodeExec.Prompt
     Shikumi.Tool
+    Shikumi.Tool.Builtin
     Shikumi.Tool.Builtin.Fs
     Shikumi.Tool.Builtin.Shell
     Shikumi.Tool.Builtin.Web
@@ -83,6 +84,7 @@ test-suite shikumi-tools-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     AcceptanceSpec
+    BuiltinAcceptanceSpec
     CodeActSpec
     EnvSpec
     Fixtures

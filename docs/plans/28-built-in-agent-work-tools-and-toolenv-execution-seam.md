@@ -65,9 +65,9 @@ This section must always reflect the actual current state of the work.
 - [x] M3: unit-test the fs tools end-to-end against `localToolEnv` in a temp directory; run grep/glob **twice** (fast path via `localToolEnv`, in-process baseline via a stub `ToolEnv` reporting `rg`/`fd` absent), and add a hardening-bounds test (skips `.git`/`node_modules`/binary files). Completed 2026-06-28T16:55:40Z; `nix develop --command cabal test shikumi-tools` passed with all 37 tests green.
 - [x] M4: add `Shikumi.Tool.Builtin.Shell` — `bashTool :: ToolEnv -> Tool BashReq BashResp` over `ToolEnv`'s `exec`. Completed 2026-06-28T16:59:47Z.
 - [x] M4: unit-test `bashTool` (exit code, stdout, stderr, non-zero exit as a value). Completed 2026-06-28T16:59:47Z; `nix develop --command cabal test shikumi-tools` passed with all 39 tests green.
-- [ ] M5: add `Shikumi.Tool.Builtin` — `builtinFsTools`, `builtinWebTools`, `builtinTools`, and `builtinRegistry`, assembling the erased catalog.
-- [ ] M5: write the end-to-end acceptance test: a scripted ReAct agent that reads → edits → bash-verifies → greps → web-fetches through `builtinRegistry`, asserting each observation.
-- [ ] Wire the new test modules into `shikumi-tools.cabal`'s `other-modules` and confirm `cabal test shikumi-tools` is green.
+- [x] M5: add `Shikumi.Tool.Builtin` — `builtinFsTools`, `builtinWebTools`, `builtinTools`, and `builtinRegistry`, assembling the erased catalog. Completed 2026-06-28T17:04:16Z.
+- [x] M5: write the end-to-end acceptance test: a scripted ReAct agent that reads → edits → bash-verifies → greps → web-fetches through `builtinRegistry`, asserting each observation. Completed 2026-06-28T17:04:16Z; `BuiltinAcceptanceSpec` drives the native ReAct loop through all five tool calls and a finish step.
+- [x] Wire the new test modules into `shikumi-tools.cabal`'s `other-modules` and confirm `cabal test shikumi-tools` is green. Completed 2026-06-28T17:04:16Z; `nix develop --command cabal test shikumi-tools` passed with all 40 tests green.
 
 
 ## Surprises & Discoveries
@@ -301,6 +301,11 @@ Compare the result against the original purpose.
 - 2026-06-28: Milestone 4 is complete. `Shikumi.Tool.Builtin.Shell` provides `bashTool`, and
   `ShellSpec` proves stdout capture for a zero exit and stderr/non-zero exit returned as a normal
   `BashResp` value. Milestone 5 remains.
+- 2026-06-28: Milestone 5 is complete. `Shikumi.Tool.Builtin` assembles the erased builtin catalog
+  and `builtinRegistry`. `BuiltinAcceptanceSpec` seeds a temporary README, runs a scripted native
+  ReAct agent through `read -> edit -> bash -> grep -> web_fetch -> finish`, verifies each
+  observation in the trajectory, checks the final file content, and extracts a typed `WorkAnswer`.
+  The work-tool surface requested by this plan is now implemented.
 
 
 ## Context and Orientation
@@ -747,6 +752,18 @@ Test suite shikumi-tools-test: PASS
 1 of 1 test suites (1 of 1 test cases) passed.
 ```
 
+After Milestone 5, the builtin registry acceptance path was validated:
+
+```text
+$ nix develop --command cabal test shikumi-tools
+BuiltinAcceptance
+  builtinRegistry drives a scripted work cycle: OK (0.05s)
+
+All 40 tests passed (0.08s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
+
 For the network-gated web check in Milestone 2:
 
 ```bash
@@ -780,6 +797,27 @@ just test
 Expected: every package's suite passes.
 
 Update this section with the actual transcripts as work proceeds.
+
+Actual 2026-06-28T17:04:16Z:
+
+```text
+$ nix develop --command just test
+cabal test all
+
+shikumi-tools:        All 40 tests passed
+shikumi:              All 119 tests passed
+shikumi-compile:      All 13 tests passed
+shikumi-cache:        All 14 tests passed
+okf-core:             PASS
+shikumi-cache-postgres: All 1 tests passed
+shikumi-okf:          All 8 tests passed
+shikumi-eval:         All 38 tests passed
+shikumi-trace:        All 20 tests passed
+shikumi-cache-redis:  PASS (skipped: no Redis reachable at socket)
+shikumi-trace-otel:   All 2 tests passed
+shikumi-optimize:     All 43 tests passed
+shikumi-cli:          All 5 tests passed
+```
 
 
 ## Validation and Acceptance
