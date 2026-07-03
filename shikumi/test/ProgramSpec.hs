@@ -18,6 +18,7 @@ import ProgramFixtures
     Topic (..),
     badVerdictResponse,
     cellSig,
+    mkResponse,
     outlineResponse,
     outlineToDraft,
     runScriptedLLM,
@@ -79,6 +80,15 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runScriptedLLM ref $
             runProgramConc (Predict topicToVerdict emptyParams) (Topic "haskell")
         out @?= Left (ValidationFailure "score: must be at most 10"),
+      testCase "EP-33: a native JSON body of the wrong shape keeps the located native error" $ do
+        -- {"points": 42} parses as JSON, so it is the native wire shape; the
+        -- native decode reports the precise SchemaMismatch instead of the marker
+        -- parser's misleading MissingField.
+        ref <- newIORef [mkResponse "{\"points\": 42}"]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
+            runProgram (Predict topicToOutline emptyParams) (Topic "haskell")
+        out @?= Left (SchemaMismatch "points: expected array, got number"),
       testCase "M2: foldParams returns nodes in stage order" $
         foldParams twoStage @?= [emptyParams, emptyParams],
       testCase "M5: nodeInstructionsIndexed returns signature instructions in node order" $

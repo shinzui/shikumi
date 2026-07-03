@@ -97,6 +97,7 @@ import Shikumi.Adapter
   ( Adapter (..),
     ToPrompt,
     adapterFor,
+    assistantJSON,
     attachSchema,
     fallbackAdapter,
     nativeAdapter,
@@ -324,9 +325,17 @@ runPredict sig ps i = do
 -- a native model (whose @responseFormat@ the router enforced) replies with a JSON
 -- object, while a fallback model replies with @[[ ## field ## ]]@ sections. Because
 -- a model-agnostic 'runPredict' cannot know at render time which the real model is,
--- we try the native JSON parse first and fall back to the section parser, reporting
--- the fallback parser's error when both fail (so un-routed runs keep their exact
--- prior error behaviour).
+-- we detect the shape from the /body/: if it parses as JSON at all it is the native
+-- wire shape, so we keep the native parser's precise, located error; otherwise it is
+-- the marker shape and the fallback parser handles it exactly as before.
+--
+-- This detection replaced an older "try native, silently fall back on any native
+-- error" rule, which turned a genuine native decode failure (e.g. a JSON body of
+-- the wrong shape) into a misleading @MissingField@ from the marker parser finding
+-- no sections. One accepted edge: a body that is a bare JSON scalar (e.g. @42@) is
+-- now the native shape and reports the native @SchemaMismatch@ ("expected object")
+-- rather than a marker @MissingField@ — strictly more accurate. Un-routed runs,
+-- whose stub replies are marker bodies, are unaffected.
 parseResponse ::
   forall i o.
   (FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
@@ -334,8 +343,10 @@ parseResponse ::
   Response ->
   Either ShikumiError o
 parseResponse sig' resp =
-  case parse (nativeAdapter @i @o) sig' resp of
-    Right o -> Right o
+  case assistantJSON resp of
+    -- The body is JSON: the native wire shape. Keep the native parser's error.
+    Right _ -> parse (nativeAdapter @i @o) sig' resp
+    -- Not JSON: the fallback / marker wire shape. Exact prior behaviour.
     Left _ -> parse (fallbackAdapter @i @o) sig' resp
 
 -- | The per-sample temperatures for a 'MajorityVote' of @k@ samples. 'Nothing'

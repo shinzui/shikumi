@@ -4,7 +4,7 @@ slug: native-adapter-path-and-strict-mode-schemas
 title: "Native Adapter Path and Strict-Mode Schemas"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfe4dhetqa7m7g3n6zq03a"
 master_plan: "docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md"
 ---
 
@@ -42,7 +42,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `parseResponse` keeps the native error when the body parses as JSON; regression test added
+- [x] M1 (2026-07-03): `parseResponse` keeps the native error when the body parses as JSON; regression test added (`ProgramSpec` "EP-33: a native JSON body of the wrong shape keeps the located native error" — asserts `Left (SchemaMismatch "points: expected array, got number")`, green)
 - [ ] M2: `Maybe` fields required-but-nullable; `enumSchema` gains `"type": "string"`; `SchemaSpec` golden deliberately updated; repo-wide schema-pin survey done
 - [ ] M3: native demo rendering (`nativeDemoMessages`) implemented in `nativeAdapter`
 - [ ] M3: native render channel — `runPredict` stamps the native system prompt and demo texts; `translateForWire` swaps them in for native-capable models and strips the keys; router tests added
@@ -412,7 +412,7 @@ Every commit uses a conventional-commit subject and MUST carry these trailers:
 ```text
 MasterPlan: docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md
 ExecPlan: docs/plans/33-native-adapter-path-and-strict-mode-schemas.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfe4dhetqa7m7g3n6zq03a
 ```
 
 Suggested split, one commit per milestone: `fix(program): keep native parse errors for

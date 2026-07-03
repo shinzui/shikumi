@@ -37,6 +37,7 @@ module Shikumi.Adapter
     adapterFor,
     attachSchema,
     responseText,
+    assistantJSON,
 
     -- * The private request-metadata channel (consumed by "Shikumi.Routing")
     stampTemperature,
@@ -376,7 +377,10 @@ responseText :: Response -> Text
 responseText resp =
   T.concat [t | AssistantText (TextContent t) <- V.toList (flattenAssistantBlocks resp)]
 
--- | Read the assistant text and parse it as a JSON value (native path).
+-- | Read the assistant text and parse it as a JSON value (native path). Exported
+-- for 'Shikumi.Program.parseResponse', which uses it to detect the wire shape: a
+-- body that parses as JSON is the native shape and is decoded by the native
+-- parser (keeping its located error), while a non-JSON body is the marker shape.
 assistantJSON :: Response -> Either ShikumiError Value
 assistantJSON resp =
   case eitherDecodeStrict (encodeUtf8 (responseText resp)) of

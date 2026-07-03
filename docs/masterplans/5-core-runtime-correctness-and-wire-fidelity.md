@@ -93,7 +93,7 @@ no behavior with them and would blur each plan's acceptance criteria.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Complete |
-| 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | Not Started |
+| 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | In Progress |
 | 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Not Started |
 | 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Not Started |
 
