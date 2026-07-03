@@ -98,9 +98,11 @@ import Shikumi.Adapter
     ToPrompt,
     adapterFor,
     assistantJSON,
+    attachNativeRender,
     attachSchema,
     fallbackAdapter,
     nativeAdapter,
+    nativeRenderPieces,
     stampTemperature,
   )
 import Shikumi.Error (ShikumiError (..))
@@ -317,7 +319,13 @@ runPredict sig ps i = do
       -- Stamp the derived schema onto the metadata channel regardless of which
       -- adapter rendered the prompt; the router attaches a real @responseFormat@
       -- from it for native-capable models and strips it otherwise.
-      opts = attachSchema (deriveSchema @o) opts0
+      --
+      -- Also stamp the native-format alternative (system prompt + JSON demos): the
+      -- prompt is rendered model-agnostically as the marker format, so the router
+      -- swaps in these native pieces once it knows the real model is native-capable
+      -- (and strips them for fallback models / un-routed runs).
+      (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
+      opts = attachNativeRender nativeSys nativeDemos (attachSchema (deriveSchema @o) opts0)
   resp <- complete placeholderModel ctx opts
   either throwError pure (parseResponse sig' resp)
 

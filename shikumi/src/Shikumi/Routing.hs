@@ -11,13 +11,16 @@
 -- effect — exactly the seam @cachedLLM@ ("Shikumi.Cache") and @tracedLLM@
 -- ("Shikumi.Trace") already use. 'runProgram' renders each 'Predict' node
 -- model-agnostically against the inert placeholder model and stamps its intentions
--- (the derived JSON schema, and any per-sample temperature) onto the private
--- request-metadata channel ('Shikumi.Adapter.attachSchema' /
--- 'Shikumi.Adapter.stampTemperature'). 'routeLLM' then reads the /ambient/ model
--- supplied by 'runRouting', overwrites the placeholder with it, translates the
--- stamped metadata into @Options.responseFormat@ (for native-capable models only)
--- and @Options.temperature@, strips the private keys, and forwards the call to the
--- real @LLM@ interpreter beneath it.
+-- (the derived JSON schema, any per-sample temperature, and the native-format render
+-- alternative — system prompt + JSON demos) onto the private request-metadata
+-- channel ('Shikumi.Adapter.attachSchema' / 'Shikumi.Adapter.stampTemperature' /
+-- 'Shikumi.Adapter.attachNativeRender'). 'routeLLM' then reads the /ambient/ model
+-- supplied by 'runRouting', overwrites the placeholder with it, and calls
+-- 'translateForWire', which for a native-capable model sets
+-- @Options.responseFormat@ from the stamped schema and swaps the marker @Context@
+-- (system prompt + demo assistant turns) for the stamped native-format alternative;
+-- sets @Options.temperature@ when stamped; and in all cases strips the private keys
+-- before forwarding the call to the real @LLM@ interpreter beneath it.
 --
 -- Install order (mirroring @runTrace . runKeyedLLM . tracedLLM@): 'runRouting' is
 -- /outer/ of the real @LLM@ interpreter, which is /outer/ of 'routeLLM' (the
@@ -42,16 +45,20 @@ module Shikumi.Routing
   )
 where
 
-import Baikai (Model, Options, ResponseFormat (..))
+import Baikai (Context, Message (..), Model, Options, ResponseFormat (..), assistant)
 import Control.Lens ((&), (.~), (^.))
-import Data.Aeson (Result (..), Value, fromJSON)
+import Data.Aeson (FromJSON, Result (..), Value, fromJSON)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
+import Data.Vector qualified as V
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, passthrough, send)
 import Shikumi.Adapter
   ( ModelCapability (..),
     capabilityFor,
+    metaNativeDemosKey,
+    metaNativePromptKey,
     metaResponseSchemaKey,
     metaTemperatureKey,
   )
@@ -84,30 +91,81 @@ routeLLM :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a
 routeLLM = interpose $ \env -> \case
   Complete _placeholder ctx opts -> do
     m <- currentModel
-    complete m ctx (translateForWire m opts)
+    let (ctx', opts') = translateForWire m ctx opts
+    complete m ctx' opts'
   other -> passthrough env other
 
--- | Realize the private request-metadata channel against the real model: attach a
--- native @responseFormat@ when the schema was stamped /and/ the model is
--- native-capable; set @temperature@ when one was stamped; then strip both private
--- keys so nothing private reaches the transport.
-translateForWire :: Model -> Options -> Options
-translateForWire m opts =
+-- | Realize the private request-metadata channel against the real model. For a
+-- native-capable model: attach the native @responseFormat@ from the stamped
+-- schema, and swap the marker-format 'Context' (system prompt + demo assistant
+-- turns) for the stamped native-format alternative. In all cases: set
+-- @temperature@ when one was stamped, and strip every private @shikumi.*@ key so
+-- nothing private reaches the transport. Fallback-capability models keep the
+-- marker 'Context' unchanged; non-'Predict' @Complete@ calls (no stamps) are never
+-- rewritten.
+translateForWire :: Model -> Context -> Options -> (Context, Options)
+translateForWire m ctx opts =
   let md = opts ^. #metadata
       mSchema = Map.lookup metaResponseSchemaKey md
       mTemp = Map.lookup metaTemperatureKey md >>= valueToDouble
-      stripped = Map.delete metaResponseSchemaKey (Map.delete metaTemperatureKey md)
-      withSchema o = case (mSchema, capabilityFor m) of
-        (Just s, NativeSchema) ->
-          o & #responseFormat .~ Just (JsonSchema {name = "output", schema = s, strict = True})
-        _ -> o
+      mNativeSys = Map.lookup metaNativePromptKey md >>= fromJSONMaybe
+      mNativeDemos = Map.lookup metaNativeDemosKey md >>= fromJSONMaybe
+      stripped =
+        foldr
+          Map.delete
+          md
+          [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey]
+      isNative = case capabilityFor m of NativeSchema -> True; PromptFallback -> False
+      withSchema o
+        | isNative,
+          Just s <- mSchema =
+            o & #responseFormat .~ Just (JsonSchema {name = "output", schema = s, strict = True})
+        | otherwise = o
       withTemp o = case mTemp of
         Just t -> o & #temperature .~ Just t
         Nothing -> o
-   in withTemp (withSchema (opts & #metadata .~ stripped))
+      opts' = withTemp (withSchema (opts & #metadata .~ stripped))
+      ctx' = case (isNative, mNativeSys, mNativeDemos) of
+        (True, Just sys, Just demos) -> rewriteNativeContext sys demos ctx
+        _ -> ctx
+   in (ctx', opts')
+
+-- | Install the native-format system prompt and demo assistant turns into a
+-- 'Context'. The assistant turns of a 'Predict'-rendered context are exactly the
+-- demo outputs, in order; each is replaced (via baikai's deterministic 'assistant'
+-- constructor) with the corresponding stamped native text. Defensive: if the count
+-- of assistant turns differs from the stamped list length the messages are left
+-- untouched (only the system prompt is swapped), so a hand-built or unexpected
+-- context is never corrupted.
+rewriteNativeContext :: Text -> [Text] -> Context -> Context
+rewriteNativeContext sys demos ctx =
+  let msgs = V.toList (ctx ^. #messages)
+      assistantCount = length [() | AssistantMessage _ <- msgs]
+      msgs'
+        | assistantCount == length demos = replaceAssistants demos msgs
+        | otherwise = msgs
+   in ctx & #systemPrompt .~ Just sys & #messages .~ V.fromList msgs'
+
+-- | Replace each assistant message's text with the next demo text, in order,
+-- preserving all user/tool messages. Total: if the demo list runs out, remaining
+-- assistant messages are kept as-is.
+replaceAssistants :: [Text] -> [Message] -> [Message]
+replaceAssistants _ [] = []
+replaceAssistants ds (m : rest) = case m of
+  AssistantMessage _ -> case ds of
+    (d : ds') -> assistant d : replaceAssistants ds' rest
+    [] -> m : replaceAssistants ds rest
+  _ -> m : replaceAssistants ds rest
 
 -- | Read a JSON number back into a 'Double' (the per-sample temperature).
 valueToDouble :: Value -> Maybe Double
 valueToDouble v = case fromJSON v of
   Success d -> Just d
+  Error _ -> Nothing
+
+-- | Read a stamped JSON value back into a decodable Haskell value (the native
+-- prompt 'Text' and the demo @[Text]@), returning 'Nothing' on any mismatch.
+fromJSONMaybe :: (FromJSON a) => Value -> Maybe a
+fromJSONMaybe v = case fromJSON v of
+  Success a -> Just a
   Error _ -> Nothing

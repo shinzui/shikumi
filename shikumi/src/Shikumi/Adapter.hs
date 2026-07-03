@@ -23,6 +23,16 @@
 -- the router ("Shikumi.Routing".@routeLLM@) translates those into
 -- @responseFormat@\/@temperature@ against the real model and strips the keys before
 -- transport.
+--
+-- The same channel also carries the /native render alternative/ (EP-33). Because
+-- the runtime always renders the model-agnostic marker prompt, 'attachNativeRender'
+-- additionally stamps the native-format system prompt under 'metaNativePromptKey'
+-- and the native (JSON) demo assistant turns under 'metaNativeDemosKey'
+-- ('nativeRenderPieces' produces both). For a native-capable model the router swaps
+-- these into the @Context@ (so the model is told to reply as JSON and shown JSON
+-- demos, not @[[ ## … ## ]]@ markers); for fallback models the marker prompt stands
+-- and the keys are stripped. 'renderOutputNative' is the shared demo renderer, also
+-- used by 'nativeAdapter' when a caller drives it directly.
 module Shikumi.Adapter
   ( -- * Input rendering
     ToPrompt (..),
@@ -43,6 +53,11 @@ module Shikumi.Adapter
     stampTemperature,
     metaResponseSchemaKey,
     metaTemperatureKey,
+    metaNativePromptKey,
+    metaNativeDemosKey,
+    attachNativeRender,
+    nativeRenderPieces,
+    renderOutputNative,
   )
 where
 
@@ -64,15 +79,17 @@ import Baikai
   )
 import Control.Lens (at, (&), (.~), (?~), (^.))
 import Data.Aeson (Object, Value (..), eitherDecodeStrict, toJSON)
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Vector qualified as V
 import GHC.Generics
 import Shikumi.Error (ShikumiError (..))
@@ -198,6 +215,21 @@ metaResponseSchemaKey = "shikumi.responseSchema"
 metaTemperatureKey :: Text
 metaTemperatureKey = "shikumi.temperature"
 
+-- | Reserved 'Options.metadata' key carrying the full native-format system prompt
+-- (instruction + native output guide) as a JSON string. Stamped by
+-- 'Shikumi.Program.runPredict'; "Shikumi.Routing".@routeLLM@ swaps it into the
+-- 'Context' for native-capable models and strips it before transport. Because
+-- @runPredict@ renders model-agnostically (the marker prompt), this carries the
+-- native alternative so the router can install it once the real model is known.
+metaNativePromptKey :: Text
+metaNativePromptKey = "shikumi.native.systemPrompt"
+
+-- | Reserved 'Options.metadata' key carrying the native-format demo assistant
+-- turns, in order, as a JSON array of strings. Same lifecycle as
+-- 'metaNativePromptKey'.
+metaNativeDemosKey :: Text
+metaNativeDemosKey = "shikumi.native.demos"
+
 -- | Stamp the derived JSON schema onto a request's private metadata channel. This
 -- is no longer a no-op: it records the schema under 'metaResponseSchemaKey' so the
 -- router can attach a real @responseFormat@ once the ambient model is known. (The
@@ -206,6 +238,28 @@ metaTemperatureKey = "shikumi.temperature"
 attachSchema :: Value -> Options -> Options
 attachSchema schema opts =
   opts & #metadata . at metaResponseSchemaKey ?~ schema
+
+-- | Stamp the native-format system prompt and demo assistant turns onto a
+-- request's private metadata channel, under 'metaNativePromptKey' and
+-- 'metaNativeDemosKey'. Mirrors 'attachSchema': the router swaps these into the
+-- 'Context' for native-capable models and strips the keys before transport.
+attachNativeRender :: Text -> [Text] -> Options -> Options
+attachNativeRender sys demos opts =
+  opts
+    & #metadata . at metaNativePromptKey ?~ toJSON sys
+    & #metadata . at metaNativeDemosKey ?~ toJSON demos
+
+-- | The native-format render pieces for a signature: the system prompt a
+-- native-capable model should see (instruction + native output guide, /not/ the
+-- marker guide) and the demo assistant turns rendered as JSON objects, in order.
+-- 'Shikumi.Program.runPredict' stamps these via 'attachNativeRender' so the router
+-- can install them once the real model is known.
+nativeRenderPieces ::
+  forall i o. (ToSchema o, ToPrompt o) => Signature i o -> (Text, [Text])
+nativeRenderPieces sig =
+  ( systemHeader sig <> nativeOutputGuide sig,
+    [renderOutputNative @o o | Demo _ o <- getDemos sig]
+  )
 
 -- | Stamp a per-sample temperature onto a request's private metadata channel under
 -- 'metaTemperatureKey'. Used by 'Shikumi.Program.runProgram' to thread a
@@ -226,7 +280,7 @@ nativeAdapter =
   Adapter
     { render = \sig i ->
         let sys = systemHeader sig <> nativeOutputGuide sig
-            ctx = buildContext sys (demoMessages sig ++ [userTurn i])
+            ctx = buildContext sys (nativeDemoMessages sig ++ [userTurn i])
             opts = attachSchema (deriveSchema @o) _Options
          in (ctx, opts),
       parse = \_sig resp -> assistantJSON resp >>= fromModelChecked
@@ -253,11 +307,19 @@ fallbackAdapter =
 -- | The XML adapter (EP-26). A third wire format on the same typed seam: @render@
 -- asks the model to wrap each output field in @\<field\>…\</field\>@ tags, and
 -- @parse@ reads those tags back. Some models follow an XML shape more reliably than
--- JSON or the @[[ ## … ## ]]@ markers. Opt-in — a caller selects it explicitly;
--- 'adapterFor' does not auto-select it (XML is a caller choice, not a detectable
--- model capability). Reuses the same 'sectionsToObject' + 'fromModelChecked'
--- decode path as 'fallbackAdapter', so nested records and lists in tags coerce the
--- same way.
+-- JSON or the @[[ ## … ## ]]@ markers. Reuses the same 'sectionsToObject' +
+-- 'fromModelChecked' decode path as 'fallbackAdapter', so nested records and lists
+-- in tags coerce the same way.
+--
+-- Reachability: 'xmlAdapter' is /not/ selectable by the runtime router. The router
+-- ("Shikumi.Routing".@routeLLM@) picks between the native and fallback wire shapes
+-- from the model's detected 'ModelCapability' (native vs. prompt-fallback); XML is a
+-- caller choice, not a detectable capability, so 'adapterFor' never returns it. To
+-- use it, hold the 'Adapter' value directly and render/parse with it inside an
+-- 'Shikumi.Program.embed' node — the same way 'Shikumi.Module.twoStep' drives
+-- 'fallbackAdapter' by hand. A per-node adapter selector through the 'Program' GADT
+-- was considered and deferred (see the parent MasterPlan's scope), as it is
+-- disproportionate to the need.
 xmlAdapter ::
   forall i o.
   (ToSchema o, FromModel o, Validatable o, ToPrompt i, ToPrompt o) =>
@@ -333,6 +395,26 @@ demoMessages :: (ToPrompt i, ToPrompt o) => Signature i o -> [Message]
 demoMessages sig = concatMap one (getDemos sig)
   where
     one (Demo i o) = [user (toPrompt i), assistant (renderOutputSections o)]
+
+-- | Render a demo output as the JSON object a native model is asked to reply
+-- with. Reuses 'sectionsToObject' so each field's text coerces against the
+-- derived schema exactly as the fallback parse path coerces marker sections —
+-- one source of truth for the text-to-typed-JSON coercion (there is no @o ->
+-- Value@ inverse to render directly, as 'FromModel' has no dual).
+renderOutputNative :: forall o. (ToSchema o, ToPrompt o) => o -> Text
+renderOutputNative o =
+  decodeUtf8 (LBS.toStrict (Aeson.encode obj))
+  where
+    obj = sectionsToObject (deriveSchema @o) (Map.fromList (toPromptFields o))
+
+-- | Demo turns for the native path: user prompt as usual, assistant turn as the
+-- JSON object (not marker sections), so a native model sees examples in the same
+-- shape as the reply it is asked to produce.
+nativeDemoMessages ::
+  forall i o. (ToSchema o, ToPrompt i, ToPrompt o) => Signature i o -> [Message]
+nativeDemoMessages sig = concatMap one (getDemos sig)
+  where
+    one (Demo i o) = [user (toPrompt i), assistant (renderOutputNative @o o)]
 
 -- | Render a demo output as @[[ ## field ## ]]@ sections (shared by both adapters
 -- for demo presentation).

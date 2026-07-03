@@ -44,9 +44,9 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1 (2026-07-03): `parseResponse` keeps the native error when the body parses as JSON; regression test added (`ProgramSpec` "EP-33: a native JSON body of the wrong shape keeps the located native error" — asserts `Left (SchemaMismatch "points: expected array, got number")`, green)
 - [x] M2 (2026-07-03): `Maybe` fields required-but-nullable; `enumSchema` gains `"type": "string"`; `SchemaSpec` golden deliberately updated; repo-wide schema-pin survey done (see Surprises)
-- [ ] M3: native demo rendering (`nativeDemoMessages`) implemented in `nativeAdapter`
-- [ ] M3: native render channel — `runPredict` stamps the native system prompt and demo texts; `translateForWire` swaps them in for native-capable models and strips the keys; router tests added
-- [ ] Docs: `xmlAdapter` reachability documented; haddocks updated; CHANGELOG entry
+- [x] M3 (2026-07-03): native demo rendering (`renderOutputNative` / `nativeDemoMessages`) implemented; `nativeAdapter` now renders demos as JSON
+- [x] M3 (2026-07-03): native render channel — `runPredict` stamps the native system prompt and demo texts (`attachNativeRender` / `nativeRenderPieces`); `translateForWire` widened to `Model -> Context -> Options -> (Context, Options)`, swaps them in for native-capable models and strips all four keys; three router tests added (capturing stub now records `Context`)
+- [x] Docs (2026-07-03): `xmlAdapter` reachability documented (embed-node usage); `Shikumi.Adapter`/`Shikumi.Routing` module headers updated; CHANGELOG entries for the schema-shape and native-prompt changes
 
 
 ## Surprises & Discoveries
@@ -76,6 +76,22 @@ implementation. Provide concise evidence.
   `FieldSchema`/`enumSchema` emitters this plan fixes), so EP-33's change does not
   touch it and no test broke. Fixing those hand-written tool schemas belongs to
   `docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md`.
+- M3 signature deviation from the plan: `nativeRenderPieces` was specified as
+  `(ToSchema o, ToPrompt i, ToPrompt o) => Signature i o -> (Text, [Text])`, but
+  `ToPrompt i` is genuinely unused (the demo /inputs/ are not rendered here — only
+  the system prompt and the demo /outputs/), so `-Wredundant-constraints` (enabled
+  repo-wide) flagged it. Dropped `ToPrompt i`; the final type is
+  `(ToSchema o, ToPrompt o) => Signature i o -> (Text, [Text])`. Callers
+  (`runPredict`) still satisfy it. Evidence: build was warning-clean only after the
+  drop.
+- M3 test wiring: signature-level demos set via `Shikumi.Signature.setDemos` do
+  /not/ reach the wire — `Shikumi.Program.effectiveSignature` overwrites a node's
+  demos with the ones decoded from its `Params` channel (JSON), so the router test
+  for native JSON demos supplies the demo through `Params` (a
+  `Shikumi.Program.Demo` carrying `object ["subject" .= …]` /
+  `object ["points" .= …]`) on a hand-built `Predict` node, not on the signature.
+  This mirrors the same demos-through-Params fact EP-32 documented for
+  `chainOfThought`.
 
 
 ## Decision Log
@@ -133,7 +149,32 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Delivered in full, all three milestones. The self-contradictory native request is
+fixed: a routed native-capable model now receives a system prompt that describes
+the JSON object it must produce and demo turns rendered as JSON (proven by the two
+new `RoutingSpec` cases that fail before / pass after), while a routed fallback
+model and every un-routed run keep the marker prompt byte-for-byte. `parseResponse`
+keeps the precise native decode error for JSON bodies (`ProgramSpec` case:
+`{"points": 42}` → `SchemaMismatch "points: expected array, got number"`). Derived
+schemas satisfy OpenAI strict mode (required-but-nullable `Maybe`, typed enums),
+pinned by the deliberately-updated `SchemaSpec` golden. `cabal build all` is
+warning-clean (including `-Wredundant-constraints`) and `cabal test all` is green.
+
+Design realized as planned: the render/format decision moved to the router via the
+existing private metadata channel (two new reserved keys), avoiding both a
+`Program` GADT change and a cross-repo `Baikai.Context` `FromJSON`. `translateForWire`
+widened to `Model -> Context -> Options -> (Context, Options)` — the single
+translation seam EP-34 must reuse for the `Stream` operation (integration point 3);
+its `Complete` case now threads the rewritten `Context`.
+
+Deferred, documented rather than built (unchanged from plan): per-node XML adapter
+selection through the `Program` GADT; `xmlAdapter` reachability is now documented
+(drive it by holding the `Adapter` value inside an `embed` node, as `twoStep` does).
+
+Two small deviations recorded in Surprises & Discoveries: `nativeRenderPieces` lost
+its unused `ToPrompt i` constraint (redundant-constraints), and the native-demo
+router test supplies its demo through the node `Params` channel because
+`effectiveSignature` overwrites signature-level demos.
 
 
 ## Context and Orientation
@@ -488,7 +529,9 @@ End state of the touched surfaces (full module paths):
   `assistantJSON :: Response -> Either ShikumiError Value`;
   `metaNativePromptKey :: Text`; `metaNativeDemosKey :: Text`;
   `attachNativeRender :: Text -> [Text] -> Options -> Options`;
-  `nativeRenderPieces :: (ToSchema o, ToPrompt i, ToPrompt o) => Signature i o -> (Text, [Text])`.
+  `nativeRenderPieces :: (ToSchema o, ToPrompt o) => Signature i o -> (Text, [Text])`
+  (the planned `ToPrompt i` was dropped as redundant — see Surprises);
+  `renderOutputNative :: (ToSchema o, ToPrompt o) => o -> Text` (also exported).
   `nativeAdapter` renders demos natively; `fallbackAdapter`/`xmlAdapter` unchanged.
 - `Shikumi.Schema` / `Shikumi.Schema.Types` — `FieldSchema (Maybe a)` required flag `True`;
   `enumSchema` emits `"type": "string"`. No exported-name changes.

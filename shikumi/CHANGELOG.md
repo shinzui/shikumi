@@ -17,6 +17,23 @@
   `WithReasoning o` now has a delegating `Validatable` instance that runs the
   wrapped value's rule.
 
+- **BREAKING** Derived JSON Schemas now satisfy OpenAI strict mode. A `Maybe`
+  field is emitted as required-but-nullable (listed in `required` with a nullable
+  schema) instead of being omitted from `required`, and `enumSchema` carries an
+  explicit `"type": "string"`. This changes the shape real OpenAI/Anthropic
+  requests send; the decode path is unchanged and still tolerates a missing key or
+  explicit `null` for `Maybe` fields.
+
+- Native structured-output requests are now coherent. When a program routes to a
+  native-capable model, the request carries a system prompt describing the JSON
+  object to produce and demos rendered as JSON — not `[[ ## field ## ]]` marker
+  sections — via a new native render channel (`attachNativeRender` /
+  `nativeRenderPieces`, swapped in by `routeLLM`/`translateForWire`). Fallback
+  models are unchanged. `parseResponse` now keeps the precise native decode error
+  for JSON reply bodies instead of masking it behind a misleading `MissingField`
+  from the marker parser. `Shikumi.Routing.translateForWire` widened to
+  `Model -> Context -> Options -> (Context, Options)`.
+
 ## 0.2.0.0 - 2026-06-28
 
 ### Added
