@@ -12,6 +12,7 @@ import Data.IORef (newIORef, readIORef)
 import Data.Ratio ((%))
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
+import Effectful.Concurrent.Async (mapConcurrently)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM
@@ -23,9 +24,10 @@ import Shikumi.LLM
     runLLMResilient,
     stream,
   )
-import Shikumi.LLM.Budget (newBudget)
+import Shikumi.LLM.Budget (newBudget, spentUSD)
 import StubProvider
-  ( concurrencyStubRegistry,
+  ( budgetBarrierStubRegistry,
+    concurrencyStubRegistry,
     costStubRegistry,
     failingStreamCostStubRegistry,
     failingStreamStubRegistry,
@@ -81,6 +83,27 @@ tests =
         case res2 of
           Left (BudgetExceeded _) -> pure ()
           other -> assertFailure ("expected Left (BudgetExceeded ...), got " <> show other),
+      testCase "EP-35: budget admission is optimistic — N concurrent calls overshoot the ceiling" $ do
+        -- The barrier stub keeps all four calls in flight (each already past
+        -- admitCall) until none has recorded its cost, pinning the documented
+        -- overshoot: admission is not reservation.
+        arrived <- newTVarIO 0
+        reg <- budgetBarrierStubRegistry arrived 4 (1 % 100) "ok"
+        b <- newBudget (Just (1 % 100)) -- ceiling = a single call's cost
+        let cfg = (defaultLLMConfig reg) {budget = Just b}
+        results <-
+          runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $
+            mapConcurrently (const (complete stubModel stubContext stubOptions)) [1 .. 4 :: Int]
+        case results of
+          Right rs -> length rs @?= 4 -- all four admitted together (overshoot)
+          other -> assertFailure ("expected all four concurrent calls to succeed, got " <> show other)
+        spent <- spentUSD b
+        assertBool "total overshot the ceiling" (spent > (1 % 100))
+        -- the ceiling is now consumed; a subsequent call is refused
+        res5 <- runText cfg
+        case res5 of
+          Left (BudgetExceeded _) -> pure ()
+          other -> assertFailure ("expected Left (BudgetExceeded ...) once the ceiling is consumed, got " <> show other),
       testCase "rate limit caps concurrency at 1" $ do
         cur <- newTVarIO 0
         mx <- newTVarIO 0

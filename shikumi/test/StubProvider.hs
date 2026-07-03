@@ -13,6 +13,7 @@ module StubProvider
     flattenAssistantText,
     stubRegistry,
     costStubRegistry,
+    budgetBarrierStubRegistry,
     failingStubRegistry,
     failingStreamStubRegistry,
     failingStreamCostStubRegistry,
@@ -29,6 +30,7 @@ import Control.Concurrent.STM
     atomically,
     modifyTVar',
     readTVar,
+    retry,
   )
 import Control.Exception (bracket_, throwIO)
 import Data.Generics.Labels ()
@@ -124,6 +126,20 @@ stubRegistry t = mkRegistry t (\_ _ _ -> pure (stubResponse t))
 costStubRegistry :: Rational -> Text -> IO ProviderRegistry
 costStubRegistry c t =
   mkRegistry t (\_ _ _ -> pure (stubResponse t & #message . #usage . #cost . #usd .~ c))
+
+-- | A registry whose @complete@ blocks until @n@ calls have all arrived (a shared
+-- 'TVar' barrier), then returns a cost-carrying response. Guarantees that @n@
+-- concurrent calls are all in flight — each already past the budget's optimistic
+-- @admitCall@ gate — before any of them records its cost, so a test can pin the
+-- documented budget overshoot under concurrency.
+budgetBarrierStubRegistry :: TVar Int -> Int -> Rational -> Text -> IO ProviderRegistry
+budgetBarrierStubRegistry arrived n cost t =
+  mkRegistry t $ \_ _ _ -> do
+    atomically (modifyTVar' arrived (+ 1))
+    atomically $ do
+      a <- readTVar arrived
+      if a >= n then pure () else retry
+    pure (stubResponse t & #message . #usage . #cost . #usd .~ cost)
 
 -- | A registry whose @complete@ throws 'providerError' (a transient failure) the
 -- first @failTimes@ calls, then returns the given text. The 'IORef' records the

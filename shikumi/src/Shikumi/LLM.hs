@@ -77,7 +77,7 @@ import Effectful.Dispatch.Dynamic (reinterpret_, send)
 import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Exception (bracket_, try)
 import Shikumi.Error (ShikumiError (..), fromBaikaiError, isTransient)
-import Shikumi.LLM.Budget (Budget, recordCost, tryReserve)
+import Shikumi.LLM.Budget (Budget, admitCall, recordCost)
 
 -- | The provider-neutral LM effect. 'Complete' is a blocking completion;
 -- 'Stream' returns the assembled list of typed events so callers that need
@@ -173,7 +173,9 @@ newRateLimiter n = RateLimiter <$> newTVarIO n
 -- | Interpretation-time policy for 'runLLMResilient'.
 data LLMConfig = LLMConfig
   { retryPolicy :: !RetryPolicy,
-    -- | 'Nothing' = unlimited cost
+    -- | 'Nothing' = unlimited cost. Enforcement is optimistic admission, not
+    -- reservation: concurrent calls can overshoot the ceiling by up to the sum of
+    -- their in-flight costs (see "Shikumi.LLM.Budget").
     budget :: !(Maybe Budget),
     -- | 'Nothing' = unbounded concurrency
     rateLimit :: !(Maybe RateLimiter),
@@ -222,8 +224,12 @@ runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
     mr = rateLimit cfg
     rp = retryPolicy cfg
 
--- | Optimistic pre-call budget gate. Refuses the call with 'BudgetExceeded' when
--- the running total has already reached the ceiling.
+-- | Optimistic pre-call budget gate (admission, not reservation). Refuses the
+-- call with 'BudgetExceeded' when the recorded running total has already reached
+-- the ceiling. Because 'admitCall' holds nothing, @N@ calls admitted concurrently
+-- can each pass the gate and overshoot the ceiling by up to the sum of their costs;
+-- the first call after the total reaches the ceiling is refused. See
+-- "Shikumi.LLM.Budget".
 withBudget ::
   (IOE :> es, Error ShikumiError :> es) =>
   Maybe Budget ->
@@ -231,7 +237,7 @@ withBudget ::
   Eff es a
 withBudget Nothing act = act
 withBudget (Just b) act = do
-  ok <- liftIO (tryReserve b)
+  ok <- liftIO (admitCall b)
   if ok then act else throwError (BudgetExceeded "cost ceiling reached")
 
 -- | Bound concurrency to the limiter's permits, releasing on every exit path.

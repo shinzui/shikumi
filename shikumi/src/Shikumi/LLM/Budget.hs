@@ -1,16 +1,24 @@
 -- | A running US-dollar cost ceiling for LM calls.
 --
--- The budget is enforced /before/ a call by an optimistic 'tryReserve' check and
--- updated /after/ each successful call with 'recordCost', reading baikai's
--- per-response @Usage.cost.usd@ (a 'Rational', always populated). The semantics
--- are deliberately simple: the budget refuses the /next/ call once the running
--- total has reached the ceiling. A single in-flight call is never clipped
--- mid-stream (baikai exposes no streaming cost preview), but once it pushes the
--- total to/over the cap, every subsequent call fails fast.
+-- The budget is checked /before/ a call by an optimistic 'admitCall' /admission/
+-- and updated /after/ each call with 'recordCost', reading baikai's per-response
+-- @Usage.cost.usd@ (a 'Rational', always populated). Admission is /not/ a
+-- reservation: nothing is held, because baikai exposes no pre-call cost estimate.
+-- The honest contract is:
+--
+--   * a call is admitted while the recorded running total is /strictly under/ the
+--     ceiling;
+--   * @N@ calls admitted concurrently — all seeing a total under the ceiling before
+--     any of them records its cost — are all admitted and all charged, so the total
+--     can overshoot the ceiling by up to the sum of those in-flight calls' costs;
+--   * once the recorded total reaches (or exceeds) the ceiling, every subsequent
+--     admission is refused.
+--
+-- An unlimited budget (@ceilingUSD == Nothing@) always admits.
 module Shikumi.LLM.Budget
   ( Budget (..),
     newBudget,
-    tryReserve,
+    admitCall,
     recordCost,
     spentUSD,
   )
@@ -36,11 +44,14 @@ data Budget = Budget
 newBudget :: Maybe Rational -> IO Budget
 newBudget c = Budget c <$> newTVarIO 0
 
--- | Optimistic pre-call check: 'True' if a call is permitted (the running total
--- has not yet reached the ceiling), 'False' once the ceiling is met/exceeded.
--- An unlimited budget always permits.
-tryReserve :: Budget -> IO Bool
-tryReserve b = case ceilingUSD b of
+-- | Optimistic pre-call admission (not a reservation — nothing is held): 'True'
+-- if a call is permitted (the recorded running total is strictly under the
+-- ceiling), 'False' once the ceiling is met/exceeded. Because it reserves nothing,
+-- @N@ concurrent admissions can each see a sub-ceiling total and all succeed,
+-- overshooting by up to the sum of their costs; the first admission after the
+-- total reaches the ceiling is refused. An unlimited budget always admits.
+admitCall :: Budget -> IO Bool
+admitCall b = case ceilingUSD b of
   Nothing -> pure True
   Just cap -> atomically $ do
     s <- readTVar (spentRef b)
