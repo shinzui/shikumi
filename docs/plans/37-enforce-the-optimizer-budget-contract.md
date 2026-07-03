@@ -61,7 +61,7 @@ This section must always reflect the actual current state of the work.
       `labeledFewShot`
 - [x] 2026-07-03: M4: MIPROv2 phases 1–2 metered (teacher runs, proposer calls) sharing one meter
       with phase 3
-- [ ] M5: GEPA seed-evaluation gate
+- [x] 2026-07-03: M5: GEPA seed-evaluation gate
 - [ ] M6: bootstrap per-teacher-run accounting; random search shares one meter across
       inner bootstraps and its own scoring
 - [ ] M7: `ensembleSearchWith` with exact call counting between members
@@ -86,6 +86,11 @@ implementation. Provide concise evidence.
   5 proposer calls, and at least a 4-call baseline search evaluation, so it could
   not satisfy the bound. With one shared meter, the test observes only work that
   fits the shared ceiling and asserts the actual counter is `<= 4`.
+
+- 2026-07-03: M5's GEPA seed-gate test uses `maxLmCalls = 1` on a 2-example,
+  single-node fixture. The seed evaluation costs 2 predicted completions, so the
+  optimizer now returns the student before evaluation; `withLmCallCount` observes
+  exactly 0 LM calls.
 
 
 ## Decision Log

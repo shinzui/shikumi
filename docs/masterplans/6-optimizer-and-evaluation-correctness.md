@@ -199,7 +199,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-37: M1 — BudgetMeter seam in Search.hs; instructionSearch/copro/searchJoint rewired
 - [x] EP-37: M2 — labeledFewShot budget parameterization
 - [x] EP-37: M3 — MIPROv2 phases 1–2 metered
-- [ ] EP-37: M4 — GEPA seed-eval gate
+- [x] EP-37: M4 — GEPA seed-eval gate
 - [ ] EP-37: M5 — bootstrap and random-search metering
 - [ ] EP-37: M6 — ensemble budget via exact call counting
 - [ ] EP-37: M7 — honest Budget docs and budget tests for all optimizers

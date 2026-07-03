@@ -58,7 +58,7 @@ import Shikumi.Eval
 import Shikumi.LLM (LLM)
 import Shikumi.Module (predict)
 import Shikumi.Optimize.Pareto (Candidate (..), paretoFrontier, sampleParent)
-import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, setNodeInstrIfNew)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, newBudgetMeter, scoringCost, setNodeInstrIfNew, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
 import Shikumi.Program
   ( NodeFields (..),
@@ -199,47 +199,56 @@ gepa ::
   Budget ->
   Optimizer i o
 gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
+  meter <- newBudgetMeter budget
   let paths = programNodePaths student
       fields = nodeFieldsIndexed student
       nNodes = max 1 (length paths)
-      n = max 1 (datasetSize train)
       progSummary = fallbackProgramSummary (length paths)
       dataSummary = fallbackDatasetSummary (datasetSize train)
-      maxCalls = maxLmCalls budget
       maxCands = maxCandidates budget
       rebuild cand = either (const student) id (setProgramParams (params cand) student)
+      seedCost = scoringCost train student
 
-  seedRpt <- evaluatePure train metric student
-  let seedCand = Candidate (foldParams student) (perEx seedRpt) (aggregateScore seedRpt)
+  seedFits <- tryCharge meter seedCost
+  if not seedFits
+    then pure (freezeProgram student)
+    else do
+      seedRpt <- evaluatePure train metric student
+      let seedCand = Candidate (foldParams student) (perEx seedRpt) (aggregateScore seedRpt)
 
-      -- A full step costs: capture (n) + mutate (1) + child eval (n) = 2n + 1.
-      stepCost = 2 * n + 1
-      stepCap = maxCands + 4
+          -- A full step costs: capture + child evaluation over the whole dataset,
+          -- plus one reflective proposer call.
+          stepCost = 2 * seedCost + 1
+          stepCap = maxCands + 4
 
-      loop step calls cands seed frontier
-        | step >= stepCap = pure (bestOf seedCand frontier)
-        | calls + stepCost > maxCalls = pure (bestOf seedCand frontier)
-        | length cands >= maxCands = pure (bestOf seedCand frontier)
-        | otherwise = case sampleParent seed (paretoFrontier frontier) of
-            Nothing -> pure (bestOf seedCand frontier)
-            Just (parent, seed') -> do
-              let parentProg = rebuild parent
-                  idx = step `mod` nNodes
-              (fblog, _) <- captureFeedback train fbMetric parentProg
-              case drop idx paths of
-                (path : _)
-                  | null (feedbackFor path fblog) ->
-                      -- nothing to reflect on at this node; advance (capture cost only)
-                      loop (step + 1) (calls + n) cands seed' frontier
-                _ -> do
-                  child <- mutateNode proposer progSummary dataSummary fields fblog paths idx parentProg
-                  rpt <- evaluatePure train metric child
-                  let childCand = Candidate (foldParams child) (perEx rpt) (aggregateScore rpt)
-                      frontier' = paretoFrontier (childCand : frontier)
-                  loop (step + 1) (calls + stepCost) (childCand : cands) seed' frontier'
+          loop step cands seed frontier
+            | step >= stepCap = pure (bestOf seedCand frontier)
+            | length cands >= maxCands = pure (bestOf seedCand frontier)
+            | otherwise = do
+                fitsStep <- tryCharge meter stepCost
+                if not fitsStep
+                  then pure (bestOf seedCand frontier)
+                  else case sampleParent seed (paretoFrontier frontier) of
+                    Nothing -> pure (bestOf seedCand frontier)
+                    Just (parent, seed') -> do
+                      let parentProg = rebuild parent
+                          idx = step `mod` nNodes
+                      (fblog, _) <- captureFeedback train fbMetric parentProg
+                      case drop idx paths of
+                        (path : _)
+                          | null (feedbackFor path fblog) ->
+                              -- nothing to reflect on at this node; the reserved
+                              -- full-step budget is a conservative upper bound.
+                              loop (step + 1) cands seed' frontier
+                        _ -> do
+                          child <- mutateNode proposer progSummary dataSummary fields fblog paths idx parentProg
+                          rpt <- evaluatePure train metric child
+                          let childCand = Candidate (foldParams child) (perEx rpt) (aggregateScore rpt)
+                              frontier' = paretoFrontier (childCand : frontier)
+                          loop (step + 1) (childCand : cands) seed' frontier'
 
-  best <- loop 0 n [seedCand] 1 [seedCand]
-  pure (freezeProgram (rebuild best))
+      best <- loop 0 [seedCand] 1 [seedCand]
+      pure (freezeProgram (rebuild best))
 
 -- | The per-example score vector from a report, in dataset order.
 perEx :: Report -> [Double]

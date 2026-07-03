@@ -16,7 +16,8 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, boolScore, dataset, exactMatch, example, predictionPrimary)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
-  ( Candidate (..),
+  ( Budget (..),
+    Candidate (..),
     FeedbackMetric,
     captureFeedback,
     defaultBudget,
@@ -28,6 +29,7 @@ import Shikumi.Optimize
     reflectiveProposer,
     sampleParent,
     scoreOn,
+    withLmCallCount,
   )
 import Shikumi.Program (Params (..), foldParams, nodeFieldsIndexed, programParams)
 import Shikumi.Trace.Feedback (feedbackFor)
@@ -65,7 +67,7 @@ runGepa :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (
 runGepa act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runGepaStubLM act
 
 tests :: TestTree
-tests = testGroup "Gepa" [paretoPure, feedbackCapture, reflectiveMutation, heldoutLift, roundTrips]
+tests = testGroup "Gepa" [paretoPure, feedbackCapture, reflectiveMutation, heldoutLift, budgetGate, roundTrips]
 
 -- ---------------------------------------------------------------------------
 -- Pure Pareto-frontier tests
@@ -153,6 +155,17 @@ heldoutLift =
         assertBool ("before should be low, got " <> show before) (before < 0.5)
         assertBool ("after " <> show after <> " should exceed before " <> show before) (after > before)
         assertBool ("after should reach the floor, got " <> show after) (after >= 0.75)
+
+budgetGate :: TestTree
+budgetGate =
+  testCase "gepa returns the student without seed evaluation when the budget is too small" $ do
+    let tiny = Budget {maxLmCalls = 1, maxCandidates = 4}
+    res <- runGepa (withLmCallCount (optimize (gepa reflectiveProposer fbMetric tiny) trainset exactMatch sentimentProg))
+    case res of
+      Left e -> assertFailure ("unexpected error: " <> show e)
+      Right (cp, calls) -> do
+        calls @?= 0
+        programParams (compiledProgram cp) @?= programParams sentimentProg
 
 roundTrips :: TestTree
 roundTrips =
