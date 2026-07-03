@@ -4,7 +4,7 @@ slug: cache-key-v2-endpoint-completeness
 title: "Cache Key v2 Endpoint Completeness"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeamsehst07eh4n7kp8a7"
 master_plan: "docs/masterplans/7-cache-trace-and-replay-hardening.md"
 ---
 
@@ -29,14 +29,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: extend `requestToCanonicalValueVersioned` with `baseUrl`, `modelHeaders`, `compat`, `optionsHeaders`; strip message timestamps
-- [ ] M1: bump `currentKeyVersion` to `"shikumi-cache/v2"`; correct the false module-header claim in `Key.hs`
-- [ ] M2: recapture the pinned golden digest in `shikumi-cache/test/Main.hs`; fix the versioning test's hard-coded version pair
-- [ ] M2: add discrimination tests (baseUrl, model headers, options headers, compat) and the timestamp-insensitivity test
-- [ ] M2: add the over-stripping guard test (a `"timestamp"` key inside tool-call arguments still changes the key)
-- [ ] M3: update the pinned digest in `shikumi-trace/test/Main.hs`; document trace invalidation in `Key.hs` and in this plan
-- [ ] M4: document the lossy `Cost` JSON round-trip in `shikumi-cache/src/Shikumi/Cache/ResponseJSON.hs`
-- [ ] Full test suite green (`just test-one shikumi-cache`, `just test-one shikumi-trace`, `just test`)
+- [x] M1: extend `requestToCanonicalValueVersioned` with `baseUrl`, `modelHeaders`, `compat`, `optionsHeaders`; strip message timestamps. Completed 2026-07-03.
+- [x] M1: bump `currentKeyVersion` to `"shikumi-cache/v2"`; correct the false module-header claim in `Key.hs`. Completed 2026-07-03.
+- [x] M2: recapture the pinned golden digest in `shikumi-cache/test/Main.hs`; fix the versioning test's hard-coded version pair. Completed 2026-07-03; v2 digest is `b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564`.
+- [x] M2: add discrimination tests (baseUrl, model headers, options headers, compat) and the timestamp-insensitivity test. Completed 2026-07-03.
+- [x] M2: add the over-stripping guard test (a `"timestamp"` key inside tool-call arguments still changes the key). Completed 2026-07-03.
+- [x] M3: update the pinned digest in `shikumi-trace/test/Main.hs`; document trace invalidation in `Key.hs` and in this plan. Completed 2026-07-03.
+- [x] M4: document the lossy `Cost` JSON round-trip in `shikumi-cache/src/Shikumi/Cache/ResponseJSON.hs`. Completed 2026-07-03.
+- [x] Full test suite green (`just test-one shikumi-cache`, `just test-one shikumi-trace`, `just test`). Completed 2026-07-03.
 
 
 ## Surprises & Discoveries
@@ -44,7 +44,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- `Data.Aeson.KeyMap` in the pinned aeson version does not export `adjust`; the timestamp stripper uses `KM.lookup` plus `KM.insert` instead. Evidence: `cabal build shikumi-cache` initially failed with `Not in scope: 'KM.adjust'`, then passed after the helper was rewritten.
+- The current `Baikai.user` constructor emits `timestamp = Nothing`, not a fixed fixture timestamp. The timestamp-insensitivity test therefore compares `user "ping"` against `userAt t "ping"` and also compares two distinct `userAt` timestamps, which is the stronger behavior this plan needed.
+- `just test` passed with the expected Redis skip when no local Redis socket was reachable:
+
+```text
+[SKIP] shikumi-cache-redis: no Redis reachable at socket /Users/shinzui/Keikaku/bokuno/shikumi/.dev/redis/redis.sock
+```
 
 
 ## Decision Log
@@ -70,7 +76,17 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Completed 2026-07-03. The cache key namespace is now `"shikumi-cache/v2"` and the hashed canonical request includes endpoint identity (`baseUrl`, model headers, compat shim, per-call headers) while ignoring only payload-level message timestamps. The new pinned digest for the fixed cache/trace fixture is `b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564`, duplicated in `shikumi-cache/test/Main.hs` and `shikumi-trace/test/Main.hs`.
+
+The `shikumi-cache` suite now has 20 tests, including endpoint/header/compat discrimination, timestamp insensitivity, and the guard that nested `"timestamp"` request data still affects the key. `shikumi-trace` continues to reproduce the same key byte-for-byte. The adjacent lossy `Cost` JSON behavior is documented but unchanged, as planned.
+
+Validation completed:
+
+```text
+just test-one shikumi-cache   # All 20 tests passed
+just test-one shikumi-trace   # All 20 tests passed
+just test                     # All suites passed; Redis suite skipped loudly without a local socket
+```
 
 
 ## Context and Orientation
@@ -83,12 +99,12 @@ The request triple `(Model, Context, Options)` comes from baikai, the provider-a
 
 - `Baikai.Model.Model` (baikai `baikai/src/Baikai/Model.hs`, lines 96-111) has fields `modelId`, `name`, `api`, `provider`, `baseUrl :: Text`, `reasoning`, `input`, `cost`, `contextWindow`, `maxOutputTokens`, `headers :: Map Text Text`, `compat :: Compat`. `Compat` (same file) is a three-constructor sum (`CompatNone` / `CompatOpenAICompletions` / `CompatAnthropicMessages`) describing per-host request-rewriting shims; it has `ToJSON`. `baseUrl`, `headers`, and `compat` all change provider behavior and are all currently missing from the key.
 - `Baikai.Options.Options` (baikai `baikai/src/Baikai/Options.hs`) has, besides the fields already hashed, `apiKey`, `timeoutMs`, `headers :: Map Text Text`, `metadata`, `cacheRetention`. Only `headers` joins the key (see Decision Log).
-- `Baikai.Message.Message` (baikai `baikai/src/Baikai/Message.hs`) is a three-constructor sum — `UserMessage UserPayload`, `AssistantMessage AssistantPayload`, `ToolResultMessage ToolResultPayload` — and every payload record carries a `timestamp :: UTCTime`. The smart constructor `user` uses a fixed fixture timestamp (`2000-01-01`), which is why the existing golden test is deterministic; but `userAt`/`userNow` and every real assistant turn carry wall-clock times. All three `Message` constructors derive `ToJSON` generically with default options, so a message serializes as `{"tag":"UserMessage","contents":{...payload fields including "timestamp"...}}` — the payload object is under the `"contents"` key. That shape is what the timestamp strip in this plan relies on (and what a new test locks down behaviorally).
+- `Baikai.Message.Message` (baikai `baikai/src/Baikai/Message.hs`) is a three-constructor sum — `UserMessage UserPayload`, `AssistantMessage AssistantPayload`, `ToolResultMessage ToolResultPayload` — and every payload record carries a `timestamp :: Maybe UTCTime`. The smart constructor `user` emits `timestamp = Nothing`, while `userAt`/`userNow` and every real assistant turn can carry wall-clock times. All three `Message` constructors derive `ToJSON` generically with default options, so a message serializes as `{"tag":"UserMessage","contents":{...payload fields including "timestamp"...}}` — the payload object is under the `"contents"` key. That shape is what the timestamp strip in this plan relies on (and what a new test locks down behaviorally).
 
 Two golden tests pin the digest of a fixed request and will both change:
 
-- `shikumi-cache/test/Main.hs` line 67: `pinnedKey = "30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113"`, asserted at lines 145-147. The same file's versioning test (lines 247-252) compares the serializations for hard-coded versions `"shikumi-cache/v1"` and `"shikumi-cache/v2"`.
-- `shikumi-trace/test/Main.hs` line 305 pins the identical digest (asserted at lines 184-187) to prove the trace package reproduces the cache package's key byte-for-byte.
+- `shikumi-cache/test/Main.hs` now pins `pinnedKey = "b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564"` and compares the current version against `"shikumi-cache/v3"` in the versioning test so the test remains meaningful after the v2 bump.
+- `shikumi-trace/test/Main.hs` pins the identical digest to prove the trace package reproduces the cache package's key byte-for-byte.
 
 Consumers of the key besides `cachedLLM` (`shikumi-cache/src/Shikumi/Cache.hs:63`): trace capture stamps `Key.cacheKey m c o` onto every LM-call span (`shikumi-trace/src/Shikumi/Trace.hs:350`) and also embeds `requestToCanonicalValue m c o` as the span's `prompt` attribute (line 343); replay recomputes the key per call (`shikumi-trace/src/Shikumi/Trace/Replay.hs:65`) and looks it up in the index built from recorded spans (`shikumi-trace/src/Shikumi/Trace/Store.hs:83-91`). Because recorded keys are stored as text inside trace files and replay recomputes keys with the live function, any change to the function makes old trace files unreplayable — replay raises its `ReplayDivergence` error. That is the correct, fail-closed behavior; this plan documents it rather than mitigating it.
 
@@ -282,7 +298,7 @@ feat(cache): hash endpoint identity and ignore message timestamps (key v2)
 
 MasterPlan: docs/masterplans/7-cache-trace-and-replay-hardening.md
 ExecPlan: docs/plans/40-cache-key-v2-endpoint-completeness.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeamsehst07eh4n7kp8a7
 ```
 
 Every commit in this plan carries those same three trailers.
@@ -324,3 +340,5 @@ stripMessageTimestamps :: Value -> Value                       -- newly exported
 The canonical top-level field set for v2, sorted as `canonicalJSON` emits it: `api`, `baseUrl`, `compat`, `maxTokens`, `messages`, `model`, `modelHeaders`, `optionsHeaders`, `provider`, `responseFormat`, `systemPrompt`, `temperature`, `thinking`, `toolChoice`, `tools`, `version`.
 
 Downstream interface consumers that must not need code changes (verify by building): `Shikumi.Cache.cachedLLM`, `Shikumi.Trace.llmAttrs`, `Shikumi.Trace.Replay.runLLMReplay`, `Shikumi.Trace.Store.replayIndex`, and the backend test suites in `shikumi-cache-redis`/`shikumi-cache-postgres`. Plan `docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md` builds on the post-bump function; it must not start before this plan is complete.
+
+Revision note (2026-07-03): Implemented the plan end-to-end, corrected the `Baikai.user` timestamp description to match source, recorded the v2 digest and validation evidence, and marked all progress items complete.

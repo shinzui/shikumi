@@ -4,7 +4,7 @@ slug: cache-trace-and-replay-hardening
 title: "Cache, Trace, and Replay Hardening"
 kind: master-plan
 created_at: 2026-07-02T03:29:36Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeamsehst07eh4n7kp8a7"
 ---
 
 # Cache, Trace, and Replay Hardening
@@ -41,7 +41,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Not Started |
+| 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
 | 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Not Started |
 | 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Not Started |
 | 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Not Started |
@@ -75,9 +75,9 @@ CI enforcement of test skips. Shared concern with another initiative: EP-41 make
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-40: M1 — v2 canonical value (endpoint fields in, timestamps out) and version bump
-- [ ] EP-40: M2 — shikumi-cache golden digest recaptured and new key-discrimination tests green
-- [ ] EP-40: M3 — shikumi-trace pinned digest updated; trace-invalidation consequence documented
+- [x] EP-40: M1 — v2 canonical value (endpoint fields in, timestamps out) and version bump
+- [x] EP-40: M2 — shikumi-cache golden digest recaptured and new key-discrimination tests green
+- [x] EP-40: M3 — shikumi-trace pinned digest updated; trace-invalidation consequence documented
 - [ ] EP-41: M1 — shared `CacheConfig` and TTL-aware `cachedLLMWith`; never-cache-error guard
 - [ ] EP-41: M2 — best-effort posture at all four backends (SQLite no longer crashes); Postgres leak fixed; SQLite WAL/busy_timeout
 - [ ] EP-41: M3 — degradation/TTL/corrupt-row tests green; redis/postgres skips loud
@@ -94,7 +94,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: EP-40 completed with v2 digest `b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564` pinned in both `shikumi-cache/test/Main.hs` and `shikumi-trace/test/Main.hs`. `just test-one shikumi-cache`, `just test-one shikumi-trace`, and `just test` all pass; the Redis cache suite skipped loudly because no local Redis socket was reachable.
 
 
 ## Decision Log
@@ -117,4 +117,4 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+2026-07-03: EP-40 is complete. The cache key now hashes endpoint identity and behavior-affecting headers while ignoring message construction timestamps, and trace continues to reproduce the same key byte-for-byte under v2. This unblocks EP-42, whose replay-divergence fixtures should use the post-v2 key function and pinned digest.

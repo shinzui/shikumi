@@ -12,10 +12,25 @@
 -- process.
 module Main (main) where
 
-import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options, _Response)
+import Baikai
+  ( Compat (CompatAnthropicMessages),
+    Context,
+    Model,
+    Options,
+    Response,
+    defaultAnthropicMessagesCompat,
+    user,
+    userAt,
+    _Context,
+    _Model,
+    _Options,
+    _Response,
+  )
 import Control.Lens ((&), (.~))
+import Data.Aeson (object, toJSON, (.=))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
@@ -33,7 +48,7 @@ import Shikumi.Cache
   )
 import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
 import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
-import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned)
+import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned, stripMessageTimestamps)
 import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
@@ -64,7 +79,7 @@ fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 -- reproduce. Captured from a first run; any drift in field set, canonical JSON,
 -- or hash breaks this test.
 pinnedKey :: T.Text
-pinnedKey = "30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113"
+pinnedKey = "b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564"
 
 stubResponse :: Response
 stubResponse = _Response
@@ -148,7 +163,48 @@ keyTests =
       testCase "a different request yields a different key" $
         assertBool
           "temperature change must change the key"
-          (cacheKey fixModel fixCtx fixOpts /= cacheKey fixModel fixCtx (fixOpts & #temperature .~ Just 0.7))
+          (cacheKey fixModel fixCtx fixOpts /= cacheKey fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)),
+      testCase "baseUrl changes the key" $
+        assertBool
+          "endpoint routing must be part of the key"
+          (cacheKey fixModel fixCtx fixOpts /= cacheKey (fixModel & #baseUrl .~ "https://proxy.internal") fixCtx fixOpts),
+      testCase "model headers change the key" $
+        assertBool
+          "model default headers must be part of the key"
+          ( cacheKey fixModel fixCtx fixOpts
+              /= cacheKey (fixModel & #headers .~ Map.singleton "anthropic-beta" "context-1m-2025-08-07") fixCtx fixOpts
+          ),
+      testCase "options headers change the key" $
+        assertBool
+          "per-call headers must be part of the key"
+          ( cacheKey fixModel fixCtx fixOpts
+              /= cacheKey fixModel fixCtx (fixOpts & #headers .~ Map.singleton "anthropic-beta" "output-128k-2025-02-19")
+          ),
+      testCase "compat shim changes the key" $
+        assertBool
+          "compat request-shaping flags must be part of the key"
+          ( cacheKey fixModel fixCtx fixOpts
+              /= cacheKey (fixModel & #compat .~ CompatAnthropicMessages defaultAnthropicMessagesCompat) fixCtx fixOpts
+          ),
+      testCase "message timestamps do not affect the key" $ do
+        let t1 = read "2026-01-01 00:00:00 UTC" :: UTCTime
+            t2 = read "2026-06-30 12:34:56 UTC" :: UTCTime
+            ctxAt t = fixCtx & #messages .~ V.singleton (userAt t "ping")
+        cacheKey fixModel (ctxAt t1) fixOpts @?= cacheKey fixModel (ctxAt t2) fixOpts
+        cacheKey fixModel fixCtx fixOpts @?= cacheKey fixModel (ctxAt t1) fixOpts,
+      testCase "stripMessageTimestamps removes only the payload-level timestamp" $ do
+        let msg inner =
+              object
+                [ "tag" .= ("UserMessage" :: T.Text),
+                  "contents"
+                    .= object
+                      [ "timestamp" .= ("2026-01-01T00:00:00Z" :: T.Text),
+                        "content" .= [object ["args" .= object ["timestamp" .= inner]]]
+                      ]
+                ]
+            stripped x = stripMessageTimestamps (toJSON [msg (x :: T.Text)])
+        assertBool "nested timestamps still discriminate" (stripped "a" /= stripped "b")
+        stripped "a" @?= stripped "a"
     ]
 
 memoryTests :: TestTree
@@ -246,8 +302,8 @@ versioningTests =
         n @?= 1,
       testCase "bumping the namespace version changes the hashed bytes" $
         assertBool
-          "v1 and v2 canonical serializations must differ"
-          ( canonicalJSON (requestToCanonicalValueVersioned "shikumi-cache/v1" fixModel fixCtx fixOpts)
-              /= canonicalJSON (requestToCanonicalValueVersioned "shikumi-cache/v2" fixModel fixCtx fixOpts)
+          "current and next-version canonical serializations must differ"
+          ( canonicalJSON (requestToCanonicalValueVersioned currentKeyVersion fixModel fixCtx fixOpts)
+              /= canonicalJSON (requestToCanonicalValueVersioned "shikumi-cache/v3" fixModel fixCtx fixOpts)
           )
     ]

@@ -57,7 +57,12 @@ usageOptions :: Options
 usageOptions = defaultOptions {fieldLabelModifier = camelTo2 '_'}
 
 -- | Parse a required object field as 'Scientific' and lift it to 'Rational',
--- inverting baikai's @Rational -> Scientific@ cost encoding.
+-- inverting baikai's @Rational -> Scientific@ cost encoding. A synthetic cost
+-- with a non-terminating decimal expansion, such as @1 % 3@, does not satisfy
+-- 'Eq' after an encode/decode round-trip because baikai's encoder drops the
+-- repetend index. Real USD pricing rates are decimal, so real provider costs
+-- terminate; do not rely on round-tripped 'CachedResponse' equality for
+-- synthetic non-decimal costs.
 ratField :: Object -> Key -> Parser Rational
 ratField o k = toRational <$> (o .: k :: Parser Scientific)
 

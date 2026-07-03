@@ -302,7 +302,7 @@ fixOpts :: Options
 fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 
 pinnedKey :: Text
-pinnedKey = "30b2015562ec8b5cd4fdb64c7cc671c84f56f80d24891deec6676c521f008113"
+pinnedKey = "b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564"
 
 -- ---------------------------------------------------------------------------
 -- Shared helpers
