@@ -4,7 +4,7 @@ slug: enforce-the-optimizer-budget-contract
 title: "Enforce the Optimizer Budget Contract"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaf8e86bvx2arbh7nk2c"
 master_plan: "docs/masterplans/6-optimizer-and-evaluation-correctness.md"
 ---
 
@@ -52,7 +52,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `BudgetMeter` seam (`newBudgetMeter`, `tryCharge`, `meteredScore`,
+- [x] 2026-07-03: M1: `BudgetMeter` seam (`newBudgetMeter`, `tryCharge`, `meteredScore`,
       `selectBestMetered`, `withLmCallCount`) in Search.hs with unit tests
 - [ ] M2: rewire `instructionSearch`, `copro`, and `searchJoint` onto the meter
       (replacing their hand-rolled counters), with the per-candidate cost corrected to
@@ -436,7 +436,7 @@ fix(optimize): meter labeledFewShot scoring against the budget
 
 MasterPlan: docs/masterplans/6-optimizer-and-evaluation-correctness.md
 ExecPlan: docs/plans/37-enforce-the-optimizer-budget-contract.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaf8e86bvx2arbh7nk2c
 ```
 
 Because `shikumi-cli` and `shikumi-jitsurei` import `labeledFewShot`/`ensembleSearch`,
