@@ -33,9 +33,9 @@ This section must always reflect the actual current state of the work.
 - [x] M2: `bestEffortIO` helper; SQLite handlers degrade instead of throwing; SQLite WAL + busy_timeout pragmas (2026-07-03)
 - [x] M2: Redis default TTL removed (opt-in via `openRedisCacheWithTTL`); Redis lookup/store best-effort against thrown exceptions (2026-07-03)
 - [x] M2: Postgres connection released on schema failure (2026-07-03)
-- [ ] M3: new tests — error-response non-caching, TTL expiry, SQLite corrupt-row MISS, SQLite dropped-table degradation, Redis/Postgres closed-handle degradation, Redis storage-TTL knob
-- [ ] M3: loud SKIPPED banners in redis/postgres suites (CI gating deferred to masterplan 9)
-- [ ] Full suites green: `just test-one shikumi-cache`, `just test-one shikumi-cache-redis` (with services up), `just test-one shikumi-cache-postgres`
+- [x] M3: new tests — error-response non-caching, TTL expiry, SQLite corrupt-row MISS, SQLite dropped-table degradation, Redis/Postgres closed-handle degradation, Redis storage-TTL knob (2026-07-03)
+- [x] M3: loud SKIPPED banners in redis/postgres suites (CI gating deferred to masterplan 9) (2026-07-03)
+- [x] Full suites green: `just test-one shikumi-cache`, `just test-one shikumi-cache-redis` (with services up), `just test-one shikumi-cache-postgres` (2026-07-03)
 
 
 ## Surprises & Discoveries
@@ -52,6 +52,10 @@ Linking ... shikumi-cache-test
 Linking ... shikumi-cache-redis-test
 Linking ... shikumi-cache-postgres-test
 ```
+
+- 2026-07-03: A released hasql `Connection` can crash the process before a Haskell exception is available to catch. The Postgres backend now stores `Maybe Connection` inside `PostgresCache`; `closePostgresCache` releases once and marks the handle closed, and later `lookupCache`/`storeCache` calls degrade to MISS/no-op without touching the released pointer.
+
+- 2026-07-03: The Redis suite's sibling tests can run concurrently under tasty, so tests that assert Redis TTL must not share the same operational key as memoization tests. The closed-connection and TTL tests now use distinct request keys and clear their own keys before checking behavior.
 
 
 ## Decision Log
@@ -75,13 +79,21 @@ Record every decision made while working on the plan.
   Rationale: The CI initiative (docs/masterplans/9-ci-and-shared-test-infrastructure.md) owns when a skip should fail a pipeline. Two owners of one knob would conflict.
   Date: 2026-07-01
 
+- Decision: Represent a closed Postgres cache as `Nothing` inside the backend handle instead of relying on exception catching after `Connection.release`.
+  Rationale: Using a released hasql/libpq connection can segfault before the Haskell exception machinery runs, so the only reliable best-effort posture is to avoid calling hasql after close. This keeps `closePostgresCache` idempotent and makes post-close lookup/store degrade in ordinary Haskell code.
+  Date: 2026-07-03
+
+- Decision: Redis tests that inspect key TTL use request variants distinct from the memoization test key.
+  Rationale: Tasty may run sibling tests concurrently. Sharing one Redis key lets the default no-expiry memoize test race with the SETEX assertion and produce a false `TTL = -1`; distinct keys make the tests independent and repeatable.
+  Date: 2026-07-03
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+2026-07-03: EP-41 is complete. The policy layer now exposes `CacheConfig`, `defaultCacheConfig`, and `cachedLLMWith`; `cachedLLM` enforces policy-layer TTL and refuses to store in-band error responses. SQLite, Redis, and Postgres now share best-effort lookup/store posture, Redis no longer expires entries by default, and Postgres is safe to call after close. The redis/postgres skip paths print prominent zero-test banners while keeping exit code 0. Validation passed with `just test-one shikumi-cache` (24 tests), `just test-one shikumi-cache-redis` with services up (3 tests), `REDIS_SOCKET= just test-one shikumi-cache-redis` (loud skip, exit 0), and `just test-one shikumi-cache-postgres` (2 tests).
 
 
 ## Context and Orientation

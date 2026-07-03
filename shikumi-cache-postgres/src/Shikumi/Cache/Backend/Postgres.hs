@@ -17,7 +17,7 @@ module Shikumi.Cache.Backend.Postgres
   )
 where
 
-import Control.Concurrent.MVar (MVar, newMVar, withMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, withMVar)
 import Control.Exception (throwIO)
 import Data.Aeson (Result (Error, Success), Value, fromJSON, toJSON)
 import Data.Functor.Contravariant ((>$<))
@@ -35,8 +35,10 @@ import Shikumi.Cache (Cache (..), CacheKey (unCacheKey))
 import Shikumi.Cache.Backend.Effort (bestEffortIO)
 
 -- | An open Postgres-backed cache: a single connection behind an 'MVar' (hasql
--- connections are not safe for concurrent use), with the schema ensured at open.
-newtype PostgresCache = PostgresCache {conn :: MVar Connection}
+-- connections are not safe for concurrent use), with the schema ensured at
+-- open. The connection becomes 'Nothing' after 'closePostgresCache' so accidental
+-- use-after-close degrades without touching a released libpq pointer.
+newtype PostgresCache = PostgresCache (MVar (Maybe Connection))
 
 -- | Connect using the given hasql settings (e.g. @EphemeralPg.connectionSettings@
 -- for tests, or @Hasql.Connection.Settings@ builders in production), ensuring the
@@ -52,27 +54,36 @@ openPostgresCache settings = do
         Left e -> do
           Connection.release conn
           throwIO (userError ("shikumi-cache-postgres: schema creation failed: " <> show e))
-        Right () -> PostgresCache <$> newMVar conn
+        Right () -> PostgresCache <$> newMVar (Just conn)
 
 -- | Release the connection.
 closePostgresCache :: PostgresCache -> IO ()
-closePostgresCache (PostgresCache mv) = withMVar mv Connection.release
+closePostgresCache (PostgresCache mv) =
+  modifyMVar_ mv $ \case
+    Nothing -> pure Nothing
+    Just conn -> do
+      Connection.release conn
+      pure Nothing
 
 -- | Discharge the 'Cache' effect against Postgres. A missing row, a session
 -- error, or a JSON decode failure all surface as a MISS ('Nothing'); a store
 -- error is swallowed (best-effort caching — the next call simply re-fetches).
 runCachePostgres :: (IOE :> es) => PostgresCache -> Eff (Cache : es) a -> Eff es a
 runCachePostgres (PostgresCache mv) = interpret $ \_ -> \case
-  LookupCache k -> liftIO . bestEffortIO Nothing $ do
-    r <- withMVar mv (\conn -> Connection.use conn (statement (unCacheKey k) lookupStmt))
-    pure $ case r of
-      Right (Just v) -> case fromJSON v of
-        Success cr -> Just cr
-        Error _ -> Nothing
-      _ -> Nothing
-  StoreCache k v -> liftIO . bestEffortIO () $ do
-    _ <- withMVar mv (\conn -> Connection.use conn (statement (unCacheKey k, toJSON v) storeStmt))
-    pure ()
+  LookupCache k -> liftIO . bestEffortIO Nothing . withMVar mv $ \case
+    Nothing -> pure Nothing
+    Just conn -> do
+      r <- Connection.use conn (statement (unCacheKey k) lookupStmt)
+      pure $ case r of
+        Right (Just v) -> case fromJSON v of
+          Success cr -> Just cr
+          Error _ -> Nothing
+        _ -> Nothing
+  StoreCache k v -> liftIO . bestEffortIO () . withMVar mv $ \case
+    Nothing -> pure ()
+    Just conn -> do
+      _ <- Connection.use conn (statement (unCacheKey k, toJSON v) storeStmt)
+      pure ()
 
 -- | @CREATE TABLE IF NOT EXISTS@ (unpreparable — it is a utility statement).
 createTableStmt :: Statement () ()

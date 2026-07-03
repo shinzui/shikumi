@@ -42,7 +42,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
-| 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | In Progress |
+| 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Complete |
 | 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Not Started |
 | 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Not Started |
 
@@ -78,9 +78,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-40: M1 — v2 canonical value (endpoint fields in, timestamps out) and version bump
 - [x] EP-40: M2 — shikumi-cache golden digest recaptured and new key-discrimination tests green
 - [x] EP-40: M3 — shikumi-trace pinned digest updated; trace-invalidation consequence documented
-- [ ] EP-41: M1 — shared `CacheConfig` and TTL-aware `cachedLLMWith`; never-cache-error guard
-- [ ] EP-41: M2 — best-effort posture at all four backends (SQLite no longer crashes); Postgres leak fixed; SQLite WAL/busy_timeout
-- [ ] EP-41: M3 — degradation/TTL/corrupt-row tests green; redis/postgres skips loud
+- [x] EP-41: M1 — shared `CacheConfig` and TTL-aware `cachedLLMWith`; never-cache-error guard
+- [x] EP-41: M2 — best-effort posture at all four backends (SQLite no longer crashes); Postgres leak fixed; SQLite WAL/busy_timeout
+- [x] EP-41: M3 — degradation/TTL/corrupt-row tests green; redis/postgres skips loud
 - [ ] EP-42: M1 — replay index fails closed on conflicting duplicate keys (tests included)
 - [ ] EP-42: M2 — trace state atomic + loud stack-corruption check; concurrency contract documented
 - [ ] EP-42: M3 — tail: multi-root rendering, live `bumpRetry`, numeric sibling ordering, v1 trace files accepted
@@ -95,6 +95,7 @@ Document cross-plan insights, dependency changes, scope adjustments, or unexpect
 interactions between child plans. Provide concise evidence.
 
 - 2026-07-03: EP-40 completed with v2 digest `b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564` pinned in both `shikumi-cache/test/Main.hs` and `shikumi-trace/test/Main.hs`. `just test-one shikumi-cache`, `just test-one shikumi-trace`, and `just test` all pass; the Redis cache suite skipped loudly because no local Redis socket was reachable.
+- 2026-07-03: EP-41 completed. A released hasql connection can segfault before Haskell exception handling runs, so the Postgres backend now records a closed state and degrades post-close lookup/store without touching a released pointer. Live Redis tests also required distinct operational keys because tasty may run sibling tests concurrently.
 
 
 ## Decision Log
@@ -118,3 +119,5 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 2026-07-03: EP-40 is complete. The cache key now hashes endpoint identity and behavior-affecting headers while ignoring message construction timestamps, and trace continues to reproduce the same key byte-for-byte under v2. This unblocks EP-42, whose replay-divergence fixtures should use the post-v2 key function and pinned digest.
+
+2026-07-03: EP-41 is complete. Cache policy now has uniform TTL semantics through `cachedLLMWith`, error-shaped responses are not memoized, SQLite/Redis/Postgres storage failures degrade instead of escaping, Redis defaults to no server-side expiry, and the server-backed suites advertise skips loudly without changing CI policy ownership.

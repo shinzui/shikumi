@@ -18,6 +18,7 @@ import Baikai
     Model,
     Options,
     Response,
+    StopReason (ErrorReason),
     defaultAnthropicMessagesCompat,
     user,
     userAt,
@@ -26,6 +27,7 @@ import Baikai
     _Options,
     _Response,
   )
+import Control.Exception (bracket)
 import Control.Lens ((&), (.~))
 import Data.Aeson (object, toJSON, (.=))
 import Data.Generics.Labels ()
@@ -34,6 +36,8 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
+import Database.SQLite3 (Database, SQLData (SQLText), StepResult (Done))
+import Database.SQLite3 qualified as SQL
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
@@ -42,7 +46,10 @@ import Shikumi.Cache
     CachedResponse (..),
     cacheKey,
     cachedLLM,
+    cachedLLMWith,
     currentKeyVersion,
+    defaultCacheConfig,
+    entryTTL,
     lookupCache,
     storeCache,
   )
@@ -251,8 +258,43 @@ sqliteTests =
           (wc, _, werr) <- runPhase "write"
           assertBool ("write phase failed: " <> werr) (wc == ExitSuccess)
           (rc, _, rerr) <- runPhase "read"
-          assertBool ("read phase did not find the on-disk entry: " <> rerr) (rc == ExitSuccess)
+          assertBool ("read phase did not find the on-disk entry: " <> rerr) (rc == ExitSuccess),
+      testCase "a corrupt row decodes as a MISS" $
+        withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
+          let file = dir </> "corrupt.db"
+          got <- withSQLiteCache file $ \c -> do
+            insertRawSQLiteRow file restartKey "not json"
+            runEff . runCacheSQLite c $ lookupCache restartKey
+          got @?= Nothing,
+      testCase "a dropped table degrades lookup/store to MISS / no-op" $
+        withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
+          let file = dir </> "dropped.db"
+          withSQLiteCache file $ \c -> do
+            withRawSQLite file (`SQL.exec` "DROP TABLE shikumi_cache;")
+            got <- runEff . runCacheSQLite c $ lookupCache restartKey
+            got @?= Nothing
+            runEff . runCacheSQLite c $ storeCache restartKey restartEntry
     ]
+
+withRawSQLite :: FilePath -> (Database -> IO a) -> IO a
+withRawSQLite file = bracket (SQL.open (T.pack file)) SQL.close
+
+insertRawSQLiteRow :: FilePath -> CacheKey -> T.Text -> IO ()
+insertRawSQLiteRow file key rawValue =
+  withRawSQLite file $ \db ->
+    bracket
+      ( SQL.prepare
+          db
+          """
+          INSERT OR REPLACE INTO shikumi_cache (key, value, stored_at)
+          VALUES (?, ?, ?);
+          """
+      )
+      SQL.finalize
+      $ \stmt -> do
+        SQL.bind stmt [SQLText (unCacheKey key), SQLText rawValue, SQLText "2026-06-08T00:00:00Z"]
+        res <- SQL.step stmt
+        res @?= Done
 
 memoizeTests :: TestTree
 memoizeTests =
@@ -277,7 +319,32 @@ memoizeTests =
             _ <- complete fixModel fixCtx fixOpts
             complete fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)
         n <- readIORef ref
-        n @?= 2
+        n @?= 2,
+      testCase "an in-band error response is not memoized" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let errResp = stubResponse & #message . #stopReason .~ ErrorReason
+        _ <-
+          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref errResp . cachedLLM $ do
+            _ <- complete fixModel fixCtx fixOpts
+            complete fixModel fixCtx fixOpts
+        n <- readIORef ref
+        n @?= 2,
+      testCase "an entry older than entryTTL is a MISS; the refetched entry is a HIT" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let key = cacheKey fixModel fixCtx fixOpts
+            cfg = defaultCacheConfig {entryTTL = Just 3600}
+        runEff . runConcurrent . runCacheMemory tv $
+          storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
+        _ <-
+          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
+            complete fixModel fixCtx fixOpts
+        _ <-
+          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
+            complete fixModel fixCtx fixOpts
+        n <- readIORef ref
+        n @?= 1
     ]
 
 versioningTests :: TestTree

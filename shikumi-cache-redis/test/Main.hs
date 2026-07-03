@@ -18,18 +18,33 @@ import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text.Encoding qualified as TE
+import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
 import Database.Redis qualified as R
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Shikumi.Cache (CacheKey (unCacheKey), cacheKey, cachedLLM)
-import Shikumi.Cache.Backend.Redis (RedisCache, closeRedisCache, openRedisCache, runCacheRedis)
+import Shikumi.Cache
+  ( CacheKey (unCacheKey),
+    CachedResponse (..),
+    cacheKey,
+    cachedLLM,
+    currentKeyVersion,
+    lookupCache,
+    storeCache,
+  )
+import Shikumi.Cache.Backend.Redis
+  ( RedisCache,
+    closeRedisCache,
+    openRedisCache,
+    openRedisCacheWithTTL,
+    runCacheRedis,
+  )
 import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (lookupEnv)
 import System.Exit (exitSuccess)
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 fixModel :: Model
 fixModel = _Model & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
@@ -42,6 +57,12 @@ fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 
 stubResponse :: Response
 stubResponse = _Response
+
+someTime :: UTCTime
+someTime = read "2026-06-08 00:00:00 UTC"
+
+entry :: CachedResponse
+entry = CachedResponse stubResponse someTime currentKeyVersion
 
 -- | A counting stub interpreter of EP-1's @LLM@: every completion bumps a
 -- counter and returns a fixed response.
@@ -62,27 +83,39 @@ main = do
         Left _ -> skip ("no Redis reachable at socket " <> sock)
         Right cache -> do
           clearKey ci
-          defaultMain (tests cache)
+          defaultMain (tests ci cache)
           closeRedisCache cache
   where
     skip reason = do
-      putStrLn ("[SKIP] shikumi-cache-redis: " <> reason)
+      let banner = replicate 72 '='
+      mapM_
+        putStrLn
+        [ banner,
+          "== SKIPPED: shikumi-cache-redis test suite ran ZERO tests",
+          "== reason: " <> reason,
+          "== to run for real: `just services-up` inside `nix develop .#ghc9124`",
+          "== CI enforcement of this skip is owned by docs/masterplans/9-ci-and-shared-test-infrastructure.md",
+          banner
+        ]
       exitSuccess
 
 -- | Delete any entry a previous run left for the fixed request, via a throwaway
 -- connection, so the MISS→HIT counter starts honest.
 clearKey :: R.ConnectInfo -> IO ()
-clearKey ci = do
+clearKey ci = clearKeyFor ci (cacheKey fixModel fixCtx fixOpts)
+
+clearKeyFor :: R.ConnectInfo -> CacheKey -> IO ()
+clearKeyFor ci key = do
   conn <- R.checkedConnect ci
-  void $ R.runRedis conn (R.del (redisKeyFor (cacheKey fixModel fixCtx fixOpts) :| []))
+  void $ R.runRedis conn (R.del (redisKeyFor key :| []))
   R.disconnect conn
 
 -- | Rebuild the backend's operational key (the backend keeps it private).
 redisKeyFor :: CacheKey -> ByteString
 redisKeyFor k = TE.encodeUtf8 ("shikumi:cache:" <> unCacheKey k)
 
-tests :: RedisCache -> TestTree
-tests cache =
+tests :: R.ConnectInfo -> RedisCache -> TestTree
+tests ci cache =
   testGroup
     "shikumi-cache-redis"
     [ testCase "memoize: first request MISS (provider once), repeat is a Redis HIT" $ do
@@ -102,5 +135,39 @@ tests cache =
           runEff . runTime . runCacheRedis cache . runCountingLLM refB stubResponse . cachedLLM $
             complete fixModel fixCtx fixOpts
         nB <- readIORef refB
-        nB @?= 0
+        nB @?= 0,
+      testCase "a closed connection degrades to MISS / no-op" $ do
+        let key = cacheKey fixModel fixCtx (fixOpts & #temperature .~ Just 0.2)
+        clearKeyFor ci key
+        closed <- openRedisCache ci
+        closeRedisCache closed
+        got <- runEff . runCacheRedis closed $ lookupCache key
+        got @?= Nothing
+        runEff . runCacheRedis closed $
+          storeCache key entry,
+      testCase "storage TTL knob: opt-in SETEX vs default no-expiry" $ do
+        let key = cacheKey fixModel fixCtx (fixOpts & #temperature .~ Just 0.3)
+        clearKeyFor ci key
+        ttlCache <- openRedisCacheWithTTL 60 ci
+        runEff . runCacheRedis ttlCache $
+          storeCache key entry
+        ttlWithExpiry <- redisTTL ci key
+        closeRedisCache ttlCache
+        case ttlWithExpiry of
+          Right seconds -> assertBool ("SETEX should leave a positive TTL, got " <> show seconds) (seconds > 0)
+          Left err -> fail ("TTL lookup failed after SETEX: " <> show err)
+        clearKeyFor ci key
+        defaultCache <- openRedisCache ci
+        runEff . runCacheRedis defaultCache $
+          storeCache key entry
+        ttlNoExpiry <- redisTTL ci key
+        closeRedisCache defaultCache
+        ttlNoExpiry @?= Right (-1)
     ]
+
+redisTTL :: R.ConnectInfo -> CacheKey -> IO (Either R.Reply Integer)
+redisTTL ci key = do
+  conn <- R.checkedConnect ci
+  result <- R.runRedis conn (R.ttl (redisKeyFor key))
+  R.disconnect conn
+  pure result

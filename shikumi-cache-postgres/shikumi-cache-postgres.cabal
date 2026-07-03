@@ -64,4 +64,5 @@ test-suite shikumi-cache-postgres-test
     , tasty
     , tasty-hunit
     , text
+    , time
     , vector

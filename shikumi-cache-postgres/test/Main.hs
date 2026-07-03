@@ -15,11 +15,12 @@ import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text qualified as T
+import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import EphemeralPg qualified as Pg
-import Shikumi.Cache (cacheKey, cachedLLM)
+import Shikumi.Cache (CachedResponse (..), cacheKey, cachedLLM, currentKeyVersion, lookupCache, storeCache)
 import Shikumi.Cache.Backend.Postgres (PostgresCache, closePostgresCache, openPostgresCache, runCachePostgres)
 import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
@@ -39,6 +40,12 @@ fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 stubResponse :: Response
 stubResponse = _Response
 
+someTime :: UTCTime
+someTime = read "2026-06-08 00:00:00 UTC"
+
+entry :: CachedResponse
+entry = CachedResponse stubResponse someTime currentKeyVersion
+
 -- | A counting stub interpreter of EP-1's @LLM@: every completion bumps a
 -- counter and returns a fixed response.
 runCountingLLM :: (IOE :> es) => IORef Int -> Response -> Eff (LLM : es) a -> Eff es a
@@ -51,17 +58,26 @@ main = do
   started <- Pg.start Pg.defaultConfig
   case started of
     Left err -> do
-      putStrLn ("[SKIP] shikumi-cache-postgres: " <> T.unpack (Pg.renderStartError err))
+      let banner = replicate 72 '='
+      mapM_
+        putStrLn
+        [ banner,
+          "== SKIPPED: shikumi-cache-postgres test suite ran ZERO tests",
+          "== reason: " <> T.unpack (Pg.renderStartError err),
+          "== to run for real: the dev shell provides the postgres binaries ephemeral-pg needs",
+          "== CI enforcement of this skip is owned by docs/masterplans/9-ci-and-shared-test-infrastructure.md",
+          banner
+        ]
       exitSuccess
     Right db -> do
       cache <- openPostgresCache (Pg.connectionSettings db)
-      defaultMain (tests cache)
+      defaultMain (tests (openPostgresCache (Pg.connectionSettings db)) cache)
         `finally` (closePostgresCache cache >> Pg.stop db)
 
 -- Keep a reference to `cacheKey` so the import is exercised even though the
 -- backend computes keys internally (documents the integration-point-#7 reuse).
-tests :: PostgresCache -> TestTree
-tests cache =
+tests :: IO PostgresCache -> PostgresCache -> TestTree
+tests openCache cache =
   let _key = cacheKey fixModel fixCtx fixOpts
    in testGroup
         "shikumi-cache-postgres"
@@ -81,5 +97,12 @@ tests cache =
               runEff . runTime . runCachePostgres cache . runCountingLLM refB stubResponse . cachedLLM $
                 complete fixModel fixCtx fixOpts
             nB <- readIORef refB
-            nB @?= 0
+            nB @?= 0,
+          testCase "a released connection degrades to MISS / no-op" $ do
+            closed <- openCache
+            closePostgresCache closed
+            got <- runEff . runCachePostgres closed $ lookupCache (cacheKey fixModel fixCtx fixOpts)
+            got @?= Nothing
+            runEff . runCachePostgres closed $
+              storeCache (cacheKey fixModel fixCtx fixOpts) entry
         ]
