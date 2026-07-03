@@ -94,7 +94,7 @@ no behavior with them and would blur each plan's acceptance criteria.
 |---|-------|------|-----------|-----------|--------|
 | 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Complete |
 | 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | Complete |
-| 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Not Started |
+| 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Complete |
 | 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -205,9 +205,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-33: M1 — `parseResponse` keeps the native error for JSON bodies (2026-07-03)
 - [x] EP-33: M2 — strict-mode schema shape (required-but-nullable `Maybe`, typed enums) with goldens deliberately updated (2026-07-03)
 - [x] EP-33: M3 — native render channel: router swaps guide and demos for native-capable models; native demos rendered as JSON (2026-07-03)
-- [ ] EP-34: M1 — `routeLLM` rewrites the `Stream` operation (model, metadata translation, stripping)
-- [ ] EP-34: M2 — `streamPredict` reuses `effectiveSignature`, `attachSchema`, and `parseResponse`
-- [ ] EP-34: M3 — stream errors surface out-of-band; retries fire; budget charging documented and tested
+- [x] EP-34: M1 — `routeLLM` rewrites the `Stream` operation (model, metadata translation, stripping) (2026-07-03)
+- [x] EP-34: M2 — `streamPredict` reuses `effectiveSignature`, `attachSchema`, and `parseResponse` (2026-07-03)
+- [x] EP-34: M3 — stream errors surface out-of-band; retries fire; budget charging documented and tested (2026-07-03)
 - [ ] EP-35: M1 — `MajorityVote` carries its reducer; `majorityVoteBy` applies its `TempSchedule`; `modal` total
 - [ ] EP-35: M2 — budget admission gate renamed/documented with a concurrent overshoot test
 - [ ] EP-35: M3 — partial-function tail (`chain`, `parseBound`, `spreadTemps` clamp, refine advice failure) closed
@@ -253,6 +253,23 @@ interactions between child plans. Provide concise evidence.
   with the JSON-decoded `Params.demos`). Tests that need demos on the wire must
   supply them through the node's `Params` channel, as EP-33's native-demos router
   test does.
+- EP-34 (2026-07-03): the pinned baikai (baikai 0.1.x / 0.1.2.0) contradicts the
+  Decision Log's assumption that a terminal payload carries a structured
+  `errorInfo :: Maybe BaikaiError`. Its `TerminalPayload` is `{reason, message}`
+  only; stream-failure detail lives in the assembled message's `errorMessage` and
+  `stopReason`. So EP-34's stream-error posture maps every terminal `EventError` to
+  a transient `ProviderFailure` (still `isTransient`, so retries fire) rather than
+  dispatching through `fromBaikaiError`. Cross-initiative note for EP-39
+  (`docs/plans/39-evaluation-accounting-and-api-tail.md`): the routed `Stream`
+  operation now sends the real model id and strips metadata, and stream failures are
+  out-of-band `ProviderFailure`s (never in-band `EventError`) with budget charged
+  from the terminal before the throw — EP-39's usage-accounting assertions should
+  align to this posture.
+- EP-34 (2026-07-03): integration points 2, 3, 4 all honored — `streamPredict`
+  reuses `Shikumi.Program`'s exported `effectiveSignature`/`parseResponse` and the
+  same `attachSchema`/`attachNativeRender` stamps as `runPredict` (no forked
+  translation, no second parser); `routeLLM`'s `Stream` case calls the same widened
+  `translateForWire` EP-33 delivered and strips the same four metadata keys.
 
 
 ## Decision Log
