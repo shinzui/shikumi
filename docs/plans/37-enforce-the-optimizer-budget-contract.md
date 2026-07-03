@@ -54,7 +54,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] 2026-07-03: M1: `BudgetMeter` seam (`newBudgetMeter`, `tryCharge`, `meteredScore`,
       `selectBestMetered`, `withLmCallCount`) in Search.hs with unit tests
-- [ ] M2: rewire `instructionSearch`, `copro`, and `searchJoint` onto the meter
+- [x] 2026-07-03: M2: rewire `instructionSearch`, `copro`, and `searchJoint` onto the meter
       (replacing their hand-rolled counters), with the per-candidate cost corrected to
       `datasetSize × nodes`
 - [ ] M3: `labeledFewShotWith` (budget-parameterized) + metered scoring; back-compat

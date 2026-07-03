@@ -71,7 +71,7 @@ import Shikumi.Optimize.Propose
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
+import Shikumi.Optimize.Search (BudgetMeter, effectiveInstructionAt, freezeProgram, meteredScore, newBudgetMeter, setNodeInstrIfNew)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program
   ( Demo (..),
@@ -242,36 +242,54 @@ searchJoint ::
   [[[Demo]]] ->
   Eff es (Program i o)
 searchJoint cfg train metric student instrCands demoCands = do
+  meter <- newBudgetMeter (budget cfg)
+  searchJointWith meter cfg train metric student instrCands demoCands
+
+-- | Meter-aware implementation of 'searchJoint'. Later MIPRO phases share a meter
+-- with this helper so all three phases consume one budget.
+searchJointWith ::
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
+  BudgetMeter ->
+  Miprov2Config ->
+  Dataset i o ->
+  Metric o ->
+  Program i o ->
+  -- | per-node instruction candidates
+  [[Text]] ->
+  -- | per-node demo-set candidates
+  [[[Demo]]] ->
+  Eff es (Program i o)
+searchJointWith meter cfg train metric student instrCands demoCands = do
   let nNodes = length (foldParams student)
       dsSize = datasetSize train
       mbSize = max 1 (min dsSize (minibatchSize cfg))
-      maxCalls = maxLmCalls (budget cfg)
       apply = applyVec instrCands demoCands student
       baseVec = replicate nNodes (0, 0)
-  if dsSize > maxCalls
-    then pure (apply baseVec)
-    else do
-      baseFull <- scoreOn train metric (apply baseVec)
-      let screen _t calls acc [] = pure (reverse acc, calls)
-          screen t calls acc (v : vs)
-            | calls + mbSize > maxCalls = pure (reverse acc, calls)
-            | otherwise = do
-                s <- scoreOn (minibatchAt mbSize (t * 7 + length acc) train) metric (apply v)
-                screen t (calls + mbSize) ((v, s) : acc) vs
-          go t calls bestVec bestFull
+  mBaseFull <- meteredScore meter train metric (apply baseVec)
+  case mBaseFull of
+    Nothing -> pure (apply baseVec)
+    Just baseFull -> do
+      let screen _t acc [] = pure (reverse acc)
+          screen t acc (v : vs) = do
+            ms <- meteredScore meter (minibatchAt mbSize (t * 7 + length acc) train) metric (apply v)
+            case ms of
+              Nothing -> pure (reverse acc)
+              Just s -> screen t ((v, s) : acc) vs
+          go t bestVec bestFull
             | t >= numTrials cfg = pure bestVec
             | otherwise = do
-                (scored, calls1) <- screen t calls [] (oneCoordNeighbors instrCands demoCands bestVec)
+                scored <- screen t [] (oneCoordNeighbors instrCands demoCands bestVec)
                 case bestByScore scored of
                   Nothing -> pure bestVec
-                  Just propVec
-                    | calls1 + dsSize > maxCalls -> pure bestVec
-                    | otherwise -> do
-                        fs <- scoreOn train metric (apply propVec)
+                  Just propVec -> do
+                    mFull <- meteredScore meter train metric (apply propVec)
+                    case mFull of
+                      Nothing -> pure bestVec
+                      Just fs ->
                         if fs > bestFull
-                          then go (t + 1) (calls1 + dsSize) propVec fs
-                          else go (t + 1) (calls1 + dsSize) bestVec bestFull
-      best <- go 0 dsSize baseVec baseFull
+                          then go (t + 1) propVec fs
+                          else go (t + 1) bestVec bestFull
+      best <- go 0 baseVec baseFull
       pure (apply best)
 
 -- | Apply a joint vector to the student: set each node's instruction and demos to the

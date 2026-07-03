@@ -30,7 +30,7 @@ import Effectful.Prim (Prim)
 import GHC.Generics (Generic)
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
-import Shikumi.Eval (Dataset, Metric, datasetSize)
+import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize.Propose
   ( PastInstruction (..),
@@ -38,7 +38,7 @@ import Shikumi.Optimize.Propose
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
+import Shikumi.Optimize.Search (BudgetMeter, effectiveInstructionAt, freezeProgram, meteredScore, newBudgetMeter, setNodeInstrIfNew, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program (Program, foldParams)
 
@@ -62,16 +62,17 @@ defaultCoproConfig = CoproConfig {breadth = 4, depth = 3, budget = defaultBudget
 -- nodes, threading one running LM-call count so the 'Budget' bounds the whole search.
 copro :: (ToJSON i, ToJSON o) => CoproConfig -> Optimizer i o
 copro cfg = Optimizer $ \train metric student -> do
+  meter <- newBudgetMeter (budget cfg)
   let nNodes = length (foldParams student)
-  (final, _calls) <-
+  final <-
     foldM
-      (\acc idx -> optimizeNode cfg train metric idx acc)
-      (student, 0)
+      (\acc idx -> optimizeNode cfg meter train metric idx acc)
+      student
       [0 .. nNodes - 1]
   pure (freezeProgram final)
 
 -- | Optimize node @idx@ over @depth@ rounds. Returns the program with node @idx@ set
--- to its best-found instruction, plus the updated LM-call count. Each round proposes
+-- to its best-found instruction. Each round proposes
 -- @breadth - 1@ fresh candidates (plus the retained current instruction) via the
 -- grounded proposer fed the scored attempt history, scores the not-yet-seen ones on
 -- the whole training set, records @(instruction, best-score)@, and sets the node to
@@ -79,27 +80,26 @@ copro cfg = Optimizer $ \train metric student -> do
 optimizeNode ::
   (ToJSON i, ToJSON o, LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   CoproConfig ->
+  BudgetMeter ->
   Dataset i o ->
   Metric o ->
   Int ->
-  (Program i o, Int) ->
-  Eff es (Program i o, Int)
-optimizeNode cfg train metric idx (prog0, calls0) = goRound 1 prog0 calls0 []
+  Program i o ->
+  Eff es (Program i o)
+optimizeNode cfg meter train metric idx prog0 = goRound 1 prog0 []
   where
-    dsSize = datasetSize train
     bdth = max 2 (breadth cfg)
     dpth = max 1 (depth cfg)
     proposerCost = 4 + (bdth - 1)
-    maxCalls = maxLmCalls (budget cfg)
-    maxCands = maxCandidates (budget cfg)
 
-    goRound r prog calls evald
-      | r > dpth = pure (setBest prog evald, calls)
+    goRound r prog evald
+      | r > dpth = pure (setBest prog evald)
       | otherwise = do
           let cur = effectiveInstructionAt idx prog
               hist = [PastInstruction i s | (i, s) <- evald]
-          (cands, calls1) <-
-            if calls + proposerCost <= maxCalls
+          fitsProposer <- tryCharge meter proposerCost
+          cands <-
+            if fitsProposer
               then do
                 ProposeResult cs <-
                   proposeInstructions
@@ -114,22 +114,21 @@ optimizeNode cfg train metric idx (prog0, calls0) = goRound 1 prog0 calls0 []
                         tipIndex = 1,
                         viewBatch = 2
                       }
-                pure (cs, calls + proposerCost)
-              else pure ([cur], calls)
-          (evald', calls2) <- scoreNew prog calls1 evald (dedupNew evald cands)
+                pure cs
+              else pure [cur]
+          evald' <- scoreNew prog evald (dedupNew evald cands)
           -- set the node to the best instruction found so far, then continue
           let prog' = setBest prog evald'
-          goRound (r + 1) prog' calls2 evald'
+          goRound (r + 1) prog' evald'
 
-    -- Score the not-yet-evaluated candidates, threading the call count and stopping
+    -- Score the not-yet-evaluated candidates, using the shared meter and stopping
     -- before either Budget ceiling would be exceeded.
-    scoreNew _ calls evald [] = pure (evald, calls)
-    scoreNew prog calls evald (c : cs)
-      | calls + dsSize > maxCalls = pure (evald, calls)
-      | length evald >= maxCands = pure (evald, calls)
-      | otherwise = do
-          s <- scoreOn train metric (setNodeInstrIfNew idx c prog)
-          scoreNew prog (calls + dsSize) (evald ++ [(c, s)]) cs
+    scoreNew _ evald [] = pure evald
+    scoreNew prog evald (c : cs) = do
+      ms <- meteredScore meter train metric (setNodeInstrIfNew idx c prog)
+      case ms of
+        Nothing -> pure evald
+        Just s -> scoreNew prog (evald ++ [(c, s)]) cs
 
     -- Candidates not already scored, de-duplicated against each other (order-preserving).
     dedupNew evald = go (map fst evald)

@@ -20,7 +20,7 @@ import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
 import Shikumi.Program (Params (..), programParams)
-import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, runStubLMCounting, sentimentProg)
+import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, runStubLMCounting, sentimentPipeline, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -57,5 +57,18 @@ tests =
         count <- readIORef ref
         assertBool
           ("expected 0 < calls <= 6, got " <> show count)
-          (count > 0 && count <= 6)
+          (count > 0 && count <= 6),
+      testCase "charges scoring by dataset size times predict nodes" $ do
+        ref <- newIORef (0 :: Int)
+        let budget = Budget {maxLmCalls = 11, maxCandidates = 32}
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runStubLMCounting ref (optimize (instructionSearch 1 budget) trainset exactMatch sentimentPipeline)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        count <- readIORef ref
+        assertBool
+          ("expected 0 < calls <= 11 for two-node scoring, got " <> show count)
+          (count > 0 && count <= 11)
     ]

@@ -33,13 +33,12 @@ where
 
 import Control.Monad (foldM)
 import Data.Aeson (ToJSON)
-import Shikumi.Eval (datasetSize)
 import Shikumi.Optimize.Propose
   ( ProposeRequest (..),
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, meteredScore, newBudgetMeter, setNodeInstrIfNew, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
 import Shikumi.Program (foldParams)
 
@@ -47,29 +46,31 @@ import Shikumi.Program (foldParams)
 -- an explicit LM-call budget, using the grounded proposer to generate candidates.
 instructionSearch :: (ToJSON i, ToJSON o) => Int -> Budget -> Optimizer i o
 instructionSearch proposalsPerNode budget = Optimizer $ \train metric student -> do
-  let dsSize = datasetSize train
-      nNodes = length (foldParams student)
+  meter <- newBudgetMeter budget
+  let nNodes = length (foldParams student)
       -- The grounded proposer's fixed per-node LM-call cost (see module header).
       proposerCost = 4 + max 0 proposalsPerNode
 
-      -- Score candidate instructions for node @idx@, threading the call count and
+      -- Score candidate instructions for node @idx@, using the shared meter and
       -- the best-so-far; stop before the next scoring would exceed the budget.
-      scoreCands calls best idx prog cs = case cs of
-        [] -> pure (best, calls)
-        (c : rest)
-          | calls + dsSize > maxLmCalls budget -> pure (best, calls)
-          | otherwise -> do
-              s <- scoreOn train metric (setNodeInstrIfNew idx c prog)
+      scoreCands best idx prog cs = case cs of
+        [] -> pure best
+        (c : rest) -> do
+          ms <- meteredScore meter train metric (setNodeInstrIfNew idx c prog)
+          case ms of
+            Nothing -> pure best
+            Just s -> do
               let best' = case best of
                     Nothing -> Just (c, s)
                     Just (_, bs) -> if s > bs then Just (c, s) else best
-              scoreCands (calls + dsSize) best' idx prog rest
+              scoreCands best' idx prog rest
 
       -- Optimize one node, holding the others fixed.
-      stepNode (prog, calls) idx = do
+      stepNode prog idx = do
         let curInstr = effectiveInstructionAt idx prog
-        (cands, calls1) <-
-          if calls + proposerCost <= maxLmCalls budget
+        fitsProposer <- tryCharge meter proposerCost
+        cands <-
+          if fitsProposer
             then do
               ProposeResult cs <-
                 proposeInstructions
@@ -84,10 +85,10 @@ instructionSearch proposalsPerNode budget = Optimizer $ \train metric student ->
                       tipIndex = 0,
                       viewBatch = 2
                     }
-              pure (cs, calls + proposerCost)
-            else pure ([curInstr], calls)
-        (best, calls2) <- scoreCands calls1 Nothing idx prog cands
-        pure (setNodeInstrIfNew idx (maybe curInstr fst best) prog, calls2)
+              pure cs
+            else pure [curInstr]
+        best <- scoreCands Nothing idx prog cands
+        pure (setNodeInstrIfNew idx (maybe curInstr fst best) prog)
 
-  (final, _) <- foldM stepNode (student, 0) [0 .. nNodes - 1]
+  final <- foldM stepNode student [0 .. nNodes - 1]
   pure (freezeProgram final)
