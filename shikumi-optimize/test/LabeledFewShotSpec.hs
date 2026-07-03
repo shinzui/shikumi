@@ -9,6 +9,7 @@
 -- is a perfect 1.0.
 module LabeledFewShotSpec (tests) where
 
+import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -20,7 +21,7 @@ import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
 import Shikumi.Program (Demo, Params (..), programParams)
-import StubLM (Label (..), Sentence (..), runStubLM, sentimentProg)
+import StubLM (Label (..), Sentence (..), runStubLM, runStubLMCounting, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -70,5 +71,16 @@ tests =
               (maximum candScores > minimum candScores)
             assertBool
               ("best candidate should be perfect, got " <> show chosenScore)
-              (chosenScore == 1.0)
+              (chosenScore == 1.0),
+      testCase "labeledFewShotWith respects maxLmCalls while scoring candidates" $ do
+        ref <- newIORef (0 :: Int)
+        let budget = Budget {maxLmCalls = 6, maxCandidates = 100}
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runStubLMCounting ref (optimize (labeledFewShotWith budget 2) trainset exactMatch sentimentProg)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        count <- readIORef ref
+        assertBool ("expected 0 < calls <= 6, got " <> show count) (count > 0 && count <= 6)
     ]

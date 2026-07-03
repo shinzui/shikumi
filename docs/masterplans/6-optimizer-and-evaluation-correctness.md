@@ -197,7 +197,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-36: M4 — GEPA reflects on the effective instruction
 - [x] EP-36: M5 — fixture diversification (non-empty signature instruction, two-node pipeline) and acceptance suite green
 - [x] EP-37: M1 — BudgetMeter seam in Search.hs; instructionSearch/copro/searchJoint rewired
-- [ ] EP-37: M2 — labeledFewShot budget parameterization
+- [x] EP-37: M2 — labeledFewShot budget parameterization
 - [ ] EP-37: M3 — MIPROv2 phases 1–2 metered
 - [ ] EP-37: M4 — GEPA seed-eval gate
 - [ ] EP-37: M5 — bootstrap and random-search metering

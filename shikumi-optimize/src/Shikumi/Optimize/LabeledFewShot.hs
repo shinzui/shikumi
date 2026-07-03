@@ -9,6 +9,7 @@
 -- reproducible run to run — the tests rely on this.
 module Shikumi.Optimize.LabeledFewShot
   ( labeledFewShot,
+    labeledFewShotWith,
     labeledCandidateSets,
     withDemos,
   )
@@ -18,16 +19,21 @@ import Control.Lens ((&), (.~))
 import Data.Aeson (ToJSON, toJSON)
 import Data.Generics.Labels ()
 import Shikumi.Eval (Dataset, Example (..), datasetExamples)
-import Shikumi.Optimize.Search (freezeProgram, scoreOn, selectBest)
-import Shikumi.Optimize.Types (Optimizer (..), Scored (..), defaultBudget)
+import Shikumi.Optimize.Search (freezeProgram, meteredScore, newBudgetMeter, selectBestMetered)
+import Shikumi.Optimize.Types (Budget, Optimizer (..), Scored (..), defaultBudget)
 import Shikumi.Program (Demo (..), Program, mapParams)
 
 -- | Select the best size-@k@ set of labelled demonstrations from the training set.
 -- Multi-node programs receive the same demo set at every node (the DSPy default).
 labeledFewShot :: (ToJSON i, ToJSON o) => Int -> Optimizer i o
-labeledFewShot k = Optimizer $ \train metric prog -> do
+labeledFewShot = labeledFewShotWith defaultBudget
+
+-- | Select the best size-@k@ labelled demo set under an explicit budget.
+labeledFewShotWith :: (ToJSON i, ToJSON o) => Budget -> Int -> Optimizer i o
+labeledFewShotWith budget k = Optimizer $ \train metric prog -> do
+  meter <- newBudgetMeter budget
   let sets = labeledCandidateSets k train
-  best <- selectBest defaultBudget (\ds -> scoreOn train metric (withDemos ds prog)) sets
+  best <- selectBestMetered meter (\ds -> meteredScore meter train metric (withDemos ds prog)) sets
   pure $ case best of
     Nothing -> freezeProgram prog
     Just sc -> freezeProgram (withDemos (candidate sc) prog)

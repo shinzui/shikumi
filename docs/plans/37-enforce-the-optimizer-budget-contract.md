@@ -57,7 +57,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: M2: rewire `instructionSearch`, `copro`, and `searchJoint` onto the meter
       (replacing their hand-rolled counters), with the per-candidate cost corrected to
       `datasetSize × nodes`
-- [ ] M3: `labeledFewShotWith` (budget-parameterized) + metered scoring; back-compat
+- [x] 2026-07-03: M3: `labeledFewShotWith` (budget-parameterized) + metered scoring; back-compat
       `labeledFewShot`
 - [ ] M4: MIPROv2 phases 1–2 metered (teacher runs, proposer calls) sharing one meter
       with phase 3
@@ -74,7 +74,12 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: M3's labelled-few-shot budget test uses the existing 4-example fixture
+  rather than creating a separate 6-example fixture. Under the old unbudgeted
+  `labeledFewShot 2` path this fixture scores all 6 size-2 demo sets, which is 24
+  LM completions. The new `labeledFewShotWith (Budget { maxLmCalls = 6,
+  maxCandidates = 100 }) 2` test stops after one 4-call scoring evaluation and
+  asserts the actual counter is `<= 6`.
 
 
 ## Decision Log
