@@ -27,13 +27,14 @@ import Control.Lens ((^.))
 import Data.Aeson (FromJSON, ToJSON, Value, eitherDecode, encode)
 import Data.ByteString.Lazy qualified as BL
 import Data.Generics.Labels ()
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Shikumi.Cache.Key (CacheKey (..))
-import Shikumi.Trace (SpanKind (LlmCallSpan), TraceTree (..))
+import Shikumi.Trace (SpanId (..), SpanKind (LlmCallSpan), TraceTree (..))
 import System.Directory (renameFile)
 
 -- | The on-disk wrapper: a format version plus the tree. Bump
@@ -79,13 +80,30 @@ readTraceFile path = do
 
 -- | The replay index: every LM-call span's content-addressed key mapped to its
 -- recorded response JSON. A span missing either its @cacheKey@ or its @response@
--- contributes nothing.
-replayIndex :: TraceTree -> Map CacheKey Value
+-- contributes nothing. Duplicate keys are legal only when every occurrence
+-- recorded the same response; differing responses mean replay is not
+-- deterministic, so index construction fails closed.
+replayIndex :: TraceTree -> Either Text (Map CacheKey Value)
 replayIndex t =
-  Map.fromList
-    [ (CacheKey ck, v)
-    | s <- Map.elems (spans t),
-      (s ^. #kind) == LlmCallSpan,
-      Just ck <- [s ^. #attrs . #cacheKey],
-      Just v <- [s ^. #attrs . #response]
-    ]
+  case conflicts of
+    [] -> Right (Map.map (snd . NE.head) grouped)
+    cs -> Left (T.intercalate "; " (map describe cs))
+  where
+    occurrences =
+      [ (CacheKey ck, (s ^. #spanId, v))
+      | s <- Map.elems (spans t),
+        (s ^. #kind) == LlmCallSpan,
+        Just ck <- [s ^. #attrs . #cacheKey],
+        Just v <- [s ^. #attrs . #response]
+      ]
+    grouped = Map.fromListWith (<>) [(k, NE.singleton sv) | (k, sv) <- occurrences]
+    conflicts =
+      [ (k, NE.toList svs)
+      | (k, svs) <- Map.toList grouped,
+        length (NE.nub (fmap snd svs)) > 1
+      ]
+    describe (CacheKey k, svs) =
+      "replay index conflict: cache key "
+        <> k
+        <> " was recorded with differing responses by spans "
+        <> T.intercalate ", " [sid | (SpanId sid, _) <- svs]

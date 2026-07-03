@@ -34,6 +34,7 @@ import Shikumi.Program
     TempSchedule (TempFixed),
     foldParams,
     mapParamsAt,
+    runProgram,
   )
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
@@ -177,10 +178,35 @@ storeTests =
             Right _ -> assertFailure "expected Left on a foreign formatVersion",
       testCase "replayIndex maps each llm-call cacheKey to its response" $ do
         tree <- buildTree
-        let idx = replayIndex tree
+        idx <- replayIndexOrFail tree
         -- two LM-call leaves with distinct requests => two distinct keys.
         Map.size idx @?= 2
         assertBool "every indexed value is a JSON object (a recorded response)" (all isObject (Map.elems idx)),
+      testCase "duplicate keys with equal responses dedupe" $ do
+        let tree = duplicateKeyTree (object ["text" .= ("same" :: Text)]) (object ["text" .= ("same" :: Text)])
+        idx <- replayIndexOrFail tree
+        Map.size idx @?= 1,
+      testCase "duplicate keys with conflicting responses fail closed" $ do
+        let tree = duplicateKeyTree (object ["text" .= ("first" :: Text)]) (object ["text" .= ("second" :: Text)])
+        case replayIndex tree of
+          Left msg -> do
+            assertBool "message names the key" ("dup-key" `T.isInfixOf` msg)
+            assertBool "message names span-1" ("span-1" `T.isInfixOf` msg)
+            assertBool "message names span-2" ("span-2" `T.isInfixOf` msg)
+          Right _ -> assertFailure "expected conflicting duplicate keys to fail closed",
+      testCase "majorityVote over identical requests replays" $ do
+        (live, tree) <-
+          runEff . runPrim . runTime . runTrace . runFixedLLM cellResp . tracedLLM . runErrorNoCallStack @ShikumiError $
+            runProgram (majorityVote 3 (TempFixed []) (predict cellSig)) (Cell "x")
+        case live of
+          Left e -> assertFailure ("live majorityVote failed: " <> show e)
+          Right liveOut -> do
+            idx <- replayIndexOrFail tree
+            Map.size idx @?= 1
+            replayed <-
+              runEff . runLLMReplay idx . runErrorNoCallStack @ShikumiError $
+                runProgram (majorityVote 3 (TempFixed []) (predict cellSig)) (Cell "x")
+            replayed @?= Right liveOut,
       testCase "cacheKey reproduces EP-6's pinned digest (integration point #7)" $ do
         let CacheKey hex = Key.cacheKey fixModel fixCtx fixOpts
         hex @?= pinnedKey
@@ -210,7 +236,7 @@ replayTests =
           let p = dir <> "/trace.json"
           writeTraceFile p tree
           Right tree' <- readTraceFile p
-          let idx = replayIndex tree'
+          idx <- replayIndexOrFail tree'
           -- (4) replay the SAME pipeline; the counting provider must not be hit.
           writeIORef calls 0
           replayed <- runEff . runLLMReplay idx $ twoStage "the article"
@@ -227,7 +253,7 @@ replayTests =
           let p = dir <> "/trace.json"
           writeTraceFile p tree
           Right tree' <- readTraceFile p
-          let idx = replayIndex tree'
+          idx <- replayIndexOrFail tree'
           -- A different article => a first-stage key that was never recorded.
           res <- try (runEff . runLLMReplay idx $ twoStage "a different article")
           case res of
@@ -260,7 +286,7 @@ e2eTests =
           let p = dir <> "/trace.json"
           writeTraceFile p tree
           Right tree' <- readTraceFile p
-          let idx = replayIndex tree'
+          idx <- replayIndexOrFail tree'
           writeIORef calls 0
           (replayFinal, _) <- runEff . runPrim . runTime . runTrace . runLLMReplay idx $ demoPipeline demoArticle
           replayCalls <- readIORef calls
@@ -328,6 +354,40 @@ isObject :: Value -> Bool
 isObject v = case v of
   Object {} -> True
   _ -> False
+
+replayIndexOrFail :: TraceTree -> IO (Map.Map CacheKey Value)
+replayIndexOrFail tree =
+  either (assertFailure . T.unpack) pure (replayIndex tree)
+
+duplicateKeyTree :: Value -> Value -> TraceTree
+duplicateKeyTree firstResp secondResp =
+  let rootSpan =
+        Span
+          { spanId = SpanId "span-0",
+            parent = Nothing,
+            kind = ProgramSpan,
+            label = "root",
+            startedAt = baseTime,
+            endedAt = Just (addUTCTime 1 baseTime),
+            attrs = emptyAttrs
+          }
+      child :: Int -> Value -> Span
+      child n resp =
+        Span
+          { spanId = SpanId ("span-" <> T.pack (show n)),
+            parent = Just (SpanId "span-0"),
+            kind = LlmCallSpan,
+            label = "llm-call",
+            startedAt = addUTCTime (fromIntegral n) baseTime,
+            endedAt = Just (addUTCTime (fromIntegral n + 1) baseTime),
+            attrs =
+              emptyAttrs
+                { cacheKey = Just "dup-key",
+                  response = Just resp
+                }
+          }
+      ss = [rootSpan, child 1 firstResp, child 2 secondResp]
+   in TraceTree (SpanId "span-0") (Map.fromList [(spanId s, s) | s <- ss])
 
 -- ---------------------------------------------------------------------------
 -- A small generator of random trees for the round-trip property

@@ -4,7 +4,7 @@ slug: replay-divergence-detection-and-trace-concurrency-safety
 title: "Replay Divergence Detection and Trace Concurrency Safety"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeamsehst07eh4n7kp8a7"
 master_plan: "docs/masterplans/7-cache-trace-and-replay-hardening.md"
 ---
 
@@ -33,9 +33,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Confirm plan 40 is Complete (v2 key landed; both pinned digests updated)
-- [ ] M1: `replayIndex` returns `Either Text (Map CacheKey Value)`; equal duplicates dedupe, conflicting duplicates fail closed
-- [ ] M1: all four call sites updated (Demo, jitsurei TraceReplay, cli Runtime, trace tests); duplicate-key tests added
+- [x] 2026-07-03: Confirm plan 40 is Complete (v2 key landed; both pinned digests updated)
+- [x] 2026-07-03: M1: `replayIndex` returns `Either Text (Map CacheKey Value)`; equal duplicates dedupe, conflicting duplicates fail closed
+- [x] 2026-07-03: M1: all four call sites updated (Demo, jitsurei TraceReplay, cli Runtime, trace tests); duplicate-key tests added
 - [ ] M2: all `TraceState` mutations atomic; `closeSpan` verifies its pop; concurrency contract documented on `runTrace` and `runCurrentNode`
 - [ ] M3: `renderTree` renders every parentless root (forest)
 - [ ] M3: `runProgramTraced` bumps retries on re-attempts; retry-count test with a fail-once stub
@@ -317,7 +317,7 @@ Commit per milestone with conventional-commit subjects (e.g. `fix(trace): fail c
 ```text
 MasterPlan: docs/masterplans/7-cache-trace-and-replay-hardening.md
 ExecPlan: docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeamsehst07eh4n7kp8a7
 ```
 
 

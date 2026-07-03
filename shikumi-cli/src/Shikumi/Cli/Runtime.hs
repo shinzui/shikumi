@@ -36,7 +36,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Effectful.Prim (Prim, runPrim)
 import Shikumi.Effect.Time (Time, runTime)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
 import Shikumi.Trace (SpanKind (ProgramSpan), TraceTree, runTrace, tracedLLM, withSpan)
@@ -80,7 +80,9 @@ runReplayProgram ::
   i ->
   IO (Either ShikumiError o)
 runReplayProgram tree prog input =
-  runEff . runErrorNoCallStack . runLLMReplay (replayIndex tree) $ runProgram prog input
+  case replayIndex tree of
+    Left err -> pure (Left (InvalidJSON ("replay index error: " <> err)))
+    Right idx -> runEff . runErrorNoCallStack . runLLMReplay idx $ runProgram prog input
 
 -- | Record a trace: run the program on its canonical input under the stub LM and
 -- EP-7's capturing interpose, wrapping the whole run in a named program span.

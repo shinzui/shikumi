@@ -133,10 +133,12 @@ replayMode path = do
   case loaded of
     Left err -> TIO.putStrLn ("trace load error: " <> err)
     Right tree -> do
-      let idx = replayIndex tree
-      (critique, _) <- runEff . runPrim . runTime . runTrace . runLLMReplay idx $ demoPipeline demoArticle
-      TIO.putStrLn ("FINAL: " <> critique)
-      TIO.putStrLn "provider calls: 0"
+      case replayIndex tree of
+        Left err -> TIO.putStrLn ("replay index error: " <> err)
+        Right idx -> do
+          (critique, _) <- runEff . runPrim . runTime . runTrace . runLLMReplay idx $ demoPipeline demoArticle
+          TIO.putStrLn ("FINAL: " <> critique)
+          TIO.putStrLn "provider calls: 0"
 
 -- ---------------------------------------------------------------------------
 -- helpers

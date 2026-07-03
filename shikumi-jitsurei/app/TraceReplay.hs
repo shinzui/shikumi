@@ -94,7 +94,10 @@ main = withSystemTempDirectory "shikumi-jitsurei" $ \dir -> do
   case loaded of
     Left err -> TIO.putStrLn ("[replay] could not read trace: " <> err)
     Right tree' -> do
-      replayed <-
-        runEff . runErrorNoCallStack @ShikumiError . runLLMReplay (replayIndex tree') $
-          runProgram qa input
-      putStrLn $ "\n[replay] from trace only -> " <> show replayed
+      case replayIndex tree' of
+        Left err -> TIO.putStrLn ("[replay] index error: " <> err)
+        Right idx -> do
+          replayed <-
+            runEff . runErrorNoCallStack @ShikumiError . runLLMReplay idx $
+              runProgram qa input
+          putStrLn $ "\n[replay] from trace only -> " <> show replayed

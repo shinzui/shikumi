@@ -43,7 +43,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 |---|-------|------|-----------|-----------|--------|
 | 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
 | 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Complete |
-| 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Not Started |
+| 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | In Progress |
 | 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -81,7 +81,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-41: M1 — shared `CacheConfig` and TTL-aware `cachedLLMWith`; never-cache-error guard
 - [x] EP-41: M2 — best-effort posture at all four backends (SQLite no longer crashes); Postgres leak fixed; SQLite WAL/busy_timeout
 - [x] EP-41: M3 — degradation/TTL/corrupt-row tests green; redis/postgres skips loud
-- [ ] EP-42: M1 — replay index fails closed on conflicting duplicate keys (tests included)
+- [x] EP-42: M1 — replay index fails closed on conflicting duplicate keys (tests included)
 - [ ] EP-42: M2 — trace state atomic + loud stack-corruption check; concurrency contract documented
 - [ ] EP-42: M3 — tail: multi-root rendering, live `bumpRetry`, numeric sibling ordering, v1 trace files accepted
 - [ ] EP-43: M1 — provider released on export exception (bracket)
