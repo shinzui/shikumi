@@ -36,7 +36,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: Confirm plan 40 is Complete (v2 key landed; both pinned digests updated)
 - [x] 2026-07-03: M1: `replayIndex` returns `Either Text (Map CacheKey Value)`; equal duplicates dedupe, conflicting duplicates fail closed
 - [x] 2026-07-03: M1: all four call sites updated (Demo, jitsurei TraceReplay, cli Runtime, trace tests); duplicate-key tests added
-- [ ] M2: all `TraceState` mutations atomic; `closeSpan` verifies its pop; concurrency contract documented on `runTrace` and `runCurrentNode`
+- [x] 2026-07-03: M2: all `TraceState` mutations atomic; `closeSpan` verifies its pop; concurrency contract documented on `runTrace` and `runCurrentNode`
 - [ ] M3: `renderTree` renders every parentless root (forest)
 - [ ] M3: `runProgramTraced` bumps retries on re-attempts; retry-count test with a fail-once stub
 - [ ] M3: `childrenOf` numeric sibling ordering; ≥10-siblings test

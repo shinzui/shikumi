@@ -109,6 +109,10 @@ localNode p act = send (LocalNode p act)
 -- shared, an 'askNode' issued from a lower interpose ('tracedNodeLLM') sees the
 -- value a higher 'localNode' set, which is exactly how a model call is correlated
 -- to its issuing node.
+--
+-- The cell is dynamically scoped for sequential execution. Do not compose
+-- 'runCurrentNode'\/'tracedNodeLLM' with 'Shikumi.Program.runProgramConc': sibling
+-- branches would share one mutable current-node slot and could mis-scope paths.
 runCurrentNode :: (Prim :> es) => Eff (CurrentNode : es) a -> Eff es a
 runCurrentNode act = do
   ref <- newIORef Nothing

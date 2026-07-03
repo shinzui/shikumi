@@ -79,7 +79,6 @@ import Effectful.Prim (Prim)
 import Effectful.Prim.IORef
   ( IORef,
     atomicModifyIORef',
-    modifyIORef',
     newIORef,
     readIORef,
   )
@@ -246,6 +245,11 @@ data TraceState = TraceState
 -- open-ended @IOE@ is needed here — only in-process mutation), and span
 -- timestamps come from shikumi's own 'Time' effect. Both are discharged at the
 -- program edge by 'runPrim' and 'runTime'.
+--
+-- The span stack is sequential: use 'Shikumi.Program.runProgram' with
+-- 'tracedLLM', not 'Shikumi.Program.runProgramConc'. State writes are atomic so a
+-- concurrent send cannot tear the span map, but a concurrent close that violates
+-- stack order now fails loudly instead of recording a silently wrong tree.
 runTrace :: (Prim :> es, Time :> es) => Eff (Trace : es) a -> Eff es (a, TraceTree)
 runTrace act = do
   st <- newTraceState
@@ -280,26 +284,42 @@ openSpan st k lbl = do
   par <- safeHead <$> readIORef (st ^. #stack)
   now <- getCurrentTime
   let s = Span sid par k lbl now Nothing emptyAttrs
-  modifyIORef' (st ^. #spans) (at sid ?~ s)
-  modifyIORef' (st ^. #stack) (sid :)
+  atomicModifyIORef' (st ^. #spans) (\m -> (m & at sid ?~ s, ()))
+  atomicModifyIORef' (st ^. #stack) (\stk -> (sid : stk, ()))
   case par of
-    Nothing -> modifyIORef' (st ^. #root) (Just . fromMaybe sid)
+    Nothing -> atomicModifyIORef' (st ^. #root) (\r -> (Just (fromMaybe sid r), ()))
     Just _ -> pure ()
   pure sid
 
--- | Close a span: stamp its 'endedAt' and pop it off the stack.
+-- | Close a span: stamp its 'endedAt' and pop it off the stack. The pop is
+-- verified because 'withSpan' brackets guarantee LIFO close order in sequential
+-- execution. Popping anything else means unsupported concurrent trace mutation,
+-- so fail loudly instead of corrupting the trace.
 closeSpan :: (Prim :> es, Time :> es) => TraceState -> SpanId -> Eff es ()
 closeSpan st sid = do
   now <- getCurrentTime
-  modifyIORef' (st ^. #spans) (ix sid . #endedAt ?~ now)
-  modifyIORef' (st ^. #stack) (drop 1)
+  atomicModifyIORef' (st ^. #spans) (\m -> (m & ix sid . #endedAt ?~ now, ()))
+  popped <- atomicModifyIORef' (st ^. #stack) $ \case
+    top : rest -> (rest, Just top)
+    [] -> ([], Nothing)
+  case popped of
+    Just top | top == sid -> pure ()
+    _ ->
+      error
+        ( "Shikumi.Trace.runTrace: span stack corrupted (closing "
+            <> show sid
+            <> " but popped "
+            <> show popped
+            <> "). runTrace supports sequential execution only; do not compose "
+            <> "tracedLLM/tracedNodeLLM with runProgramConc."
+        )
 
 -- | Apply a function to the active span's attributes (a no-op with no active span).
 modifyActive :: (Prim :> es) => TraceState -> (SpanAttrs -> SpanAttrs) -> Eff es ()
 modifyActive st f = do
   stk <- readIORef (st ^. #stack)
   case stk of
-    (sid : _) -> modifyIORef' (st ^. #spans) (ix sid . #attrs %~ f)
+    (sid : _) -> atomicModifyIORef' (st ^. #spans) (\m -> (m & ix sid . #attrs %~ f, ()))
     [] -> pure ()
 
 -- | Freeze the building state into an immutable 'TraceTree'.
@@ -322,6 +342,10 @@ safeHead (x : _) = Just x
 -- fill the span's attributes from the returned 'Response' (and the request). The
 -- streaming op is wrapped in a span but its attributes are left empty (streams
 -- carry the same data incrementally; the demo/replay path uses 'complete').
+--
+-- This capture uses 'runTrace'\'s sequential span stack. Compose it with
+-- 'Shikumi.Program.runProgram'; concurrent program execution is intentionally
+-- outside the current trace builder's contract.
 tracedLLM :: (Trace :> es, LLM :> es) => Eff es a -> Eff es a
 tracedLLM = interpose $ \_ -> \case
   Complete m c o -> withSpan LlmCallSpan (llmLabel m) $ do
