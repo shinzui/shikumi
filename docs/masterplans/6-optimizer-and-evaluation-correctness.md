@@ -95,7 +95,7 @@ suite, and the seeding fix is urgent while the budget work is not.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |----|-------|------|-----------|-----------|--------|
-| 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | In Progress |
+| 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | Complete |
 | 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | Not Started |
 | 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Not Started |
 | 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Not Started |
@@ -273,7 +273,11 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+- 2026-07-03: EP-36 is complete. The optimizer package now has shared effective
+  instruction helpers, instructionSearch/COPRO/MIPROv2/GEPA all seed from the runtime
+  effective instruction, MIPROv2's baseline vector preserves existing demos, and the
+  acceptance suite covers solved signature instructions plus two-node programs. Full
+  workspace validation passed with `cabal test all`.
 
 
 ## Revision Notes
@@ -283,3 +287,7 @@ Compare the result against the original vision.
   versus this initiative's package-local fixtures). Reason: master plan 9 and its
   children were authored in parallel with this plan, so the fixture seam was documented
   on only one side; the affected child plans carry matching Decision Log entries.
+
+- 2026-07-03: Marked EP-36 complete and recorded its validation outcome. Reason:
+  `docs/plans/36-fix-optimizer-instruction-seeding.md` was implemented through all
+  milestones and `cabal test all` passed.

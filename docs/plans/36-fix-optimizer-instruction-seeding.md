@@ -180,7 +180,21 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Completed on 2026-07-03. The optimizer package now treats a node's current instruction
+as the runtime-effective instruction: an override when present, otherwise the
+signature's base instruction. `Shikumi.Optimize.Search` owns the shared
+`effectiveInstructionAt` and `setNodeInstrIfNew` helpers, and instructionSearch, COPRO,
+MIPROv2, and GEPA all use them on the relevant read/write paths.
+
+The acceptance suite now includes solved-signature regression tests, MIPROv2 baseline
+and demo-candidate tests, a GEPA reflection prompt capture test, and multi-node
+pipeline coverage proving the first node can be optimized without disturbing the echo
+node's effective instruction. The implementation also fixed a GEPA equal-score artifact
+tie: later children no longer replace an earlier candidate unless their aggregate score
+strictly improves.
+
+Validation completed with `cabal test shikumi-optimize` reporting `All 56 tests passed`
+and `cabal test all` passing across the workspace.
 
 
 ## Context and Orientation
@@ -651,3 +665,7 @@ it was skipped) in the master plan's Surprises & Discoveries section.
   and the matching Decision Log entry. Reason: master plan 9 and its children were
   authored in parallel with this plan, so the fixture seam was documented on only one
   side.
+
+- 2026-07-03: Recorded implementation completion, validation evidence, and the GEPA
+  equal-score tie decision. Reason: all milestones are complete and `cabal test all`
+  passed after the final multi-node acceptance work.
