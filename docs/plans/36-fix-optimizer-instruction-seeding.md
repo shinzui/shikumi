@@ -62,9 +62,10 @@ This section must always reflect the actual current state of the work.
       `COPRO.hs` at the new helpers; added failing-before tests for both in
       `shikumi-optimize/test/SeedingSpec.hs`; `cabal test shikumi-optimize` passed
       with 48 tests after the fix.
-- [ ] M3: fix MIPROv2 — effective-instruction seeding, per-node original demos as demo
-      candidate 0, identity `applyVec` at the base vector; failing-before test plus a
-      `bootstrapDemoCandidates` unit test
+- [x] M3 completed 2026-07-03 — fixed MIPROv2 effective-instruction seeding, per-node
+      original demos as demo candidate 0, and identity `applyVec` behavior at the base
+      vector; added a failing-before test plus a `bootstrapDemoCandidates` unit test;
+      `cabal test shikumi-optimize` passed with 50 tests after the fix.
 - [ ] M4: GEPA reflects on the effective instruction; capturing-stub test
 - [ ] M5: fixture diversification — `ruled` (non-empty signature instruction) and
       `sentimentPipeline` (two-node) fixtures in StubLM; multi-node acceptance tests
@@ -91,6 +92,12 @@ implementation. Provide concise evidence.
   1.0` and `copro: expected 0.0 >= 1.0`, showing both optimizers blanked a solved
   signature instruction. After switching both read paths to `effectiveInstructionAt`
   and writes to `setNodeInstrIfNew`, the same suite reported `All 48 tests passed`.
+
+- 2026-07-03: The M3 MIPROv2 tests failed before the source fix with `miprov2:
+  expected 0.0 >= 1.0` and with demo candidate 0 equal to `[]` instead of the node's
+  existing demos. After making demo candidate 0 the current demos, seeding proposals
+  from `effectiveInstructionAt`, and applying instructions through `setNodeInstrIfNew`,
+  the suite reported `All 50 tests passed`.
 
 
 ## Decision Log

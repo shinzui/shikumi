@@ -193,7 +193,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-36: M1 — effective-instruction helpers in Search.hs, unit-tested
 - [x] EP-36: M2 — instructionSearch and COPRO seed from the effective instruction
-- [ ] EP-36: M3 — MIPROv2 baseline/applyVec preserve the student; original demos are a candidate
+- [x] EP-36: M3 — MIPROv2 baseline/applyVec preserve the student; original demos are a candidate
 - [ ] EP-36: M4 — GEPA reflects on the effective instruction
 - [ ] EP-36: M5 — fixture diversification (non-empty signature instruction, two-node pipeline) and acceptance suite green
 - [ ] EP-37: M1 — BudgetMeter seam in Search.hs; instructionSearch/copro/searchJoint rewired

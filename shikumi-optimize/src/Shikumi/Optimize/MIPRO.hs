@@ -5,8 +5,9 @@
 -- one node at a time, MIPROv2 searches /both/ axes — instruction × demo set — across
 -- all nodes jointly, in three phases:
 --
---   1. __bootstrap__ candidate demo sets (per node) from the teacher's passing runs
---      plus the labelled training pairs ('bootstrapDemoCandidates');
+--   1. __bootstrap__ candidate demo sets (per node), retaining the node's current
+--      demos at index 0, then adding the empty set, teacher passing runs, and the
+--      labelled training pairs ('bootstrapDemoCandidates');
 --   2. __propose__ candidate instructions (per node) through EP-19's grounded
 --      proposer ('proposeInstructionCandidates'); and
 --   3. __search__ the joint @(instruction × demoset)@ grid with cheap minibatch
@@ -44,7 +45,6 @@ where
 import Control.Monad (forM)
 import Data.Aeson (ToJSON)
 import Data.Aeson.Text (encodeToLazyText)
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text.Lazy qualified as TL
 import Effectful (Eff, (:>))
@@ -71,7 +71,7 @@ import Shikumi.Optimize.Propose
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (freezeProgram, scoreOn)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program
   ( Demo (..),
@@ -95,7 +95,7 @@ data Miprov2Auto = Miprov2Light | Miprov2Medium | Miprov2Heavy
 data Miprov2Config = Miprov2Config
   { -- | instruction candidates proposed per node (incl. the current at index 0)
     numInstructCandidates :: !Int,
-    -- | demo-set candidates per node (incl. the empty set at index 0)
+    -- | demo-set candidates per node (incl. the node's current demos at index 0)
     numDemoCandidates :: !Int,
     -- | minibatch trials the search performs
     numTrials :: !Int,
@@ -144,12 +144,10 @@ miprov2With cfg teacher = Optimizer $ \train metric student -> do
 -- ---------------------------------------------------------------------------
 
 -- | For each node (in @foldParams@ order), a list of candidate demo sets. Candidate
--- 0 is always the empty set (so "no demos" is always reachable). The remaining sets
--- come from the teacher's metric-passing runs (bootstrapped) and from the labelled
--- training pairs (labelled demos, DSPy's @max_labeled_demos@) — recovered at the
--- program-I/O level and attached to every node (the documented degradation while
--- per-node trace recovery via EP-16 is deferred; for single-node programs the two
--- coincide).
+-- 0 is the node's current demos, making the baseline vector an identity. The empty
+-- set remains reachable after that, followed by teacher metric-passing runs
+-- (bootstrapped) and labelled training pairs (DSPy's @max_labeled_demos@) recovered at
+-- the program-I/O level and attached to every node.
 bootstrapDemoCandidates ::
   (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es) =>
   Miprov2Config ->
@@ -173,9 +171,11 @@ bootstrapDemoCandidates cfg teacher train metric student = do
   let cap = max 1 (maxBootstrappedDemos cfg)
       labeledSet = take cap (map (\(Example i o) -> recoverDemo i o) exs)
       bootSet = take cap bootstrapped
-      sets = take (max 1 (numDemoCandidates cfg)) ([] : filter (not . null) [labeledSet, bootSet])
-      nNodes = length (foldParams student)
-  pure (replicate nNodes sets)
+      nodeSets ps =
+        take
+          (max 1 (numDemoCandidates cfg))
+          (dedup (demos ps : [] : filter (not . null) [labeledSet, bootSet]))
+  pure (map nodeSets (foldParams student))
 
 -- ---------------------------------------------------------------------------
 -- Phase 2 — propose instruction candidates
@@ -193,8 +193,8 @@ proposeInstructionCandidates ::
   [[[Demo]]] ->
   Eff es [[Text]]
 proposeInstructionCandidates cfg student train demoCands =
-  forM (zip3 [0 ..] (foldParams student) demoCands) $ \(k, ps, nodeDemoSets) -> do
-    let curInstr = fromMaybe "" (instructionOverride ps)
+  forM (zip [0 ..] demoCands) $ \(k, nodeDemoSets) -> do
+    let curInstr = effectiveInstructionAt k student
         demoTexts = map renderDemo (concat (take 1 (filter (not . null) nodeDemoSets)))
     ProposeResult cs <-
       proposeInstructions
@@ -275,20 +275,22 @@ searchJoint cfg train metric student instrCands demoCands = do
       pure (apply best)
 
 -- | Apply a joint vector to the student: set each node's instruction and demos to the
--- selected candidates.
+-- selected candidates. Index 0 on either axis is an identity by construction.
 applyVec :: [[Text]] -> [[[Demo]]] -> Program i o -> JointVec -> Program i o
 applyVec instrCands demoCands prog vec = foldl step prog (zip [0 ..] vec)
   where
     step p (k, (i, d)) =
-      mapParamsAt
-        k
-        ( \ps ->
-            ps
-              { instructionOverride = Just (instrCands !! k !! i),
-                demos = demoCands !! k !! d
-              }
-        )
-        p
+      setNodeInstrIfNew k (instrCands !! k !! i) $
+        mapParamsAt k (\ps -> ps {demos = demoCands !! k !! d}) p
+
+-- | Order-preserving de-duplication.
+dedup :: (Eq a) => [a] -> [a]
+dedup = go []
+  where
+    go _ [] = []
+    go seen (x : xs)
+      | x `elem` seen = go seen xs
+      | otherwise = x : go (x : seen) xs
 
 -- | The one-coordinate neighbours of a vector: each move changes exactly one node's
 -- instruction or demo index to a non-current alternative.
