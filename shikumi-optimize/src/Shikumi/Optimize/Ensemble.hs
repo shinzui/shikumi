@@ -11,6 +11,7 @@
 -- member index), so the search is reproducible run to run.
 module Shikumi.Optimize.Ensemble
   ( ensembleSearch,
+    ensembleSearchWith,
     majorityReducer,
   )
 where
@@ -19,18 +20,27 @@ import Data.Vector qualified as V
 import Shikumi.Combinator (ensemble)
 import Shikumi.Compile.Types (compiledProgram)
 import Shikumi.Eval (Dataset, dataset, datasetExamples)
-import Shikumi.Optimize.Search (freezeProgram)
-import Shikumi.Optimize.Types (Optimizer (..))
+import Shikumi.Optimize.Search (freezeProgram, withLmCallCount)
+import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 
 -- | Build an @size@-member ensemble: run @inner@ on @size@ bootstrap resamples of
 -- the training set and combine the resulting programs by majority vote.
 ensembleSearch :: (Eq o) => Int -> Optimizer i o -> Optimizer i o
-ensembleSearch size inner = Optimizer $ \train metric student -> do
+ensembleSearch = ensembleSearchWith defaultBudget
+
+-- | Build a budgeted ensemble. The budget is enforced between members using exact
+-- LLM-call counting; at least one member always runs, so the final spend may exceed
+-- the bound by one member's cost.
+ensembleSearchWith :: (Eq o) => Budget -> Int -> Optimizer i o -> Optimizer i o
+ensembleSearchWith budget size inner = Optimizer $ \train metric student -> do
   let seeds = [1 .. max 1 size]
-  members <-
-    mapM
-      (\seed -> compiledProgram <$> runOptimizer inner (resample seed train) metric student)
-      seeds
+      go _total acc [] = pure (reverse acc)
+      go total acc (seed : rest)
+        | total >= maxLmCalls budget && not (null acc) = pure (reverse acc)
+        | otherwise = do
+            (cp, calls) <- withLmCallCount (runOptimizer inner (resample seed train) metric student)
+            go (total + calls) (compiledProgram cp : acc) rest
+  members <- go 0 [] seeds
   pure (freezeProgram (ensemble members majorityReducer))
 
 -- | Sample a dataset with replacement, deterministically, seeded by @seed@. An

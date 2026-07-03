@@ -64,7 +64,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: M5: GEPA seed-evaluation gate
 - [x] 2026-07-03: M6: bootstrap per-teacher-run accounting; random search shares one meter across
       inner bootstraps and its own scoring
-- [ ] M7: `ensembleSearchWith` with exact call counting between members
+- [x] 2026-07-03: M7: `ensembleSearchWith` with exact call counting between members
 - [ ] M8: rewrite the `Budget` haddock (Types.hs) to the honest accounting model;
       per-optimizer budget tests under the counting stubs; `cabal test all` green
 
@@ -100,6 +100,12 @@ implementation. Provide concise evidence.
   handed a full budget to each inner bootstrap and then scored candidates on top,
   while the new implementation shares one meter across seed demo recovery and final
   scoring and asserts actual calls are `<= 20`.
+
+- 2026-07-03: M7's ensemble test sets `maxLmCalls = 1` around
+  `ensembleSearchWith ... 5 (labeledFewShot 1)`. The first member spends 4 actual
+  completions, so the documented between-member enforcement returns a one-member
+  ensemble and stops before launching members 2-5; the test asserts both the
+  one-member shape and the exact 4-call spend.
 
 
 ## Decision Log

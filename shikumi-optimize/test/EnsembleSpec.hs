@@ -10,6 +10,7 @@
 module EnsembleSpec (tests) where
 
 import Data.Aeson (toJSON)
+import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
@@ -23,7 +24,7 @@ import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
 import Shikumi.Program (Demo (..), Program, ProgramShape (..), programShape)
-import StubLM (Label (..), Sentence (..), runStubLM, sentimentProg)
+import StubLM (Label (..), Sentence (..), runStubLM, runStubLMCounting, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -88,5 +89,18 @@ tests =
           Left e -> assertFailure ("unexpected error: " <> show e)
           Right cp -> case programShape (compiledProgram cp) of
             ShapeEnsemble subs -> length subs @?= 3
-            other -> assertFailure ("expected a 3-member ShapeEnsemble, got " <> show other)
+            other -> assertFailure ("expected a 3-member ShapeEnsemble, got " <> show other),
+      testCase "ensembleSearchWith enforces the budget between members" $ do
+        ref <- newIORef (0 :: Int)
+        let budget = Budget {maxLmCalls = 1, maxCandidates = 32}
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runStubLMCounting ref (optimize (ensembleSearchWith budget 5 (labeledFewShot 1)) trainset exactMatch sentimentProg)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right cp -> case programShape (compiledProgram cp) of
+            ShapeEnsemble subs -> length subs @?= 1
+            other -> assertFailure ("expected a 1-member ShapeEnsemble, got " <> show other)
+        count <- readIORef ref
+        count @?= 4
     ]
