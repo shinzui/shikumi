@@ -93,7 +93,7 @@ no behavior with them and would blur each plan's acceptance criteria.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Complete |
-| 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | In Progress |
+| 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | Complete |
 | 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Not Started |
 | 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Not Started |
 
@@ -202,9 +202,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-32: M1 — catch-all `Validatable` instance deleted, constraints threaded, all packages migrated and building (2026-07-03)
 - [x] EP-32: M2 — validation failures proven through `runProgram`, `runProgramConc`, `streamProgram`, and `chainOfThought` (2026-07-03)
 - [x] EP-32: M3 — migration documented (haddocks, jitsurei example prose, CHANGELOG) (2026-07-03)
-- [ ] EP-33: M1 — `parseResponse` keeps the native error for JSON bodies
-- [ ] EP-33: M2 — strict-mode schema shape (required-but-nullable `Maybe`, typed enums) with goldens deliberately updated
-- [ ] EP-33: M3 — native render channel: router swaps guide and demos for native-capable models; native demos rendered as JSON
+- [x] EP-33: M1 — `parseResponse` keeps the native error for JSON bodies (2026-07-03)
+- [x] EP-33: M2 — strict-mode schema shape (required-but-nullable `Maybe`, typed enums) with goldens deliberately updated (2026-07-03)
+- [x] EP-33: M3 — native render channel: router swaps guide and demos for native-capable models; native demos rendered as JSON (2026-07-03)
 - [ ] EP-34: M1 — `routeLLM` rewrites the `Stream` operation (model, metadata translation, stripping)
 - [ ] EP-34: M2 — `streamPredict` reuses `effectiveSignature`, `attachSchema`, and `parseResponse`
 - [ ] EP-34: M3 — stream errors surface out-of-band; retries fire; budget charging documented and tested
@@ -235,6 +235,24 @@ interactions between child plans. Provide concise evidence.
   (`Stream.hs`); their bodies are untouched, so EP-33/EP-34 rebase onto a
   `(FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)`
   row without body conflicts.
+- EP-33 (2026-07-03): integration point 3 delivered — `translateForWire` is now
+  `Model -> Context -> Options -> (Context, Options)` and `routeLLM`'s `Complete`
+  case threads the rewritten `Context`. EP-34's routed `Stream` case must call this
+  same widened function (not a second translation path). Integration point 4
+  delivered — EP-33 defined `metaNativePromptKey` / `metaNativeDemosKey` next to the
+  existing schema/temperature keys; EP-34's `Stream` path must strip and honor the
+  same four-key set via `translateForWire` and define none of its own.
+- EP-33 (2026-07-03): two deviations for EP-34 to note. (1) `nativeRenderPieces`
+  ships as `(ToSchema o, ToPrompt o) => Signature i o -> (Text, [Text])` — the
+  planned `ToPrompt i` was dropped as redundant. (2) `parseResponse` (which EP-34
+  reuses on the streaming path) now branches on `assistantJSON resp`: JSON body →
+  native parser (keeps the located error), non-JSON → fallback parser. It also
+  gained no new arguments, so EP-34 consumes the same surface.
+- EP-33 (2026-07-03): reusable fact for EP-34 and EP-39 — signature-level demos set
+  via `setDemos` are dropped by `effectiveSignature` (it overwrites a node's demos
+  with the JSON-decoded `Params.demos`). Tests that need demos on the wire must
+  supply them through the node's `Params` channel, as EP-33's native-demos router
+  test does.
 
 
 ## Decision Log
