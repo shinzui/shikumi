@@ -12,6 +12,9 @@
 -- reproducible.
 module AcceptanceSpec (tests) where
 
+import Control.Monad (when)
+import Data.IORef (newIORef, readIORef)
+import Data.Text qualified as T
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -20,13 +23,22 @@ import Shikumi.Compile.Types (Compiler (runCompiler), compiledProgram)
 import Shikumi.Compile.ZeroShot (zeroShot)
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
-import Shikumi.Eval (Dataset, dataset, exactMatch, example)
+import Shikumi.Eval (Dataset, Prediction, Score, boolScore, dataset, exactMatch, example, predictionPrimary)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
 import Shikumi.Program (Program)
-import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, sentimentProg)
+import StubLM
+  ( Label (..),
+    Sentence (..),
+    ruleInstruction,
+    ruled,
+    runStubLM,
+    runStubLMCapturing,
+    sentimentPipeline,
+    sentimentProg,
+  )
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
+import Test.Tasty.HUnit (Assertion, assertBool, assertFailure, testCase, (@?=))
 
 runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (Either ShikumiError a)
 runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
@@ -86,7 +98,30 @@ tests =
             assertBool ("before should be low, got " <> show before) (before < 0.5)
             improved "bootstrapFewShot" before afterBoot
             improved "labeledFewShot" before afterLabeled
-            improved "instructionSearch" before afterInstr
+            improved "instructionSearch" before afterInstr,
+      testGroup
+        "seeding over multi-node programs"
+        [ testCase "instructionSearch optimizes node 0 without changing node 1" $
+            checkPipeline "instructionSearch" (instructionSearch 3 defaultBudget) True,
+          testCase "copro optimizes node 0 without changing node 1" $
+            checkPipeline "copro" (copro defaultCoproConfig) True,
+          testCase "miprov2 keeps the echo node's effective instruction" $
+            checkPipeline "miprov2" (miprov2 Miprov2Light) False,
+          testCase "gepa keeps the echo node's effective instruction" $
+            checkPipeline "gepa" (gepa reflectiveProposer fbMetric defaultBudget) False,
+          testCase "instructionSearch scores the true student as a candidate" $ do
+            ref <- newIORef []
+            res <-
+              runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+                runStubLMCapturing ref (optimize (instructionSearch 1 defaultBudget) trainset exactMatch ruled)
+            case res of
+              Left e -> assertFailure ("unexpected error: " <> show e)
+              Right _ -> pure ()
+            captured <- readIORef ref
+            assertBool
+              "expected a scored request rendered with the RULE signature instruction"
+              (any (\txt -> ruleInstruction `T.isInfixOf` txt && "text: good" `T.isInfixOf` txt) captured)
+        ]
     ]
   where
     -- Strictly higher than before, and at least a floor of 0.75, so the test fails
@@ -98,3 +133,24 @@ tests =
       assertBool
         (name <> ": expected " <> show after <> " >= 0.75")
         (after >= 0.75)
+
+fbMetric :: Label -> Prediction Label -> (Score, T.Text)
+fbMetric expd p =
+  let correct = expd == predictionPrimary p
+   in (boolScore correct, if correct then "" else "be more specific")
+
+checkPipeline :: String -> Optimizer Sentence Label -> Bool -> Assertion
+checkPipeline name opt requireFloor = do
+  res <- runStub $ do
+    before <- scoreOn heldout exactMatch sentimentPipeline
+    cp <- optimize opt trainset exactMatch sentimentPipeline
+    let out = compiledProgram cp
+    after <- scoreOn heldout exactMatch out
+    pure (before, after, effectiveInstructionAt 1 out)
+  case res of
+    Left e -> assertFailure ("unexpected error: " <> show e)
+    Right (before, after, node1Instruction) -> do
+      assertBool (name <> ": expected " <> show after <> " >= " <> show before) (after >= before)
+      when requireFloor $
+        assertBool (name <> ": expected " <> show after <> " >= 0.75") (after >= 0.75)
+      node1Instruction @?= "Echo the sentiment label unchanged."

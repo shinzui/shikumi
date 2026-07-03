@@ -195,7 +195,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-36: M2 — instructionSearch and COPRO seed from the effective instruction
 - [x] EP-36: M3 — MIPROv2 baseline/applyVec preserve the student; original demos are a candidate
 - [x] EP-36: M4 — GEPA reflects on the effective instruction
-- [ ] EP-36: M5 — fixture diversification (non-empty signature instruction, two-node pipeline) and acceptance suite green
+- [x] EP-36: M5 — fixture diversification (non-empty signature instruction, two-node pipeline) and acceptance suite green
 - [ ] EP-37: M1 — BudgetMeter seam in Search.hs; instructionSearch/copro/searchJoint rewired
 - [ ] EP-37: M2 — labeledFewShot budget parameterization
 - [ ] EP-37: M3 — MIPROv2 phases 1–2 metered
@@ -219,7 +219,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: EP-36's multi-node GEPA acceptance exposed tie drift in
+  `Shikumi.Optimize.GEPA.bestOf`: a later child with the same aggregate score could
+  replace an earlier equally good candidate and serialize an unnecessary instruction
+  override on the echo node. EP-36 changed `bestOf` to fold from the seed and keep the
+  earlier candidate on ties, preserving GEPA's never-worse artifact semantics.
 
 
 ## Decision Log

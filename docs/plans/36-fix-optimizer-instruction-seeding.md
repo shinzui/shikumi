@@ -69,11 +69,12 @@ This section must always reflect the actual current state of the work.
 - [x] M4 completed 2026-07-03 — GEPA reflects on the effective instruction; added a
       capturing-stub test for the first reflective proposer request; `cabal test
       shikumi-optimize` passed with 51 tests after the fix.
-- [ ] M5: fixture diversification — `ruled` (non-empty signature instruction) and
-      `sentimentPipeline` (two-node) fixtures in StubLM; multi-node acceptance tests
-      for all four optimizers; full `cabal test shikumi-optimize` green
-- [ ] Update haddocks that describe the old behavior (Instruction.hs header, MIPRO.hs
-      config comments, Search.hs)
+- [x] M5 completed 2026-07-03 — fixture diversification added `ruled`,
+      `echoSig`, and `sentimentPipeline` to `StubLM`; multi-node acceptance tests cover
+      all four instruction optimizers; `cabal test shikumi-optimize` passed with 56
+      tests.
+- [x] Updated haddocks that described the old behavior in `Instruction.hs`, `COPRO.hs`,
+      `MIPRO.hs`, `GEPA.hs`, and `Search.hs`.
 
 
 ## Surprises & Discoveries
@@ -105,6 +106,15 @@ implementation. Provide concise evidence.
   empty field before the fix, even when the student's signature instruction contained
   the RULE text. After changing `mutateNode` to use `effectiveInstructionAt`, the new
   capturing-stub test passed and the suite reported `All 51 tests passed`.
+
+- 2026-07-03: The M5 multi-node acceptance suite exposed a separate GEPA artifact
+  issue: after node 0 improved the score, a later equal-scoring mutation of the echo
+  node could win because `bestOf` chose from the frontier list before comparing against
+  the seed/earlier best. Evidence: the new GEPA pipeline test expected node 1's
+  effective instruction to remain `Echo the sentiment label unchanged.` but observed
+  `Please answer.`. Changing `bestOf` to fold from the seed and keep earlier candidates
+  on aggregate ties restored the expected artifact; the suite then reported `All 56
+  tests passed`.
 
 
 ## Decision Log
@@ -154,6 +164,15 @@ implementation. Provide concise evidence.
   Rationale: "The override stored at node n, if any" remains a legitimate question
   (tests ask it to assert that keep-current wrote nothing); deleting it buys nothing.
   Date: 2026-07-01
+
+- Decision: GEPA's final `bestOf` must keep the earlier candidate on aggregate-score
+  ties by folding from the seed candidate, and `mutateNode` should apply proposals
+  through `setNodeInstrIfNew`.
+  Rationale: The multi-node acceptance test showed that a later equal-scoring child can
+  rewrite an unrelated node's instruction without improving behavior. Keeping the
+  earlier candidate on ties preserves the optimizer's never-worse artifact semantics,
+  while `setNodeInstrIfNew` keeps no-op proposals from serializing redundant overrides.
+  Date: 2026-07-03
 
 
 ## Outcomes & Retrospective

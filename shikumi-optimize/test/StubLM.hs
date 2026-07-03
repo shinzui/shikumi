@@ -40,6 +40,8 @@ module StubLM
     sentimentSig,
     sentimentProg,
     ruled,
+    echoSig,
+    sentimentPipeline,
 
     -- * Ground truth and helpers
     goldLabel,
@@ -84,6 +86,7 @@ import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
+import Shikumi.Combinator ((>>>))
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
@@ -138,6 +141,14 @@ sentimentProg = predict sentimentSig
 -- task under the stub. Optimizers must preserve it when "keep current" wins.
 ruled :: Program Sentence Label
 ruled = predict (mkSignature ruleInstruction)
+
+-- | A second-stage identity node for multi-node optimizer tests.
+echoSig :: Signature Label Label
+echoSig = mkSignature "Echo the sentiment label unchanged."
+
+-- | A two-node sentiment pipeline: classify a sentence, then echo the label.
+sentimentPipeline :: Program Sentence Label
+sentimentPipeline = sentimentProg >>> predict echoSig
 
 -- ---------------------------------------------------------------------------
 -- Ground truth and helpers
@@ -213,6 +224,7 @@ runJointStubLMCounting ref = interpret $ \_ -> \case
 -- | The joint task's classification rule (see 'runJointStubLM').
 answerJoint :: Context -> Text
 answerJoint ctx
+  | Just lbl <- parseEcho (lastUserText ctx) = lbl
   | "good" `elem` ws || "bad" `elem` ws =
       -- region A: correct only with a RULE instruction
       if instructionHasRule ctx then goldLabel s else "neutral"
@@ -299,9 +311,11 @@ groundedInstruction ctx
 -- | Classify the actual input given the demos and instruction in the context.
 answerSentiment :: Context -> Text
 answerSentiment ctx =
-  case demos of
-    [] -> if instructionHasRule ctx then goldLabel s else "neutral"
-    _ -> nnLabel s demos
+  case parseEcho (lastUserText ctx) of
+    Just lbl -> lbl
+    Nothing -> case demos of
+      [] -> if instructionHasRule ctx then goldLabel s else "neutral"
+      _ -> nnLabel s demos
   where
     msgs = V.toList (ctx ^. #messages)
     demos = demoPairs msgs
@@ -380,6 +394,10 @@ parseSentence :: Text -> Text
 parseSentence t = T.strip (fromMaybe stripped (T.stripPrefix "text:" stripped))
   where
     stripped = T.strip t
+
+-- | Parse the rendered input to the echo node, whose input type is 'Label'.
+parseEcho :: Text -> Maybe Text
+parseEcho t = T.strip <$> T.stripPrefix "sentiment:" (T.strip t)
 
 -- | Read the @sentiment@ marker section out of a rendered demo output.
 parseLabel :: Text -> Text

@@ -33,9 +33,7 @@ module Shikumi.Optimize.GEPA
   )
 where
 
-import Control.Lens ((&), (?~))
 import Control.Monad (forM, forM_, when)
-import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
@@ -60,13 +58,12 @@ import Shikumi.Eval
 import Shikumi.LLM (LLM)
 import Shikumi.Module (predict)
 import Shikumi.Optimize.Pareto (Candidate (..), paretoFrontier, sampleParent)
-import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, setNodeInstrIfNew)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
 import Shikumi.Program
   ( NodeFields (..),
     Program,
     foldParams,
-    mapParamsAt,
     nodeFieldsIndexed,
     runProgram,
     setProgramParams,
@@ -179,7 +176,7 @@ mutateNode proposer progSummary dataSummary fields fblog paths idx prog =
                   fb = T.intercalate "\n" crits
               ReflectOut newInstr <-
                 runProgram proposer (ReflectIn cur fb progSummary dataSummary fldSummary)
-              pure (mapParamsAt idx (\ps -> ps & #instructionOverride ?~ newInstr) prog)
+              pure (setNodeInstrIfNew idx newInstr prog)
 
 -- | Render a node's field names for the proposer prompt.
 renderFields :: [NodeFields] -> Text
@@ -251,9 +248,7 @@ perEx rpt = [unScore s | ExampleResult {score = s} <- results rpt]
 -- | The frontier candidate with the highest aggregate (earliest on ties); falls back
 -- to the seed if the frontier is somehow empty.
 bestOf :: Candidate -> [Candidate] -> Candidate
-bestOf seedCand cs = case cs of
-  [] -> seedCand
-  (x : xs) -> foldl' (\b c -> if aggregate c > aggregate b then c else b) x xs
+bestOf seedCand = foldl' (\b c -> if aggregate c > aggregate b then c else b) seedCand
 
 -- | A minimal program summary (EP-19's program describer is the richer source).
 fallbackProgramSummary :: Int -> Text
