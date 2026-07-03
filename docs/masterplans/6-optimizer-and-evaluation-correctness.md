@@ -97,7 +97,7 @@ suite, and the seeding fix is urgent while the budget work is not.
 |----|-------|------|-----------|-----------|--------|
 | 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | Complete |
 | 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | Complete |
-| 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Not Started |
+| 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Complete |
 | 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -203,10 +203,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-37: M5 — bootstrap and random-search metering
 - [x] EP-37: M6 — ensemble budget via exact call counting
 - [x] EP-37: M7 — honest Budget docs and budget tests for all optimizers
-- [ ] EP-38: M1 — shape-fingerprint envelope in Serialize.hs with loud mismatch errors
-- [ ] EP-38: M2 — RAG migrated to instructionOverride; RAG round-trip test
-- [ ] EP-38: M3 — chain-of-thought round-trip and wrong-template rejection tests
-- [ ] EP-38: M4 — structure-contract reconciliation docs (knnFewShot, ensembleSearch)
+- [x] EP-38: M1 — shape-fingerprint envelope in Serialize.hs with loud mismatch errors
+- [x] EP-38: M2 — RAG migrated to instructionOverride; RAG round-trip test
+- [x] EP-38: M3 — chain-of-thought round-trip and wrong-template rejection tests
+- [x] EP-38: M4 — structure-contract reconciliation docs (knnFewShot, ensembleSearch)
 - [ ] EP-39: M1 — stream usage accumulated in withUsageTotals, non-zero usage test
 - [ ] EP-39: M2 — per-example timeout wired to the TimedOut variant
 - [ ] EP-39: M3 — latency relabel
@@ -224,6 +224,16 @@ interactions between child plans. Provide concise evidence.
   replace an earlier equally good candidate and serialize an unnecessary instruction
   override on the echo node. EP-36 changed `bestOf` to fold from the seed and keep the
   earlier candidate on ties, preserving GEPA's never-worse artifact semantics.
+
+- 2026-07-03: EP-38 found no checked-in serialized compiled-program fixtures to
+  migrate. The only `encodeCompiled`/`decodeCompiledOnto` callers are CLI/example/test
+  code, and the CLI test continued to pass after the shape envelope because it asserts
+  the saved JSON contains demo content rather than a fixed top-level layout.
+
+- 2026-07-03: EP-38's serialization envelope changes the correct template rule for
+  structural compilers from implicit to enforced: chain-of-thought state must be
+  decoded onto the chain-of-thought-shaped template, while RAG remains loadable onto
+  the base template because it now stores context in serializable `Params`.
 
 
 ## Decision Log
@@ -286,6 +296,13 @@ Compare the result against the original vision.
   and known lower-bound cases, the optimize package has per-optimizer counting tests,
   and full workspace validation passed with `cabal test all`.
 
+- 2026-07-03: EP-38 is complete. Compiled program serialization now writes a shape
+  fingerprint plus params envelope, rejects legacy bare arrays and wrong-template
+  loads loudly, preserves RAG context through encode/decode by storing it in
+  `instructionOverride`, proves chain-of-thought state only loads onto a compiled CoT
+  template, and documents the KNN/ensemble structure-changing optimizer exceptions.
+  Full workspace validation passed with `cabal test all`.
+
 
 ## Revision Notes
 
@@ -298,3 +315,7 @@ Compare the result against the original vision.
 - 2026-07-03: Marked EP-36 complete and recorded its validation outcome. Reason:
   `docs/plans/36-fix-optimizer-instruction-seeding.md` was implemented through all
   milestones and `cabal test all` passed.
+
+- 2026-07-03: Marked EP-38 complete and recorded its validation outcome. Reason:
+  `docs/plans/38-compiled-program-serialization-fidelity.md` was implemented through
+  all milestones and `cabal test all` passed.

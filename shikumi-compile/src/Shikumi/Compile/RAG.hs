@@ -16,27 +16,30 @@
 -- query-independent of the actual program input; wiring true per-input retrieval
 -- awaits an EP-4 embed node and is left as a TODO.
 --
--- The injection is a /structural/ rewrite (like "Shikumi.Compile.ChainOfThought"):
--- each @Predict sig ps@ leaf becomes @Predict (setInstruction (base <> context)
--- sig) ps@, so the original task instruction is preserved /and/ the retrieved
--- context is added (it appears in the rendered system prompt). The node's existing
--- 'Shikumi.Program.Params' are untouched; the same @instructionOverride@-precedence
--- caveat as chain-of-thought applies (an override set on a node replaces the whole
--- instruction at run time, context included), so apply 'rag' before a zero-shot
--- instruction if both are wanted.
+-- The injection is a serializable parameter rewrite: each @Predict sig ps@ leaf
+-- keeps its signature and receives an @instructionOverride@ containing the
+-- effective instruction (an existing override if present, otherwise the
+-- signature's base instruction) plus the retrieved context. This means RAG state
+-- survives 'Shikumi.Compile.Serialize.encodeCompiled' /
+-- 'Shikumi.Compile.Serialize.decodeCompiledOnto'. Composition order still matters:
+-- applying 'zeroShot' after 'rag' replaces the whole override and drops the
+-- context, while applying 'rag' after 'zeroShot' appends context to the zero-shot
+-- instruction.
 module Shikumi.Compile.RAG
   ( rag,
     formatPassages,
   )
 where
 
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (runPureEff)
 import Shikumi.Compile.Retriever (Passage (..), Retriever (..))
 import Shikumi.Compile.Types (Compiler (..))
 import Shikumi.Program
-  ( Program
+  ( Params (..),
+    Program
       ( Compose,
         Embed,
         Ensemble,
@@ -50,7 +53,7 @@ import Shikumi.Program
         Validate
       ),
   )
-import Shikumi.Signature (getInstruction, setInstruction)
+import Shikumi.Signature (getInstruction)
 
 -- | Install retrieved context at every node. Retrieval happens once, now, against
 -- @query@ (the documented compile-time fallback); the formatted passages are then
@@ -69,15 +72,17 @@ formatPassages ps =
   "Use the following retrieved context to answer:\n"
     <> T.unlines ["- " <> text p | p <- ps]
 
--- | Append the context block to every node's signature instruction, recursing
--- through every composite/combinator node. A no-op when @ctx@ is empty.
+-- | Append the context block to every node's effective instruction, storing the
+-- result in serializable node parameters. A no-op when @ctx@ is empty.
 install :: Text -> Program i o -> Program i o
 install ctx
   | T.null ctx = id
   | otherwise = go
   where
     go :: forall i o. Program i o -> Program i o
-    go (Predict sig ps) = Predict (setInstruction (getInstruction sig <> "\n\n" <> ctx) sig) ps
+    go (Predict sig ps) =
+      let base = fromMaybe (getInstruction sig) (instructionOverride ps)
+       in Predict sig ps {instructionOverride = Just (base <> "\n\n" <> ctx)}
     go (Compose a b) = Compose (go a) (go b)
     go (FMap k p) = FMap k (go p)
     go (Map w p) = Map w (go p)

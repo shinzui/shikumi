@@ -13,7 +13,8 @@
 -- EP-15's pure @runEmbedding@ argument), not the @Embedding@ effect: an 'Embed'
 -- body's row is fixed to @(LLM, Error ShikumiError)@, so it cannot call @embedText@;
 -- all embedding-effect work happens at the caller, outside the node. The run-time
--- form carries no @Params@ (it serializes as the empty vector, exactly like @react@).
+-- form carries no @Params@ (it serializes as an @Embed@ shape with an empty vector,
+-- exactly like @react@).
 module Shikumi.Optimize.KNN
   ( -- * Run-time form (the faithful analog)
     knnFewShot,
@@ -101,7 +102,12 @@ knnDemos embedder k train student =
 
 -- | Run-time KNN as an 'Optimizer': selection is by embedding geometry, not by
 -- score, so it consults neither the metric nor the LM at optimize time and spends
--- zero optimizer LM calls.
+-- zero optimizer LM calls. The result is a structure-changing @Embed@ wrapper
+-- around the student. Its run-time selector closure is not persisted by
+-- 'Shikumi.Compile.Serialize.encodeCompiled', so the saved state must be decoded
+-- onto the same @knnDemos@ template; decode onto the plain student fails with a
+-- shape mismatch. Use 'knnFewShotCentroid' when the desired artifact is only
+-- serializable node parameters.
 knnFewShot ::
   (ToJSON i, ToJSON o, ToPrompt i) =>
   (Text -> Vector Double) ->

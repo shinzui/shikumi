@@ -131,6 +131,11 @@ roundTrips =
         case decodeCompiledOnto (knnDemos stubEmbed 2 balanced sentimentProg) (encodeCompiled compiled) of
           Left err -> assertFailure ("decode failed: " <> err)
           Right cp' -> programParams (compiledProgram cp') @?= [],
+      testCase "run-time KNN decode onto the plain student fails with a shape message" $ do
+        let compiled = freezeProgram (knnDemos stubEmbed 2 balanced sentimentProg)
+        case decodeCompiledOnto sentimentProg (encodeCompiled compiled) of
+          Left err -> assertBool ("shape mismatch mentioned: " <> err) ("shape mismatch" `T.isInfixOf` T.pack err)
+          Right _ -> assertFailure "expected decode onto the plain student to fail",
       testCase "centroid KNN baked demos round-trip onto the bare student" $ do
         res <- runStub (optimize (knnFewShotCentroid stubEmbed 2) skewed exactMatch sentimentProg)
         case res of

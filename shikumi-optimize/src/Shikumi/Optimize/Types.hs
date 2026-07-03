@@ -10,6 +10,15 @@
 -- never changes a program's structure or types — only its parameters — so the
 -- optimized program is the same typed function, merely better-behaved.
 --
+-- Two optimizers are explicit structure-changing exceptions. 'Shikumi.Optimize.KNN.knnFewShot'
+-- returns an @Embed@ wrapper that selects demos at run time from an opaque closure;
+-- persist the underlying student or use 'Shikumi.Optimize.KNN.knnFewShotCentroid'
+-- when a plain parameter artifact is required. 'Shikumi.Optimize.Ensemble.ensembleSearch'
+-- returns an @Ensemble@ over member programs; its saved state can only be loaded
+-- onto the matching ensemble template, because the reducer closure and member
+-- structure are part of the program held in code rather than the saved parameter
+-- state.
+--
 -- __Why a record of functions, not a typeclass.__ The four optimizers differ in
 -- what extra inputs they carry (a teacher program, a budget, an inner optimizer
 -- for ensembling) but share one driver signature. A @newtype@ whose field is the

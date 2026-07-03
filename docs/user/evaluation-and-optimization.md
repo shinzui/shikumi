@@ -148,15 +148,15 @@ takes precedence, so apply CoT/RAG *before* zero-shot if you want both.
 ### Serialization
 
 ```haskell
-encodeCompiled     :: CompiledProgram i o -> ByteString          -- ordered Params vector as JSON
+encodeCompiled     :: CompiledProgram i o -> ByteString          -- shape + ordered Params as JSON
 decodeCompiledOnto :: Program i o -> ByteString -> Either String (CompiledProgram i o)
 ```
 
-This saves/loads **parameter state only** (the `[Params]` in `foldParams` order), re-applying
-it onto a structural template you reconstruct in code — exactly the
-`programShape`/`setProgramParams` contract from
-[Programs & combinators](./programs-and-combinators.md#programs-as-data-serialization). A node
-count mismatch is a `Left`, never a silent corruption.
+This saves/loads **parameter state plus a structural fingerprint**: the JSON envelope carries
+`programShape` and the `[Params]` in `foldParams` order. `decodeCompiledOnto` re-applies that
+state onto a template you reconstruct in code and rejects a shape mismatch or node-count mismatch
+as `Left`, never silent corruption. For structural compilers such as `chainOfThoughtCompiler`,
+decode onto the same compiled shape, not the plain base program.
 
 ---
 

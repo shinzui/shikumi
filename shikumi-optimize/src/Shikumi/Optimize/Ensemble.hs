@@ -9,6 +9,13 @@
 --
 -- Resampling is deterministic (a fixed linear-congruential stream seeded by the
 -- member index), so the search is reproducible run to run.
+--
+-- The returned artifact is structure-changing: it is an @Ensemble@ combinator over
+-- the optimized members, not just a parameter rewrite of the student. The member
+-- parameters are persisted by 'Shikumi.Compile.Serialize.encodeCompiled', but the
+-- reducer closure and exact member structure live in the program template held in
+-- code. Load saved state onto the matching ensemble template, not onto the plain
+-- student.
 module Shikumi.Optimize.Ensemble
   ( ensembleSearch,
     ensembleSearchWith,
@@ -24,7 +31,9 @@ import Shikumi.Optimize.Search (freezeProgram, withLmCallCount)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 
 -- | Build an @size@-member ensemble: run @inner@ on @size@ bootstrap resamples of
--- the training set and combine the resulting programs by majority vote.
+-- the training set and combine the resulting programs by majority vote. This
+-- changes structure by returning an @Ensemble@; saved state must be decoded onto a
+-- matching ensemble template.
 ensembleSearch :: (Eq o) => Int -> Optimizer i o -> Optimizer i o
 ensembleSearch = ensembleSearchWith defaultBudget
 

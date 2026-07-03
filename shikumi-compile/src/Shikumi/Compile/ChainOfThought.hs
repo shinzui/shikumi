@@ -31,6 +31,11 @@
 -- carries demos, they must be chain-of-thought-shaped (include a @reasoning@ field)
 -- to decode under the augmented output; otherwise compile chain-of-thought before
 -- few-shot.
+--
+-- Serialized state from this compiler must be decoded onto the same compiled
+-- shape, not onto the plain base program. In practice, re-apply
+-- 'chainOfThoughtCompiler' to the base template before calling
+-- 'Shikumi.Compile.Serialize.decodeCompiledOnto'.
 module Shikumi.Compile.ChainOfThought
   ( chainOfThoughtCompiler,
   )
@@ -57,6 +62,8 @@ import Shikumi.Program
 
 -- | Rewrite every 'Predict' node into its chain-of-thought form, recursing through
 -- every composite/combinator node so nodes nested arbitrarily deep are reached.
+-- Saved state produced by this compiler should be loaded onto this compiled shape,
+-- not onto the original base program.
 chainOfThoughtCompiler :: Compiler
 chainOfThoughtCompiler = Compiler cot
 

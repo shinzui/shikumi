@@ -3,6 +3,7 @@
 -- the nodes/ (a pure @foldParams@ read) — never merely "a type was added".
 module Main (main) where
 
+import Data.Aeson qualified as Aeson
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (runPureEff)
@@ -210,10 +211,44 @@ m6_serialize =
             (origPrompts, _) <- runWithCapture [answerResponse] (compiledProgram compiled) q
             (rtPrompts, _) <- runWithCapture [answerResponse] (compiledProgram roundTripped) q
             rtPrompts @?= origPrompts,
-      testCase "decoding onto a wrong-shaped template returns Left" $ do
+      testCase "decoding onto a wrong-shaped template returns a shape Left" $ do
         -- a 2-node payload onto a 1-node template
         let bytes = encodeCompiled (compile (zeroShot "x") qaPipeline)
         case decodeCompiledOnto qaBase bytes of
-          Left _ -> pure ()
-          Right _ -> assertBool "expected a count-mismatch Left" False
+          Left e -> assertBool "shape mismatch mentioned" (contains "shape mismatch" (T.pack e))
+          Right _ -> assertBool "expected a shape-mismatch Left" False,
+      testCase "legacy bare Params arrays are rejected with a re-encode hint" $ do
+        let bytes = Aeson.encode [Params (Just "legacy instruction") []]
+        case decodeCompiledOnto qaBase bytes of
+          Left e -> do
+            assertBool "legacy format mentioned" (contains "legacy bare parameter arrays" (T.pack e))
+            assertBool "re-encode hint mentioned" (contains "re-encoded" (T.pack e))
+          Right _ -> assertBool "expected a legacy-format Left" False,
+      testCase "RAG context survives encode/decode" $ do
+        let compiled = compile (rag (inMemoryRetriever 1 corpus) "shikumi mechanism") qaBase
+            bytes = encodeCompiled compiled
+        case decodeCompiledOnto qaBase bytes of
+          Left e -> assertBool ("unexpected decode failure: " <> e) False
+          Right roundTripped -> do
+            (origPrompts, _) <- runWithCapture [answerResponse] (compiledProgram compiled) q
+            (rtPrompts, _) <- runWithCapture [answerResponse] (compiledProgram roundTripped) q
+            rtPrompts @?= origPrompts
+            case rtPrompts of
+              [p] -> assertBool "target passage present after round-trip" (contains "mechanism behind how a system works" p)
+              _ -> assertBool "one prompt" False,
+      testCase "CoT state does not decode onto the base template" $ do
+        let compiled = compile chainOfThoughtCompiler qaBase
+            bytes = encodeCompiled compiled
+        case decodeCompiledOnto qaBase bytes of
+          Left e -> assertBool "shape mismatch mentioned" (contains "shape mismatch" (T.pack e))
+          Right _ -> assertBool "expected a shape-mismatch Left" False,
+      testCase "CoT round-trips onto the CoT template" $ do
+        let compiled = compile chainOfThoughtCompiler qaBase
+            bytes = encodeCompiled compiled
+        case decodeCompiledOnto (compiledProgram compiled) bytes of
+          Left e -> assertBool ("unexpected decode failure: " <> e) False
+          Right roundTripped -> do
+            (origPrompts, _) <- runWithCapture [cotAnswerResponse] (compiledProgram compiled) q
+            (rtPrompts, _) <- runWithCapture [cotAnswerResponse] (compiledProgram roundTripped) q
+            rtPrompts @?= origPrompts
     ]

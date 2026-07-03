@@ -4,7 +4,7 @@ slug: compiled-program-serialization-fidelity
 title: "Compiled Program Serialization Fidelity"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaf8e86bvx2arbh7nk2c"
 master_plan: "docs/masterplans/6-optimizer-and-evaluation-correctness.md"
 ---
 
@@ -53,15 +53,15 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `CompiledState` envelope (shape + params) in Serialize.hs; loud shape and
+- [x] M1: `CompiledState` envelope (shape + params) in Serialize.hs; loud shape and
       count mismatch errors; existing round-trip tests updated
-- [ ] M2: RAG writes `instructionOverride` instead of `setInstruction`; prompt-equality
+- [x] M2: RAG writes `instructionOverride` instead of `setInstruction`; prompt-equality
       test updated; RAG round-trip test added
-- [ ] M3: chain-of-thought round-trip onto the correct template; wrong-template decode
+- [x] M3: chain-of-thought round-trip onto the correct template; wrong-template decode
       returns Left (failing-before test)
-- [ ] M4: contract reconciliation docs in Optimize/Types.hs, KNN.hs, Ensemble.hs; knn
+- [x] M4: contract reconciliation docs in Optimize/Types.hs, KNN.hs, Ensemble.hs; knn
       wrong-template decode test in shikumi-optimize
-- [ ] `cabal test all` green
+- [x] `cabal test all` green
 
 
 ## Surprises & Discoveries
@@ -69,7 +69,39 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: Workspace search found only CLI/example/test callers of
+  `encodeCompiled`/`decodeCompiledOnto` and no checked-in serialized fixture files to
+  regenerate. Evidence command:
+
+  ```bash
+  rg -n "decodeCompiledOnto|encodeCompiled" shikumi-cli shikumi-compile shikumi-optimize shikumi shikumi-* -g '*.hs' -g '!dist-newstyle/**'
+  ```
+
+  The CLI test only asserts the saved JSON contains demo data, so the new envelope does
+  not require a CLI fixture migration.
+
+- 2026-07-03: The shape envelope turns the chain-of-thought silent-downgrade into the
+  intended loud failure, while decoding onto the compiled CoT template remains a prompt
+  round-trip. Evidence: `cabal test shikumi-compile` passed 17 tests, including
+  `CoT state does not decode onto the base template` and `CoT round-trips onto the CoT
+  template`.
+
+- 2026-07-03: Moving RAG context from a signature rewrite to `instructionOverride`
+  preserves both the prompt text and serialized state. Evidence: `cabal test
+  shikumi-compile` passed `RAG context survives encode/decode`, which asserts prompt
+  equality and the retrieved passage after decode.
+
+- 2026-07-03: Full workspace validation passed after the serialization envelope
+  change. Evidence command:
+
+  ```bash
+  cabal test all
+  ```
+
+  Notable output included `All 17 tests passed` for `shikumi-compile-test`, `All 70
+  tests passed` for `shikumi-optimize-test`, `All 141 tests passed` for
+  `shikumi-test`, and `All 5 tests passed` for `shikumi-cli-test`; the Redis cache
+  suite reported its expected local-socket skip and passed.
 
 
 ## Decision Log
@@ -108,13 +140,33 @@ implementation. Provide concise evidence.
   plan's blast radius now.
   Date: 2026-07-01
 
+- Decision: Keep `CompiledState` internal to `Shikumi.Compile.Serialize`.
+  Rationale: The public contract is still `encodeCompiled`/`decodeCompiledOnto`; no
+  caller needs to construct or inspect the envelope directly, and exporting it would
+  make the new JSON layout a larger API surface than necessary.
+  Date: 2026-07-03
+
+- Decision: Update the user guide serialization paragraph while implementing M1.
+  Rationale: `docs/user/evaluation-and-optimization.md` described `encodeCompiled` as
+  an ordered `Params` vector, which became false once the shape envelope landed. The
+  guide now states the new shape-plus-params layout and the compiled-template rule for
+  structural compilers.
+  Date: 2026-07-03
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-07-03: EP-38 is complete. `encodeCompiled` now writes an internal
+  `CompiledState` envelope containing `programShape` and `programParams`;
+  `decodeCompiledOnto` rejects legacy bare arrays and wrong program shapes with
+  descriptive `Left` messages; RAG stores retrieved context in `instructionOverride`;
+  chain-of-thought state must load onto a CoT-shaped template; and optimizer docs now
+  name the KNN and ensemble structure-changing exceptions. Targeted validation passed:
+  `cabal test shikumi-compile` (17 tests) and `cabal test shikumi-optimize` (70 tests).
+  Full workspace validation passed with `cabal test all`.
 
 
 ## Context and Orientation
@@ -333,7 +385,7 @@ fix(compile): persist a shape fingerprint with compiled params
 
 MasterPlan: docs/masterplans/6-optimizer-and-evaluation-correctness.md
 ExecPlan: docs/plans/38-compiled-program-serialization-fidelity.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaf8e86bvx2arbh7nk2c
 ```
 
 (Per-commit subjects: `fix(compile): store RAG context in instruction overrides`,
@@ -399,3 +451,11 @@ This plan is independent of plans 36/37 (optimizer internals) and 39 (shikumi-ev
 it can be implemented in any order relative to them. Coordination note from the master
 plan: plan 37 also edits the `Shikumi.Optimize.Types` module header (the `Budget`
 haddock, a different paragraph) — whichever lands second rebases a trivial doc hunk.
+
+
+## Revision Notes
+
+- 2026-07-03: Recorded implementation progress for M1-M4, targeted validation
+  evidence, the internal-envelope decision, and the user-guide documentation update.
+  Reason: EP-38 implementation landed the serialization envelope, RAG persistence,
+  chain-of-thought shape checks, and optimizer structure-contract documentation.
