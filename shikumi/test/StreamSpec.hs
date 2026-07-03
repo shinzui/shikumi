@@ -117,12 +117,12 @@ terminalResponse evs =
 -- the value streaming incrementally, the terminal carries the whole structured reply.
 streamEventsFor :: [Text] -> Text -> [AssistantMessageEvent]
 streamEventsFor deltas terminalText =
-  [ EventStart (StartPayload (AssistantMessage (_Response ^. #message))),
+  [ EventStart (StartPayload (AssistantMessage (_Response ^. #message)) Nothing),
     TextStart (IndexPayload 0)
   ]
     ++ [TextDelta (DeltaPayload 0 d) | d <- deltas]
     ++ [ TextEnd (BlockEndPayload 0 (T.concat deltas)),
-         EventDone (doneTerminal Stop (AssistantMessage (payloadWith terminalText)))
+         EventDone (doneTerminal Nothing Stop (AssistantMessage (payloadWith terminalText)))
        ]
   where
     payloadWith t = (_Response ^. #message) & #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))

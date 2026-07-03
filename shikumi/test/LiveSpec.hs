@@ -6,7 +6,7 @@
 -- default test run remains hermetic.
 module LiveSpec (tests) where
 
-import Baikai hiding (complete)
+import Baikai hiding (complete, flattenAssistantText)
 import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Baikai.Prelude
 import Baikai.Provider.OpenAI.Api qualified as OpenAI

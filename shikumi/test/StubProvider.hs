@@ -22,7 +22,7 @@ module StubProvider
   )
 where
 
-import Baikai
+import Baikai hiding (flattenAssistantText)
 import Baikai.Prelude
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
@@ -40,8 +40,9 @@ import Data.Vector qualified as V
 import Streamly.Data.Stream qualified as Stream
 
 -- | Concatenate the text of every 'AssistantText' block, ignoring thinking and
--- tool-call blocks. baikai has no library equivalent (its own smoke tests define
--- this same helper locally).
+-- tool-call blocks. baikai 0.3 exports its own 'flattenAssistantText'; this stub
+-- keeps a local copy (hidden from the @Baikai@ import) so the fixture's behavior
+-- is pinned regardless of the library's.
 flattenAssistantText :: V.Vector AssistantContent -> Text
 flattenAssistantText = T.concat . V.toList . V.mapMaybe textOf
   where
@@ -96,11 +97,11 @@ stubResponse t =
 -- | A deterministic, valid event sequence for the given text.
 stubEvents :: Text -> [AssistantMessageEvent]
 stubEvents t =
-  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message)},
+  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message), responseId = Nothing},
     TextStart IndexPayload {contentIndex = 0},
     TextDelta DeltaPayload {contentIndex = 0, delta = t},
     TextEnd BlockEndPayload {contentIndex = 0, content = t},
-    EventDone (doneTerminal Stop (AssistantMessage (stubPayloadWith t)))
+    EventDone (doneTerminal Nothing Stop (AssistantMessage (stubPayloadWith t)))
   ]
 
 -- | Build an isolated registry from a @complete@ implementation, reusing the
@@ -157,8 +158,8 @@ failingStubRegistry ref failTimes t =
 -- interpreters map this to a transient 'Shikumi.Error.ProviderFailure'.
 streamErrorEvents :: Rational -> Text -> [AssistantMessageEvent]
 streamErrorEvents cost msg =
-  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message)},
-    EventError (doneTerminal ErrorReason (AssistantMessage errPayload))
+  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message), responseId = Nothing},
+    EventError (doneTerminal Nothing ErrorReason (AssistantMessage errPayload))
   ]
   where
     errPayload =

@@ -98,7 +98,7 @@ runCapturingLLM ref resp = interpret $ \_ -> \case
     liftIO (modifyIORef' ref (++ [(m, ctx, o)]))
     -- A minimal successful stream whose terminal reassembles to @resp@, so a
     -- routed 'streamProgram' decodes exactly as the blocking path would.
-    pure [EventDone (doneTerminal Stop (AssistantMessage (resp ^. #message)))]
+    pure [EventDone (doneTerminal Nothing Stop (AssistantMessage (resp ^. #message)))]
 
 -- | Run a program sequentially under @routeLLM . runRouting model@ over a capturing
 -- stub and return the captured requests.

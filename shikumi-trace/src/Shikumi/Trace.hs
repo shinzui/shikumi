@@ -342,7 +342,7 @@ llmAttrs m c o resp =
     & #provider ?~ (m ^. #provider)
     & #prompt ?~ requestToCanonicalValue m c o
     & #response ?~ toJSON resp
-    & #latencyMs ?~ (resp ^. #latencyMs)
+    & #latencyMs ?~ fromIntegral (resp ^. #latencyMs)
     & #inputTokens ?~ (resp ^. #message . #usage . #inputTokens)
     & #outputTokens ?~ (resp ^. #message . #usage . #outputTokens)
     & #costUsd ?~ realToFrac (resp ^. #message . #usage . #cost . #usd :: Rational)

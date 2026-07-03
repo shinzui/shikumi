@@ -53,6 +53,7 @@ import Baikai
     Options,
     Response,
     TerminalPayload,
+    responseError,
   )
 import Baikai.Effectful (Baikai, runBaikai, runBaikaiWith)
 import Baikai.Effectful qualified as BE
@@ -127,12 +128,13 @@ runLLMWith reg = reinterpret_ (runBaikaiWith reg) bareHandler
 
 -- | The bare handler, shared by both interpreters. It runs in the handler stack
 -- (@Baikai : es@), so it can call the @Baikai@ transport effect and throw
--- through the @Error ShikumiError@ effect. The blocking path catches baikai's
--- 'BaikaiError' (thrown by 'BE.complete') and remaps it; the streaming path
--- collects the events and, via 'raiseStreamError', converts a terminal
--- @EventError@ into the same out-of-band 'ShikumiError' — so callers of 'stream'
--- never receive an in-band error terminal and resilience/decoding treat both
--- operations identically.
+-- through the @Error ShikumiError@ effect. The blocking path routes baikai's
+-- in-band failure (an error-shaped 'Response') through 'raiseResponseError' — plus
+-- a defensive 'try' for any residual thrown 'BaikaiError' — and remaps it; the
+-- streaming path collects the events and, via 'raiseStreamError', converts a
+-- terminal @EventError@ into the same out-of-band 'ShikumiError' — so callers of
+-- 'stream' never receive an in-band error terminal and resilience/decoding treat
+-- both operations identically.
 bareHandler ::
   (Baikai :> es, Error ShikumiError :> es) =>
   LLM (Eff localEs) a ->
@@ -140,7 +142,7 @@ bareHandler ::
 bareHandler = \case
   Complete m c o -> do
     res <- try @BaikaiError (BE.complete m c o)
-    either (throwError . fromBaikaiError) pure res
+    either (throwError . fromBaikaiError) raiseResponseError res
   Stream m c o -> BE.streamCollect m c o >>= raiseStreamError
 
 -- ---------------------------------------------------------------------------
@@ -210,8 +212,10 @@ runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
       case res of
         Left be -> throwError (fromBaikaiError be)
         Right resp -> do
+          -- Charge before raising: an error-shaped 'Response' may still carry
+          -- billable usage (mirrors 'chargeBudgetFromEvents' on the stream path).
           liftIO (chargeBudget mb resp)
-          pure resp
+          raiseResponseError resp
   Stream m c o ->
     withBudget mb . withRateLimit mr . retrying rp $ do
       evs <- BE.streamCollect m c o
@@ -305,6 +309,20 @@ raiseStreamError ::
 raiseStreamError evs = case [tp | EventError tp <- evs] of
   (tp : _) -> throwError (streamTerminalError tp)
   [] -> pure evs
+
+-- | Enforce the blocking-error posture, the 'complete' analogue of
+-- 'raiseStreamError'. Since baikai 0.3, 'BE.complete' does not throw on
+-- provider/registry/CLI failure: it returns an error-shaped 'Response' whose
+-- 'responseError' is populated. Convert that in-band failure into the same
+-- out-of-band 'ShikumiError' the rest of shikumi consumes, so an error response
+-- never masquerades as success and 'runLLMResilient' still retries transient
+-- failures (a 'ProviderFailure' thrown /inside/ the retry loop). A success
+-- passes through unchanged.
+raiseResponseError ::
+  (Error ShikumiError :> es) => Response -> Eff es Response
+raiseResponseError resp = case responseError resp of
+  Just be -> throwError (fromBaikaiError be)
+  Nothing -> pure resp
 
 -- | Map a terminal 'EventError' payload to a 'ShikumiError'.
 streamTerminalError :: TerminalPayload -> ShikumiError
