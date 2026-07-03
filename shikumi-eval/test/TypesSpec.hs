@@ -4,8 +4,7 @@ module TypesSpec (tests) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Shikumi.Eval.Types
-  ( Score (..),
-    dataset,
+  ( dataset,
     datasetSize,
     example,
     mkScore,
@@ -13,6 +12,7 @@ import Shikumi.Eval.Types
     predictionSamples,
     scoreOne,
     scoreZero,
+    unScore,
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -23,7 +23,7 @@ tests =
     "Types"
     [ testCase "mkScore clamps high" $ mkScore 1.5 @?= scoreOne,
       testCase "mkScore clamps low" $ mkScore (-0.2) @?= scoreZero,
-      testCase "mkScore passes through in-range" $ mkScore 0.5 @?= Score 0.5,
+      testCase "mkScore passes through in-range" $ unScore (mkScore 0.5) @?= 0.5,
       testCase "datasetSize counts examples" $
         datasetSize (dataset [example (1 :: Int) 'a', example 2 'b']) @?= 2,
       testCase "prediction is single-sample" $

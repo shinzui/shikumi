@@ -42,7 +42,7 @@ expectedRender =
   "score=0.5000  pass=1/3  fail=1\n\
   \tokens: in=120 out=45 total=165\n\
   \cost: $0.0023\n\
-  \latency: 1234 ms\n\
+  \latency-sum: 1234 ms\n\
   \failures:\n\
   \  [2] ProgramError: decode failed"
 

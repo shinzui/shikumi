@@ -1,13 +1,13 @@
 -- | The evaluation report and its aggregation. A 'Report' summarises a run over
 -- a dataset: the mean per-example score, pass/fail counts, summed token usage and
--- cost, total latency, and a per-example breakdown ('ExampleResult', retained in
--- dataset order for failure analysis). 'mkReport' is the pure aggregator;
+-- cost, summed per-example latency, and a per-example breakdown ('ExampleResult',
+-- retained in dataset order for failure analysis). 'mkReport' is the pure aggregator;
 -- 'renderReportText' is a deterministic human-readable rendering reused by the
 -- CLI (@docs/plans/12-cli-and-developer-experience.md@) and by golden tests.
 --
 -- 'EvalConfig' carries the run knobs (bounded 'concurrency', the 'FailurePolicy'
--- for per-example errors, and 'numSamples' per example for multi-sample metrics);
--- 'defaultEvalConfig' scores failures @0@ and keeps going.
+-- for per-example errors, optional per-example timeout, and 'numSamples' per example
+-- for multi-sample metrics); 'defaultEvalConfig' scores failures @0@ and keeps going.
 module Shikumi.Eval.Report
   ( -- * Per-example outcome
     ExampleResult (..),
@@ -94,18 +94,21 @@ data EvalConfig = EvalConfig
   { -- | max examples evaluated at once (forced to @>= 1@ by 'evaluate')
     concurrency :: !Int,
     failurePolicy :: !FailurePolicy,
+    -- | wall-clock budget per example in milliseconds; 'Nothing' means no timeout
+    exampleTimeoutMs :: !(Maybe Int),
     -- | samples per example for multi-sample metrics (forced to @>= 1@)
     numSamples :: !Int
   }
   deriving stock (Eq, Show, Generic)
 
--- | The default: four-way concurrency, score failures @0@ and keep going, one
--- sample per example.
+-- | The default: four-way concurrency, no timeout, score failures @0@ and keep
+-- going, one sample per example.
 defaultEvalConfig :: EvalConfig
 defaultEvalConfig =
   EvalConfig
     { concurrency = 4,
       failurePolicy = FailScore scoreZero,
+      exampleTimeoutMs = Nothing,
       numSamples = 1
     }
 
@@ -113,7 +116,8 @@ defaultEvalConfig =
 data Report = Report
   { -- | mean of the per-example scores, in @[0, 1]@ (0 when there are no examples)
     aggregateScore :: !Double,
-    -- | examples whose score is exactly @1.0@
+    -- | examples whose score is exactly @1.0@; fractional metrics can have good
+    -- aggregate scores while still reporting zero passes
     passCount :: !Int,
     -- | examples carrying a 'FailureReason'
     failCount :: !Int,
@@ -121,14 +125,18 @@ data Report = Report
     -- | per-example outcomes, retained in dataset order
     results :: ![ExampleResult],
     usage :: !UsageTotals,
+    -- | sum of per-example latencies; under concurrent evaluation this can exceed
+    -- wall-clock time because it is total compute latency, not elapsed time
     totalLatencyMs :: !Integer
   }
   deriving stock (Eq, Show)
 
 -- | Build a report from per-example results and the run's usage totals.
 -- 'aggregateScore' is the arithmetic mean of the per-example scores (0 if there
--- are no examples). 'passCount' counts perfect scores; 'failCount' counts
--- examples with a 'FailureReason'.
+-- are no examples). 'passCount' counts only exact @1.0@ scores, so fractional
+-- metrics such as similarity or partial-credit metrics should use
+-- 'aggregateScore' to read run quality. 'failCount' counts examples with a
+-- 'FailureReason'.
 mkReport :: [ExampleResult] -> UsageTotals -> Report
 mkReport rs u =
   Report
@@ -152,7 +160,7 @@ mkReport rs u =
 -- > score=0.6667  pass=2/3  fail=1
 -- > tokens: in=120 out=45 total=165
 -- > cost: $0.0023
--- > latency: 1234 ms
+-- > latency-sum: 1234 ms
 -- > failures:
 -- >   [2] ProgramError: decode failed
 --
@@ -177,7 +185,7 @@ renderReportText r =
           <> " total="
           <> tshowNat (totalTokens (usage r)),
         "cost: $" <> fixed4 (fromRational (totalCostUsd (usage r))),
-        "latency: " <> tshow (totalLatencyMs r) <> " ms"
+        "latency-sum: " <> tshow (totalLatencyMs r) <> " ms"
       ]
     failingResults = mapMaybe asFailure (results r)
     asFailure er = (\fr -> (index er, fr)) <$> failure er

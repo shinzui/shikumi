@@ -13,7 +13,7 @@
 -- (majority-vote, ensemble) can inspect every sample.
 module Shikumi.Eval.Types
   ( -- * Scores
-    Score (..),
+    Score,
     mkScore,
     scoreZero,
     scoreOne,

@@ -13,6 +13,7 @@ import MetricSpec qualified
 import ReportSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import TypesSpec qualified
+import UsageSpec qualified
 
 main :: IO ()
 main =
@@ -22,6 +23,7 @@ main =
       [ TypesSpec.tests,
         MetricSpec.tests,
         ReportSpec.tests,
+        UsageSpec.tests,
         EvaluateSpec.tests,
         MetricLMSpec.tests,
         GoldenSpec.tests,

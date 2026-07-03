@@ -75,6 +75,7 @@ test-suite shikumi-eval-test
     MetricSpec
     ReportSpec
     TypesSpec
+    UsageSpec
 
   build-depends:
     , aeson

@@ -98,7 +98,7 @@ suite, and the seeding fix is urgent while the budget work is not.
 | 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | Complete |
 | 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | Complete |
 | 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Complete |
-| 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Not Started |
+| 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-36).
@@ -207,11 +207,11 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-38: M2 — RAG migrated to instructionOverride; RAG round-trip test
 - [x] EP-38: M3 — chain-of-thought round-trip and wrong-template rejection tests
 - [x] EP-38: M4 — structure-contract reconciliation docs (knnFewShot, ensembleSearch)
-- [ ] EP-39: M1 — stream usage accumulated in withUsageTotals, non-zero usage test
-- [ ] EP-39: M2 — per-example timeout wired to the TimedOut variant
-- [ ] EP-39: M3 — latency relabel
-- [ ] EP-39: M4 — Score smart-constructor-only export
-- [ ] EP-39: M5 — passCount docs note and coverage tests (numSamples > 1, custom FailScore)
+- [x] EP-39: M1 — stream usage accumulated in withUsageTotals, non-zero usage test
+- [x] EP-39: M2 — per-example timeout wired to the TimedOut variant
+- [x] EP-39: M3 — latency relabel
+- [x] EP-39: M4 — Score smart-constructor-only export
+- [x] EP-39: M5 — passCount docs note and coverage tests (numSamples > 1, custom FailScore)
 
 
 ## Surprises & Discoveries
@@ -234,6 +234,18 @@ interactions between child plans. Provide concise evidence.
   structural compilers from implicit to enforced: chain-of-thought state must be
   decoded onto the chain-of-thought-shaped template, while RAG remains loadable onto
   the base template because it now stores context in serializable `Params`.
+
+- 2026-07-03: EP-39 confirmed that `withUsageTotals` is the single accounting seam
+  for both blocking and streamed LM calls. It now accumulates usage from terminal
+  stream events, so the cross-initiative streaming route work in
+  `docs/plans/34-route-and-unify-program-streaming.md` should not add a second usage
+  accumulator.
+
+- 2026-07-03: During EP-39 validation, the first `cabal test all` run failed in the
+  core routing concurrency test `runProgramConc produces the same temperature
+  multiset`; the isolated rerun passed, and a second full `cabal test all` passed.
+  This appears to be an existing concurrency-sensitive test flake rather than an
+  evaluation-layer regression.
 
 
 ## Decision Log
@@ -303,6 +315,17 @@ Compare the result against the original vision.
   template, and documents the KNN/ensemble structure-changing optimizer exceptions.
   Full workspace validation passed with `cabal test all`.
 
+- 2026-07-03: EP-39 is complete. Evaluation usage now accounts for streamed terminal
+  events, `EvalConfig` can enforce a per-example timeout that surfaces `TimedOut` or
+  aborts with core `Timeout`, report rendering labels `latency-sum`, `Score` is
+  abstract outside `Shikumi.Eval.Types`, and coverage now pins non-zero usage,
+  streamed usage, multi-sample metrics, custom `FailScore`, and pass-count semantics.
+  `cabal build all`, `cabal test shikumi-eval`, and a final `cabal test all` passed.
+
+- 2026-07-03: MasterPlan 6 is complete. The optimizer never-worse seeding fixes,
+  optimizer budget enforcement, compiled-program serialization fidelity, and
+  evaluation accounting/API tail all landed with full workspace validation.
+
 
 ## Revision Notes
 
@@ -319,3 +342,7 @@ Compare the result against the original vision.
 - 2026-07-03: Marked EP-38 complete and recorded its validation outcome. Reason:
   `docs/plans/38-compiled-program-serialization-fidelity.md` was implemented through
   all milestones and `cabal test all` passed.
+
+- 2026-07-03: Marked EP-39 complete and recorded the overall master-plan outcome.
+  Reason: `docs/plans/39-evaluation-accounting-and-api-tail.md` was implemented
+  through all milestones and final `cabal test all` passed.

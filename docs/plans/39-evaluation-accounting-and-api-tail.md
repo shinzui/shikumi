@@ -4,7 +4,7 @@ slug: evaluation-accounting-and-api-tail
 title: "Evaluation Accounting and API Tail"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaf8e86bvx2arbh7nk2c"
 master_plan: "docs/masterplans/6-optimizer-and-evaluation-correctness.md"
 ---
 
@@ -56,17 +56,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: stream usage accumulation in `withUsageTotals`; usage-carrying mock fixtures;
+- [x] M1: stream usage accumulation in `withUsageTotals`; usage-carrying mock fixtures;
       new `UsageSpec.hs` (failing-before for the stream path)
-- [ ] M2: `exampleTimeoutMs` in `EvalConfig`, race-based enforcement in `evalOne`,
+- [x] M2: `exampleTimeoutMs` in `EvalConfig`, race-based enforcement in `evalOne`,
       `TimedOut` surfaced under both failure policies; timeout tests
-- [ ] M3: latency relabel (`latency-sum: X ms`) + field haddock; ReportSpec expectation
+- [x] M3: latency relabel (`latency-sum: X ms`) + field haddock; ReportSpec expectation
       updated
-- [ ] M4: `Score` constructor hidden (smart constructors only); TypesSpec updated;
+- [x] M4: `Score` constructor hidden (smart constructors only); TypesSpec updated;
       workspace-wide recompile check
-- [ ] M5: passCount docs note; coverage tests for `numSamples > 1`, custom `FailScore`,
+- [x] M5: passCount docs note; coverage tests for `numSamples > 1`, custom `FailScore`,
       multi-sample metric
-- [ ] `cabal test all` green
+- [x] `cabal test all` green
 
 
 ## Surprises & Discoveries
@@ -74,7 +74,27 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: Baikai's stream terminal payloads in the compiled dependency carry a
+  `Message`, while blocking `Response.message` is already an `AssistantPayload`.
+  `Shikumi.Eval.Usage` therefore projects response usage directly from the assistant
+  payload and stream usage by pattern-matching terminal `AssistantMessage` values,
+  defensively treating any non-assistant terminal as zero usage.
+
+- 2026-07-03: Workspace searches confirmed the raw `Score` constructor was used only
+  in `shikumi-eval/test/TypesSpec.hs`, and `cabal build all` passed after hiding the
+  constructor. This validates the breaking export change against every workspace
+  package.
+
+- 2026-07-03: Grepping for `"latency: "` found only the report haddock, ReportSpec,
+  this ExecPlan, and an old unrelated CLI ExecPlan transcript. The CLI's live test
+  asserts only the score text, so relabeling the rendered report did not require a
+  CLI expectation update.
+
+- 2026-07-03: The first `cabal test all` run failed in the core test
+  `Routing.runProgramConc produces the same temperature multiset` with an observed
+  captured-call count of 2 instead of 3. The isolated rerun passed immediately, and a
+  second full `cabal test all` passed. This looks like an existing concurrency-sensitive
+  core test flake, not an evaluation-layer regression.
 
 
 ## Decision Log
@@ -134,7 +154,14 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-07-03: EP-39 is complete. `withUsageTotals` now accumulates
+  terminal stream usage, eval fixtures can produce non-zero usage and slow responses,
+  `EvalConfig` has an optional per-example timeout, `renderReportText` now labels the
+  latency sum honestly, `Score` is abstract outside `Shikumi.Eval.Types`, and the eval
+  suite covers streamed usage, non-zero complete usage, timeouts under both failure
+  policies, multi-sample metrics, custom `FailScore`, and the pass-count exact-score
+  semantics. Targeted validation passed with `cabal test shikumi-eval` (45 tests) and
+  `cabal build all`; full validation passed with `cabal test all`.
 
 
 ## Context and Orientation
@@ -392,7 +419,7 @@ fix(eval): accumulate streamed-call usage in withUsageTotals
 
 MasterPlan: docs/masterplans/6-optimizer-and-evaluation-correctness.md
 ExecPlan: docs/plans/39-evaluation-accounting-and-api-tail.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaf8e86bvx2arbh7nk2c
 ```
 
 (Per-commit subjects: `feat(eval): add a per-example timeout surfacing TimedOut`,
@@ -465,3 +492,11 @@ This plan is independent of plans 36–38 and may land in any order relative to 
 The soft cross-initiative relationship with
 `docs/plans/34-route-and-unify-program-streaming.md` is described in Context and
 Orientation: no ordering constraint, one courtesy notification.
+
+
+## Revision Notes
+
+- 2026-07-03: Recorded implementation progress for M1-M5 and final validation
+  evidence. Reason: EP-39 implementation landed streamed usage accounting,
+  per-example timeouts, the report latency relabel, the abstract `Score` export, and
+  the evaluation coverage tail.

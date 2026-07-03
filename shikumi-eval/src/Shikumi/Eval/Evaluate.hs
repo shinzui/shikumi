@@ -22,12 +22,12 @@ import Control.Monad (replicateM)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
-import Effectful.Concurrent (Concurrent)
-import Effectful.Concurrent.Async (pooledForConcurrentlyN)
+import Effectful.Concurrent (Concurrent, threadDelay)
+import Effectful.Concurrent.Async (pooledForConcurrentlyN, race)
 import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Prim (Prim)
 import Shikumi.Effect.Time (Time, getMonotonicTimeNSec)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Eval.Metric (Metric, MetricM, liftMetric)
 import Shikumi.Eval.Report
   ( EvalConfig (..),
@@ -87,7 +87,7 @@ evaluateWith cfg ds metric prog = do
 -- | Evaluate a single indexed example inside its error boundary, timing it with a
 -- monotonic clock.
 evalOne ::
-  (LLM :> es, Error ShikumiError :> es, Time :> es) =>
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es) =>
   EvalConfig ->
   MetricM es o ->
   Program i o ->
@@ -95,7 +95,14 @@ evalOne ::
   Eff es ExampleResult
 evalOne cfg metric prog (ix, Example inp expd) = do
   start <- getMonotonicTimeNSec
-  (s, mFail) <- scoreExample cfg metric prog inp expd
+  outcome <- case exampleTimeoutMs cfg of
+    Nothing -> Right <$> scoreExample cfg metric prog inp expd
+    Just ms -> race (threadDelay (max 0 ms * 1000)) (scoreExample cfg metric prog inp expd)
+  (s, mFail) <- case outcome of
+    Right r -> pure r
+    Left () -> case failurePolicy cfg of
+      FailAbort -> throwError (Timeout "evaluate: example timed out")
+      FailScore sc -> pure (sc, Just TimedOut)
   end <- getMonotonicTimeNSec
   let ms = fromIntegral ((end - start) `div` 1_000_000)
   pure ExampleResult {index = ix, score = s, failure = mFail, latencyMs = ms}

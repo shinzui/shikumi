@@ -15,6 +15,7 @@ module Shikumi.Eval.Usage
   )
 where
 
+import Baikai (AssistantMessageEvent (..), AssistantPayload, Message (..), TerminalPayload (..))
 import Control.Lens ((^.))
 import Data.Generics.Labels ()
 import Effectful (Eff, (:>))
@@ -34,7 +35,10 @@ withUsageTotals act = do
             resp <- complete m c o
             atomicModifyIORef' ref (\u -> (u <> usageOf resp, ()))
             pure resp
-          Stream m c o -> stream m c o
+          Stream m c o -> do
+            events <- stream m c o
+            atomicModifyIORef' ref (\u -> (u <> streamUsage events, ()))
+            pure events
       )
       act
   totals <- readIORef ref
@@ -42,10 +46,33 @@ withUsageTotals act = do
 
 -- | Project a response's token usage and cost into a 'UsageTotals'.
 usageOf :: Response -> UsageTotals
-usageOf resp =
+usageOf resp = usageOfAssistant (resp ^. #message)
+
+-- | Project an assistant message's token usage and cost into a 'UsageTotals'.
+usageOfMessage :: Message -> UsageTotals
+usageOfMessage (AssistantMessage msg) = usageOfAssistant msg
+usageOfMessage _ = emptyUsageTotals
+
+-- | Project an assistant payload's token usage and cost into a 'UsageTotals'.
+usageOfAssistant :: AssistantPayload -> UsageTotals
+usageOfAssistant msg =
   UsageTotals
-    { totalInputTokens = resp ^. #message . #usage . #inputTokens,
-      totalOutputTokens = resp ^. #message . #usage . #outputTokens,
-      totalTokens = resp ^. #message . #usage . #totalTokens,
-      totalCostUsd = resp ^. #message . #usage . #cost . #usd
+    { totalInputTokens = msg ^. #usage . #inputTokens,
+      totalOutputTokens = msg ^. #usage . #outputTokens,
+      totalTokens = msg ^. #usage . #totalTokens,
+      totalCostUsd = msg ^. #usage . #cost . #usd
     }
+
+-- | The usage of one streamed call: read off terminal events. Baikai streams
+-- emit exactly one 'EventDone' or 'EventError' carrying the assembled message
+-- with final usage; deltas carry no usage.
+streamUsage :: [AssistantMessageEvent] -> UsageTotals
+streamUsage evs =
+  mconcat
+    [ usageOfMessage msg
+    | ev <- evs,
+      msg <- case ev of
+        EventDone TerminalPayload {message = m} -> [m]
+        EventError TerminalPayload {message = m} -> [m]
+        _ -> []
+    ]

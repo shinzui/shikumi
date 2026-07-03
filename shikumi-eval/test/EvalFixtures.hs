@@ -16,27 +16,44 @@ module EvalFixtures
     -- * Canned responses
     answerResponse,
     markerResponse,
+    usageResponse,
+    usageTotalsPerCall,
+    usageTerminalEvents,
 
     -- * Mock LLM interpreters
     MockReply (..),
     runConstLLM,
     runScriptedLLM,
+    runStreamLLM,
+    runSlowLLM,
   )
 where
 
-import Baikai (AssistantContent (..), Response, _Response, _TextContent)
-import Control.Lens ((&), (.~))
+import Baikai
+  ( AssistantContent (..),
+    AssistantMessageEvent (..),
+    Message (AssistantMessage),
+    Response,
+    StopReason (..),
+    doneTerminal,
+    _Response,
+    _TextContent,
+  )
+import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
 import Data.IORef (atomicModifyIORef', newIORef)
+import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful (Eff, IOE, liftIO, type (:>))
+import Effectful.Concurrent (Concurrent, threadDelay)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Eval.Report (UsageTotals (..))
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
@@ -90,6 +107,30 @@ qaProg = predict qaSig
 answerResponse :: Text -> Response
 answerResponse t = mkResponse (markerBody [("answer", t)])
 
+-- | One response carrying known non-zero usage for accounting tests.
+usageResponse :: Text -> Response
+usageResponse t =
+  answerResponse t
+    & #message . #usage . #inputTokens .~ 100
+    & #message . #usage . #outputTokens .~ 20
+    & #message . #usage . #totalTokens .~ 120
+    & #message . #usage . #cost . #usd .~ (1 % 1000)
+
+usageTotalsPerCall :: UsageTotals
+usageTotalsPerCall =
+  UsageTotals
+    { totalInputTokens = 100,
+      totalOutputTokens = 20,
+      totalTokens = 120,
+      totalCostUsd = 1 % 1000
+    }
+
+-- | A successful terminal stream whose assembled message carries the same known
+-- non-zero usage as 'usageResponse'.
+usageTerminalEvents :: Text -> [AssistantMessageEvent]
+usageTerminalEvents t =
+  [EventDone (doneTerminal Stop (AssistantMessage (usageResponse t ^. #message)))]
+
 -- | An assistant 'Response' whose body decodes (via the fallback adapter) to a
 -- record with the given @(field, value)@ sections.
 markerResponse :: [(Text, Text)] -> Response
@@ -121,6 +162,18 @@ runConstLLM :: Response -> Eff (LLM : es) a -> Eff es a
 runConstLLM resp = interpret $ \_ -> \case
   Complete {} -> pure resp
   Stream {} -> pure []
+
+-- | Return a fixed event list for every streaming call.
+runStreamLLM :: [AssistantMessageEvent] -> Eff (LLM : es) a -> Eff es a
+runStreamLLM events = interpret $ \_ -> \case
+  Complete {} -> pure (answerResponse "stream fixture complete path")
+  Stream {} -> pure events
+
+-- | Delay every completion before returning @resp@. Used for timeout tests.
+runSlowLLM :: (Concurrent :> es) => Int -> Response -> Eff (LLM : es) a -> Eff es a
+runSlowLLM micros resp = interpret $ \_ -> \case
+  Complete {} -> threadDelay micros >> pure resp
+  Stream {} -> threadDelay micros >> pure []
 
 -- | Pop scripted replies in order; a 'MockFail' is thrown through
 -- @Error ShikumiError@. Deterministic only under @concurrency = 1@.
