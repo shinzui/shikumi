@@ -95,7 +95,7 @@ no behavior with them and would blur each plan's acceptance criteria.
 | 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Complete |
 | 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | Complete |
 | 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Complete |
-| 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Not Started |
+| 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-32).
@@ -208,9 +208,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-34: M1 — `routeLLM` rewrites the `Stream` operation (model, metadata translation, stripping) (2026-07-03)
 - [x] EP-34: M2 — `streamPredict` reuses `effectiveSignature`, `attachSchema`, and `parseResponse` (2026-07-03)
 - [x] EP-34: M3 — stream errors surface out-of-band; retries fire; budget charging documented and tested (2026-07-03)
-- [ ] EP-35: M1 — `MajorityVote` carries its reducer; `majorityVoteBy` applies its `TempSchedule`; `modal` total
-- [ ] EP-35: M2 — budget admission gate renamed/documented with a concurrent overshoot test
-- [ ] EP-35: M3 — partial-function tail (`chain`, `parseBound`, `spreadTemps` clamp, refine advice failure) closed
+- [x] EP-35: M1 — `MajorityVote` carries its reducer; `majorityVoteBy` applies its `TempSchedule`; `modal` total (2026-07-03)
+- [x] EP-35: M2 — budget admission gate renamed/documented with a concurrent overshoot test (2026-07-03)
+- [x] EP-35: M3 — partial-function tail (`chain`, `parseBound`, `spreadTemps` clamp, refine advice failure) closed (2026-07-03)
 
 
 ## Surprises & Discoveries
@@ -270,6 +270,19 @@ interactions between child plans. Provide concise evidence.
   same `attachSchema`/`attachNativeRender` stamps as `runPredict` (no forked
   translation, no second parser); `routeLLM`'s `Stream` case calls the same widened
   `translateForWire` EP-33 delivered and strips the same four metadata keys.
+- EP-35 (2026-07-03): integration point 2 (shared `Program.hs`/`Stream.hs`) resolved
+  cleanly — EP-35's `MajorityVote` constructor and temperature-helper edits were
+  disjoint from EP-32's constraint rows and EP-34's `streamPredict` body, and rebased
+  mechanically. The arity change reached two consumers the plan did not enumerate
+  (`Refine.hs`'s two `sampleTemps` calls; test-side `RefineStub`/`CombinatorSpec`) —
+  found by `cabal build all`. Fixture-drift note (EP-49, master plan 9): the shared
+  `shikumi-testing` package still does not exist in the tree, so EP-32's local
+  `Verdict` fixture had nothing to diverge from across the whole initiative.
+- Process (2026-07-03): mid-implementation an external `git checkout 2a12176`
+  detached HEAD and reset the working tree, appearing to wipe all work; the commits
+  were intact on `master` (recovered via `git checkout master`). Only uncommitted
+  EP-34 M1/M2 edits were lost and redone. Lesson applied for the rest of the
+  initiative: commit each milestone immediately after its tests pass.
 
 
 ## Decision Log
@@ -303,7 +316,39 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+Complete — all four child plans landed, closing every one of the four review
+findings the initiative set out to fix. Measured against the Vision & Scope's four
+promises:
+
+1. Validation dispatch (EP-32): the catch-all `Validatable` instance is gone and a
+   user rule surfaces as `ValidationFailure` through `runProgram`, `runProgramConc`,
+   `streamProgram`, and `chainOfThought` — proven by four failing-before/passing-after
+   cases. The breaking opt-in migration was carried across every in-repo package.
+2. Native wire fidelity and strict-mode schemas (EP-33): `parseResponse` keeps the
+   located native error for JSON bodies; a routed native-capable model receives a
+   JSON-shaped prompt and JSON demos (native render channel); derived schemas satisfy
+   OpenAI strict mode (required-but-nullable `Maybe`, typed enums).
+3. Streaming routing and resilience (EP-34): `routeLLM` rewrites `Stream` exactly as
+   `Complete`; `streamPredict` reuses the blocking path's overlay, stamps, and parser;
+   stream failures surface out-of-band as transient `ProviderFailure`s that retry, with
+   budget charged from the terminal first.
+4. Combinator/budget tail (EP-35): `majorityVoteBy` applies its `TempSchedule`; the
+   budget gate is honestly named `admitCall` with a pinned overshoot test; the
+   partial-function tail (`chain`, `modal`, `sampleTemps`, `parseBound`, `spreadTemps`,
+   `refine` advice) is closed.
+
+Final state: `cabal build all && cabal test all` is green; the shikumi suite grew from
+~120 to 141 tests. The only remaining warnings are pre-existing and in other master
+plans' packages (`shikumi-cache-postgres` → MP7, `shikumi-eval` → MP6). All commits
+carry the `MasterPlan:`/`ExecPlan:`/`Intention:` trailers.
+
+Decomposition held up: the four plans were genuinely independently verifiable, the
+soft ordering EP-32 → EP-33 → EP-34 paid off (EP-33 settled `translateForWire` and
+`parseResponse` before EP-34 consumed them), and EP-35 floated free. The main surprise
+was a dependency-version mismatch: the pinned baikai lacks the structured
+`errorInfo`/`FromJSON` surfaces some plans assumed, which pushed EP-34's stream-error
+mapping to `ProviderFailure` (posture unchanged) — a reminder to verify the pinned
+dependency, not the working-tree sibling, when a plan cites transport internals.
 
 
 ## Revision Notes
