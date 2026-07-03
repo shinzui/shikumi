@@ -68,7 +68,10 @@ bootstrapFewShot = bootstrapFewShotWith defaultBootstrapConfig
 
 -- | Bootstrap few-shot with an explicit configuration. The @teacher@ may be a
 -- stronger or chain-of-thought variant of the student, or the student itself; it
--- must share the student's input/output types.
+-- must share the student's input/output types. Each teacher run reserves one
+-- predicted LM completion per teacher predict node before it runs; when the next
+-- teacher run does not fit the 'Budget', demo recovery stops and the demos found so
+-- far are attached.
 bootstrapFewShotWith ::
   (ToJSON i, ToJSON o) =>
   BootstrapConfig ->

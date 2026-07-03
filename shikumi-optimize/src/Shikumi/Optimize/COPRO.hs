@@ -59,7 +59,9 @@ defaultCoproConfig = CoproConfig {breadth = 4, depth = 3, budget = defaultBudget
 
 -- | Coordinate-ascent instruction optimization. Visits each node in @foldParams@
 -- order, optimizing it over @depth@ rounds against the already-improved earlier
--- nodes, threading one running LM-call count so the 'Budget' bounds the whole search.
+-- nodes. Proposer calls and candidate scoring reserve their predicted cost through
+-- one shared 'Budget', so the search returns the best-so-far before the next spend
+-- would exceed either ceiling.
 copro :: (ToJSON i, ToJSON o) => CoproConfig -> Optimizer i o
 copro cfg = Optimizer $ \train metric student -> do
   meter <- newBudgetMeter (budget cfg)

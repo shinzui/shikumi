@@ -14,13 +14,13 @@
 -- that candidate writes no redundant override, so a node can never end up worse than
 -- where it started.
 --
--- __Budget.__ The grounded proposer makes @4 + proposalsPerNode@ LM calls per node
--- (dataset summary, program describe, module describe, and one generation per proposal);
--- scoring one candidate costs one LM call per dataset example. The search threads a
--- running raw-call count and stops — returning the best found /so far/ — before either
--- bound in the 'Budget' would be exceeded, so the recorded LM-call count never exceeds
--- @maxLmCalls@. When the remaining budget cannot cover a node's full proposal, that node
--- keeps its current instruction (no proposer call) rather than partially proposing.
+-- __Budget.__ The grounded proposer reserves @4 + proposalsPerNode@ predicted LM
+-- completions per node (dataset summary, program describe, module describe, and one
+-- generation per proposal); scoring one candidate reserves one completion per dataset
+-- example per predict node. The search stops — returning the best found /so far/ —
+-- before either bound in the 'Budget' would be exceeded. When the remaining budget
+-- cannot cover a node's full proposal, that node keeps its current instruction (no
+-- proposer call) rather than partially proposing.
 --
 -- This module re-points V1's blind proposer at EP-19's grounded surface; the old
 -- @ProposeIn@/@ProposeOut@/@proposeInstruction@ predictor is removed (the grounded

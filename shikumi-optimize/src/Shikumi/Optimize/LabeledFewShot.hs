@@ -5,8 +5,9 @@
 --
 -- No LM calls are made beyond scoring. Candidate sets are enumerated
 -- deterministically (all size-@k@ combinations of the training demos, in a fixed
--- order, bounded by the budget) rather than randomly sampled, so the result is
--- reproducible run to run — the tests rely on this.
+-- order) rather than randomly sampled. 'labeledFewShotWith' reserves one scoring
+-- cost per candidate before evaluation and stops at the shared 'Budget'; the
+-- default 'labeledFewShot' uses 'defaultBudget'.
 module Shikumi.Optimize.LabeledFewShot
   ( labeledFewShot,
     labeledFewShotWith,

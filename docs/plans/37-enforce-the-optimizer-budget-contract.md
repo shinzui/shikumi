@@ -65,7 +65,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: M6: bootstrap per-teacher-run accounting; random search shares one meter across
       inner bootstraps and its own scoring
 - [x] 2026-07-03: M7: `ensembleSearchWith` with exact call counting between members
-- [ ] M8: rewrite the `Budget` haddock (Types.hs) to the honest accounting model;
+- [x] 2026-07-03: M8: rewrite the `Budget` haddock (Types.hs) to the honest accounting model;
       per-optimizer budget tests under the counting stubs; `cabal test all` green
 
 
@@ -106,6 +106,12 @@ implementation. Provide concise evidence.
   completions, so the documented between-member enforcement returns a one-member
   ensemble and stops before launching members 2-5; the test asserts both the
   one-member shape and the exact 4-call spend.
+
+- 2026-07-03: M8 added the final coverage gaps: `knnFewShot` and
+  `knnFewShotCentroid` are asserted to make exactly 0 optimizer-time LM calls, and
+  the `miprov2 Miprov2Light` wrapper is counted against `defaultBudget`. The full
+  optimize matrix is 69 tests, and `cabal test all` passed after the docs/test
+  updates.
 
 
 ## Decision Log
@@ -157,7 +163,16 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-07-03: EP-37 is complete. The optimizer package now has one shared
+  `BudgetMeter` seam for predicted LM-call and candidate accounting; every shipped
+  optimizer either routes spending through it or, for `ensembleSearchWith`, counts
+  opaque inner optimizers exactly between members. The public API stays compatible:
+  existing names still work, and explicit-budget variants were added where they were
+  missing (`labeledFewShotWith`, `ensembleSearchWith`). The `Budget` haddock now
+  states the implemented accounting model, including predicted-cost lower bounds for
+  wrappers, one-member ensemble overshoot, and the degenerate-budget return of the
+  input program. Validation passed with `cabal test shikumi-optimize-test` and
+  `cabal test all`.
 
 
 ## Context and Orientation

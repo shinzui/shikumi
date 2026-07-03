@@ -100,7 +100,8 @@ knnDemos embedder k train student =
    in embed $ \i -> runProgram (withDemos (nearestDemos embedder k exs (toPrompt i)) student) i
 
 -- | Run-time KNN as an 'Optimizer': selection is by embedding geometry, not by
--- score, so it consults neither the metric nor the LM at optimize time.
+-- score, so it consults neither the metric nor the LM at optimize time and spends
+-- zero optimizer LM calls.
 knnFewShot ::
   (ToJSON i, ToJSON o, ToPrompt i) =>
   (Text -> Vector Double) ->
@@ -111,7 +112,7 @@ knnFewShot embedder k = Optimizer $ \train _metric student ->
 
 -- | Compile-time fallback: bake the @k@ training examples nearest the training
 -- centroid as a fixed demo set on every node, and freeze. A plain @Params@ artifact,
--- no run-time embedder needed.
+-- no run-time embedder needed, and zero optimizer LM calls are spent.
 knnFewShotCentroid ::
   (ToJSON i, ToJSON o, ToPrompt i) =>
   (Text -> Vector Double) ->

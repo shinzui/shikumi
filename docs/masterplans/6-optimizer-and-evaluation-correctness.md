@@ -96,7 +96,7 @@ suite, and the seeding fix is urgent while the budget work is not.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |----|-------|------|-----------|-----------|--------|
 | 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | Complete |
-| 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | In Progress |
+| 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | Complete |
 | 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Not Started |
 | 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Not Started |
 
@@ -202,7 +202,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-37: M4 — GEPA seed-eval gate
 - [x] EP-37: M5 — bootstrap and random-search metering
 - [x] EP-37: M6 — ensemble budget via exact call counting
-- [ ] EP-37: M7 — honest Budget docs and budget tests for all optimizers
+- [x] EP-37: M7 — honest Budget docs and budget tests for all optimizers
 - [ ] EP-38: M1 — shape-fingerprint envelope in Serialize.hs with loud mismatch errors
 - [ ] EP-38: M2 — RAG migrated to instructionOverride; RAG round-trip test
 - [ ] EP-38: M3 — chain-of-thought round-trip and wrong-template rejection tests
@@ -278,6 +278,13 @@ Compare the result against the original vision.
   effective instruction, MIPROv2's baseline vector preserves existing demos, and the
   acceptance suite covers solved signature instructions plus two-node programs. Full
   workspace validation passed with `cabal test all`.
+
+- 2026-07-03: EP-37 is complete. All optimizer budget spending now flows through a
+  shared predicted-cost `BudgetMeter` except ensemble members, which are counted
+  exactly between members. Explicit-budget surfaces were added for labeled few-shot
+  and ensemble search, the `Budget` contract now documents the exact accounting model
+  and known lower-bound cases, the optimize package has per-optimizer counting tests,
+  and full workspace validation passed with `cabal test all`.
 
 
 ## Revision Notes

@@ -109,7 +109,7 @@ data Miprov2Config = Miprov2Config
     maxBootstrappedDemos :: !Int,
     -- | min metric score for a teacher run to contribute demos
     bootstrapThreshold :: !Double,
-    -- | hard LM-call / candidate ceiling (V1's 'Budget')
+    -- | hard predicted LM-completion / candidate ceiling (V1's 'Budget')
     budget :: !Budget
   }
   deriving stock (Eq, Show, Generic)
@@ -270,9 +270,11 @@ type JointVec = [(Int, Int)]
 
 -- | Search the joint per-node @(instruction × demoset)@ grid by greedy coordinate
 -- descent with minibatch screening, returning the best program found within the
--- 'Budget'. Each trial screens the one-coordinate neighbours of the running best on a
--- seeded minibatch, then full-evaluates the best-screened neighbour and accepts it
--- only if it strictly improves the full score.
+-- 'Budget'. Bootstrap teacher runs, grounded proposer calls, minibatch scoring, and
+-- full scoring all reserve predicted cost against one meter in 'miprov2With'. Each
+-- trial screens the one-coordinate neighbours of the running best on a seeded
+-- minibatch, then full-evaluates the best-screened neighbour and accepts it only if
+-- it strictly improves the full score.
 searchJoint ::
   (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   Miprov2Config ->

@@ -66,7 +66,10 @@ sizeFor cfg seed =
         (x : _) -> lo + (x `mod` span')
         [] -> lo
 
--- | 'bootstrapRandomSearch' with explicit tunables.
+-- | 'bootstrapRandomSearch' with explicit tunables. One 'Budget' covers all seed
+-- bootstrap teacher runs and the final candidate scoring pass; when the meter is
+-- exhausted, later seeds or scoring candidates are skipped and the best scored
+-- candidate so far is returned.
 bootstrapRandomSearchWith ::
   (ToJSON i, ToJSON o) =>
   RandomSearchConfig ->

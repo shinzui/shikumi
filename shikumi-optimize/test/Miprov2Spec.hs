@@ -28,6 +28,7 @@ import Shikumi.Optimize
     bootstrapDemoCandidates,
     defaultBudget,
     instructionSearch,
+    miprov2,
     miprov2Auto,
     miprov2With,
     optimize,
@@ -190,7 +191,17 @@ acceptance =
           Left e -> assertFailure ("unexpected error: " <> show e)
           Right _ -> pure ()
         count <- readIORef ref
-        assertBool ("expected 0 < calls <= 4, got " <> show count) (count > 0 && count <= 4)
+        assertBool ("expected 0 < calls <= 4, got " <> show count) (count > 0 && count <= 4),
+      testCase "miprov2 preset stays within the default budget" $ do
+        ref <- newIORef (0 :: Int)
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runJointStubLMCounting ref (optimize (miprov2 Miprov2Light) jointTrain exactMatch sentimentProg)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        count <- readIORef ref
+        assertBool ("expected 0 < calls <= 200, got " <> show count) (count > 0 && count <= maxLmCalls defaultBudget)
     ]
 
 serialize :: TestTree

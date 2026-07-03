@@ -66,11 +66,21 @@ newtype Optimizer i o = Optimizer
       Eff es (CompiledProgram i o)
   }
 
--- | A hard, explicit bound on search cost. The optimizers that issue LM calls
--- count the calls they make (proposer calls + per-candidate scoring evaluations,
--- each scoring evaluation costing one LM call per dataset example) and stop —
--- returning the best candidate found /so far/ — before any bound is exceeded, so
--- they never silently produce an unscored program and never blow a cost ceiling.
+-- | A hard, explicit bound on optimizer search cost. The accounting unit is a
+-- predicted LM completion: scoring one candidate costs one completion per dataset
+-- example per 'Shikumi.Program.Predict' node; a teacher run costs one completion
+-- per 'Shikumi.Program.Predict' node; and a grounded proposer call costs @4 + N@
+-- completions for @N@ requested proposals. Optimizers reserve this predicted cost
+-- before spending it and return the best candidate found so far when the next
+-- spend would exceed a ceiling.
+--
+-- This prediction is exact for plain predict/compose programs. Wrappers that can
+-- re-invoke the LM internally, such as retry, majority-vote, ensemble, or embed
+-- bodies, make the prediction a lower bound. 'Shikumi.Optimize.Ensemble.ensembleSearchWith'
+-- is the exception that counts member optimizers exactly, but enforces its ceiling
+-- only between members, so it may overshoot by one member's cost. If a budget is
+-- too small to score even the seed candidate, optimizers return the input program
+-- unscored.
 data Budget = Budget
   { -- | ceiling on raw LM calls the optimizer may make (proposals + scoring)
     maxLmCalls :: !Int,

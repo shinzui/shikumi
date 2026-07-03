@@ -192,7 +192,10 @@ renderFields (NodeFields ins outs : _) =
 
 -- | The reflective evolutionary optimizer. Takes its reflective proposer and feedback
 -- metric explicitly (so it is testable under a stub LM) and returns V1's
--- 'Optimizer'.
+-- 'Optimizer'. GEPA gates its seed evaluation before any LM call; if the budget is
+-- too small to score the student once, it returns the student unscored. Each
+-- evolution step reserves a conservative full-step cost before capture, reflection,
+-- and child scoring.
 gepa ::
   Program ReflectIn ReflectOut ->
   FeedbackMetric o ->

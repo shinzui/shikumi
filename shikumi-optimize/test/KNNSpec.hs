@@ -23,7 +23,7 @@ import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, dataset, datasetExamples, exactMatch, example)
 import Shikumi.LLM (LLM)
-import Shikumi.Optimize (knnDemos, knnFewShotCentroid, nearestDemos, optimize)
+import Shikumi.Optimize (knnDemos, knnFewShot, knnFewShotCentroid, nearestDemos, optimize, withLmCallCount)
 import Shikumi.Optimize.Search (freezeProgram)
 import Shikumi.Program (Demo (..), Params (..), programParams, runProgram)
 import StubLM (Label (..), Sentence (..), runStubLM, sentimentProg)
@@ -74,7 +74,7 @@ runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (
 runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 tests :: TestTree
-tests = testGroup "KNN" [inputNearest, centroidNearest, runtimeRuns, roundTrips]
+tests = testGroup "KNN" [inputNearest, centroidNearest, runtimeRuns, optimizeBudget, roundTrips]
 
 -- ---------------------------------------------------------------------------
 -- M1 — selection
@@ -104,6 +104,18 @@ runtimeRuns =
     let prog = knnDemos stubEmbed 2 balanced sentimentProg
     res <- runStub (runProgram prog (Sentence "france capital quiz"))
     assertBool "the Embed-wrapped KNN program runs" (either (const False) (const True) res)
+
+optimizeBudget :: TestTree
+optimizeBudget =
+  testCase "KNN optimizers make zero LM calls at optimize time" $ do
+    res <-
+      runStub $ do
+        (_, runtimeCalls) <- withLmCallCount (optimize (knnFewShot stubEmbed 2) balanced exactMatch sentimentProg)
+        (_, centroidCalls) <- withLmCallCount (optimize (knnFewShotCentroid stubEmbed 2) skewed exactMatch sentimentProg)
+        pure (runtimeCalls, centroidCalls)
+    case res of
+      Left e -> assertFailure ("unexpected error: " <> show e)
+      Right counts -> counts @?= (0, 0)
 
 -- ---------------------------------------------------------------------------
 -- M3 — serialization round-trip
