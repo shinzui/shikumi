@@ -179,7 +179,18 @@ acceptance =
             assertBool
               ("miprov2 " <> show afterMipro <> " should beat instructionSearch " <> show afterInstr)
               (afterMipro > afterInstr)
-            assertBool ("miprov2 should reach the floor, got " <> show afterMipro) (afterMipro >= 0.75)
+            assertBool ("miprov2 should reach the floor, got " <> show afterMipro) (afterMipro >= 0.75),
+      testCase "miprov2With shares one budget across bootstrap, proposal, and search" $ do
+        ref <- newIORef (0 :: Int)
+        let cfg = cfgLight & #budget .~ Budget {maxLmCalls = 4, maxCandidates = 32}
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runJointStubLMCounting ref (optimize (miprov2With cfg sentimentProg) jointTrain exactMatch sentimentProg)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        count <- readIORef ref
+        assertBool ("expected 0 < calls <= 4, got " <> show count) (count > 0 && count <= 4)
     ]
 
 serialize :: TestTree

@@ -71,7 +71,7 @@ import Shikumi.Optimize.Propose
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (BudgetMeter, effectiveInstructionAt, freezeProgram, meteredScore, newBudgetMeter, setNodeInstrIfNew)
+import Shikumi.Optimize.Search (BudgetMeter, effectiveInstructionAt, freezeProgram, meteredScore, newBudgetMeter, setNodeInstrIfNew, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program
   ( Demo (..),
@@ -134,9 +134,10 @@ miprov2 a = Optimizer $ \train metric student ->
 -- | MIPROv2 with an explicit config and an explicit teacher program.
 miprov2With :: (ToJSON i, ToJSON o) => Miprov2Config -> Program i o -> Optimizer i o
 miprov2With cfg teacher = Optimizer $ \train metric student -> do
-  demoCands <- bootstrapDemoCandidates cfg teacher train metric student
-  instrCands <- proposeInstructionCandidates cfg student train demoCands
-  best <- searchJoint cfg train metric student instrCands demoCands
+  meter <- newBudgetMeter (budget cfg)
+  demoCands <- bootstrapDemoCandidatesWith meter cfg teacher train metric student
+  instrCands <- proposeInstructionCandidatesWith meter cfg student train demoCands
+  best <- searchJointWith meter cfg train metric student instrCands demoCands
   pure (freezeProgram best)
 
 -- ---------------------------------------------------------------------------
@@ -149,7 +150,7 @@ miprov2With cfg teacher = Optimizer $ \train metric student -> do
 -- (bootstrapped) and labelled training pairs (DSPy's @max_labeled_demos@) recovered at
 -- the program-I/O level and attached to every node.
 bootstrapDemoCandidates ::
-  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es) =>
+  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
   Miprov2Config ->
   -- | teacher
   Program i o ->
@@ -159,7 +160,23 @@ bootstrapDemoCandidates ::
   Program i o ->
   Eff es [[[Demo]]]
 bootstrapDemoCandidates cfg teacher train metric student = do
+  meter <- newBudgetMeter (budget cfg)
+  bootstrapDemoCandidatesWith meter cfg teacher train metric student
+
+bootstrapDemoCandidatesWith ::
+  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
+  BudgetMeter ->
+  Miprov2Config ->
+  -- | teacher
+  Program i o ->
+  Dataset i o ->
+  Metric o ->
+  -- | student (for the node count)
+  Program i o ->
+  Eff es [[[Demo]]]
+bootstrapDemoCandidatesWith meter cfg teacher train metric student = do
   let exs = datasetExamples train
+      teacherCost = max 1 (length (foldParams teacher))
       keepIfPassing (Example inp expd) =
         ( do
             out <- runProgram teacher inp
@@ -167,7 +184,15 @@ bootstrapDemoCandidates cfg teacher train metric student = do
             pure [recoverDemo inp out | s >= bootstrapThreshold cfg]
         )
           `catchError` \_ (_ :: ShikumiError) -> pure []
-  bootstrapped <- concat <$> mapM keepIfPassing exs
+      collect [] = pure []
+      collect (ex : rest) = do
+        fits <- tryCharge meter teacherCost
+        if not fits
+          then pure []
+          else do
+            kept <- keepIfPassing ex
+            (kept ++) <$> collect rest
+  bootstrapped <- collect exs
   let cap = max 1 (maxBootstrappedDemos cfg)
       labeledSet = take cap (map (\(Example i o) -> recoverDemo i o) exs)
       bootSet = take cap bootstrapped
@@ -186,30 +211,48 @@ bootstrapDemoCandidates cfg teacher train metric student = do
 -- Uses EP-19's 'proposeInstructions'; the per-candidate tip starts at the /creative/
 -- tip (@tipIndex = 1@) so a node always gets a strong proposal even at small N.
 proposeInstructionCandidates ::
-  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es) =>
+  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
   Miprov2Config ->
   Program i o ->
   Dataset i o ->
   [[[Demo]]] ->
   Eff es [[Text]]
-proposeInstructionCandidates cfg student train demoCands =
+proposeInstructionCandidates cfg student train demoCands = do
+  meter <- newBudgetMeter (budget cfg)
+  proposeInstructionCandidatesWith meter cfg student train demoCands
+
+proposeInstructionCandidatesWith ::
+  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
+  BudgetMeter ->
+  Miprov2Config ->
+  Program i o ->
+  Dataset i o ->
+  [[[Demo]]] ->
+  Eff es [[Text]]
+proposeInstructionCandidatesWith meter cfg student train demoCands =
   forM (zip [0 ..] demoCands) $ \(k, nodeDemoSets) -> do
     let curInstr = effectiveInstructionAt k student
         demoTexts = map renderDemo (concat (take 1 (filter (not . null) nodeDemoSets)))
-    ProposeResult cs <-
-      proposeInstructions
-        train
-        ProposeRequest
-          { program = student,
-            targetNode = k,
-            currentInstruction = curInstr,
-            history = [],
-            bootstrappedDemos = demoTexts,
-            numCandidates = max 0 (numInstructCandidates cfg - 1),
-            tipIndex = 1,
-            viewBatch = 2
-          }
-    pure cs
+        numProposals = max 0 (numInstructCandidates cfg - 1)
+        proposerCost = 4 + numProposals
+    fits <- tryCharge meter proposerCost
+    if not fits
+      then pure [curInstr]
+      else do
+        ProposeResult cs <-
+          proposeInstructions
+            train
+            ProposeRequest
+              { program = student,
+                targetNode = k,
+                currentInstruction = curInstr,
+                history = [],
+                bootstrappedDemos = demoTexts,
+                numCandidates = numProposals,
+                tipIndex = 1,
+                viewBatch = 2
+              }
+        pure cs
 
 -- | Render a recovered 'Demo' as @<input-json> => <output-json>@ for the proposal
 -- prompt's demo signal.

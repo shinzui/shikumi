@@ -59,7 +59,7 @@ This section must always reflect the actual current state of the work.
       `datasetSize × nodes`
 - [x] 2026-07-03: M3: `labeledFewShotWith` (budget-parameterized) + metered scoring; back-compat
       `labeledFewShot`
-- [ ] M4: MIPROv2 phases 1–2 metered (teacher runs, proposer calls) sharing one meter
+- [x] 2026-07-03: M4: MIPROv2 phases 1–2 metered (teacher runs, proposer calls) sharing one meter
       with phase 3
 - [ ] M5: GEPA seed-evaluation gate
 - [ ] M6: bootstrap per-teacher-run accounting; random search shares one meter across
@@ -80,6 +80,12 @@ implementation. Provide concise evidence.
   LM completions. The new `labeledFewShotWith (Budget { maxLmCalls = 6,
   maxCandidates = 100 }) 2` test stops after one 4-call scoring evaluation and
   asserts the actual counter is `<= 6`.
+
+- 2026-07-03: M4's tiny-budget MIPROv2 test uses `maxLmCalls = 4` on the 4-example
+  joint fixture. Before this milestone, the run necessarily spent 4 teacher calls,
+  5 proposer calls, and at least a 4-call baseline search evaluation, so it could
+  not satisfy the bound. With one shared meter, the test observes only work that
+  fits the shared ceiling and asserts the actual counter is `<= 4`.
 
 
 ## Decision Log
