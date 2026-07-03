@@ -54,6 +54,7 @@ import Data.Aeson (Object, Value (Object))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -140,7 +141,7 @@ bestOfNWith ::
   Program i o ->
   Program i o
 bestOfNWith n failCount sched threshold reward inner = embed $ \i ->
-  let temps = sampleTemps (max 1 n) sched
+  let temps = NE.toList (sampleTemps n sched)
       go [] best lastErr _ = finish best lastErr
       go (t : ts) best lastErr budget = do
         res <- tryShikumi (withSampleTemp t (runProgram inner i))
@@ -374,7 +375,7 @@ multiChainComparison ::
   Signature (MultiChainInput i o) o2 ->
   Program i o2
 multiChainComparison m reasoner synthSig = embed $ \i -> do
-  let temps = sampleTemps (max 1 m) defaultSpread
+  let temps = NE.toList (sampleTemps m defaultSpread)
   results <- traverse (\t -> tryShikumi (withSampleTemp t (runProgram reasoner i))) temps
   let oks = [o | Right o <- results]
       errs = [e | Left e <- results]

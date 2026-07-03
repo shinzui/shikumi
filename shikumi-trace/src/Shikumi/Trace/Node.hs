@@ -94,7 +94,7 @@ programNodePaths = go []
     go prefix (Retry _ p) = go (StepRetry : prefix) p
     go prefix (RetryWhen _ _ p) = go (StepRetryWhen : prefix) p
     go prefix (Validate _ p) = go (StepValidate : prefix) p
-    go prefix (MajorityVote _ _ p) = go (StepMajorityVote : prefix) p
+    go prefix (MajorityVote _ _ _ p) = go (StepMajorityVote : prefix) p
     go prefix (Ensemble ps _) = concat (zipWith (\i p -> go (StepEnsemble i : prefix) p) [0 ..] ps)
     go _ (Embed _) = []
 

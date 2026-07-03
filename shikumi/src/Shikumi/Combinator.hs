@@ -56,11 +56,14 @@ module Shikumi.Combinator
   )
 where
 
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Program
   ( Program (Compose, Ensemble, MajorityVote, Map, Parallel, Retry, RetryWhen, Validate),
     TempSchedule (..),
+    modal,
   )
 
 -- ---------------------------------------------------------------------------
@@ -80,11 +83,11 @@ infixr 1 >>>
 -- @pipeline@\/@Compose@; this n-ary helper is restricted to a single carried type
 -- because the GADT has no identity node to seed an empty fold.)
 --
--- Applying it to the empty list is a programmer error (there is no identity
--- 'Program').
-chain :: [Program a a] -> Program a a
-chain [] = error "Shikumi.Combinator.chain: empty stage list"
-chain ps = foldr1 (>>>) ps
+-- The argument is a 'NonEmpty' — there is no identity 'Program' to seed an empty
+-- fold, so emptiness is unrepresentable rather than a runtime crash. Write
+-- @chain (a ':|' [b, c])@ (or @chain (NE.fromList [a, b, c])@).
+chain :: NonEmpty (Program a a) -> Program a a
+chain ps = foldr1 (>>>) (NE.toList ps)
 
 -- ---------------------------------------------------------------------------
 -- Map
@@ -148,16 +151,19 @@ validateRetry n ok reason p = Retry n (validate ok reason p)
 -- ---------------------------------------------------------------------------
 
 -- | Sample a program @K@ times and return the modal output (most frequent under
--- 'Eq', ties broken by first appearance). The 'TempSchedule' is carried and
--- serialized but not yet applied to the wire — see 'TempSchedule'.
+-- 'Eq', ties broken by first appearance). The 'TempSchedule' is live: each
+-- sample's temperature is stamped onto its request and realized on the wire by the
+-- router (see 'TempSchedule').
 majorityVote :: (Eq o) => Int -> TempSchedule -> Program i o -> Program i o
-majorityVote = MajorityVote
+majorityVote k sched = MajorityVote k sched modal
 
--- | Sample a program @K@ times and fold the @K@ outputs with a custom reducer,
--- for outputs that are not usefully 'Eq'. Defined as an 'ensemble' over @K@
--- copies of the program.
+-- | Sample a program @K@ times and fold the @K@ (non-empty) outputs with a custom
+-- reducer, for outputs that are not usefully 'Eq'. Like 'majorityVote' it applies
+-- the 'TempSchedule' per sample and exposes the sub-program's 'Params' once (not
+-- @K@ times) — the samples are runs of a single node, not @K@ distinct 'ensemble'
+-- members.
 majorityVoteBy :: Int -> TempSchedule -> ([o] -> o) -> Program i o -> Program i o
-majorityVoteBy k _sched reducer p = Ensemble (replicate (max 1 k) p) reducer
+majorityVoteBy k sched reducer = MajorityVote k sched (reducer . NE.toList)
 
 -- ---------------------------------------------------------------------------
 -- Ensemble

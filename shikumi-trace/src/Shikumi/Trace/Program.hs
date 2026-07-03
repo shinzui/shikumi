@@ -67,7 +67,6 @@ import Shikumi.Program
         Validate
       ),
     acceptOrReject,
-    modal,
     retryWith,
     runProgram,
     sampleTemps,
@@ -177,9 +176,9 @@ runProgramTraced = go []
       withSpan CombinatorSpan "RetryWhen" (retryWith (go (StepRetryWhen : prefix)) ok n p i)
     go prefix (Validate v p) i =
       withSpan CombinatorSpan "Validate" (go (StepValidate : prefix) p i >>= acceptOrReject v)
-    go prefix (MajorityVote k sched p) i =
+    go prefix (MajorityVote k sched reduce p) i =
       withSpan CombinatorSpan "MajorityVote" $
-        modal <$> traverse (\mt -> withSampleTemp mt (go (StepMajorityVote : prefix) p i)) (sampleTemps (max 1 k) sched)
+        reduce <$> traverse (\mt -> withSampleTemp mt (go (StepMajorityVote : prefix) p i)) (sampleTemps k sched)
     go prefix (Ensemble ps reduce) i =
       withSpan CombinatorSpan "Ensemble" $
         reduce <$> sequence [go (StepEnsemble idx : prefix) p i | (idx, p) <- zip [0 ..] ps]

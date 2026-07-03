@@ -56,6 +56,7 @@ import Baikai.Message (Message (..), UserPayload (..))
 import Control.Lens ((^.))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef')
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -197,7 +198,7 @@ answerJSON a = "{\"answer\": \"" <> a <> "\"}"
 modalCandidate :: Text -> Text
 modalCandidate t = case extractAnswers t of
   [] -> ""
-  xs -> modal xs
+  xs -> modal (NE.fromList xs)
 
 -- | Pull each attempt's answer out of the rendered 'MultiChainInput' prompt.
 extractAnswers :: Text -> [Text]

@@ -86,6 +86,8 @@ import Baikai (Model, _Model)
 import Data.Aeson (FromJSON, ToJSON, Value)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -207,10 +209,15 @@ data Program i o where
   -- normalizing), 'Left' rejects with a reason surfaced as a
   -- 'ValidationFailure'.
   Validate :: (o -> Either Text o) -> Program i o -> Program i o
-  -- | Sample a program @K@ times and return the modal (most-frequent under
-  -- 'Eq', ties broken by first-seen) output. Each sample is run with its
-  -- 'TempSchedule' temperature applied to the wire (see 'TempSchedule').
-  MajorityVote :: (Eq o) => Int -> TempSchedule -> Program i o -> Program i o
+  -- | Sample a program @K@ times, then fold the (non-empty) samples with a
+  -- total reducer — 'Shikumi.Combinator.majorityVote' passes 'modal' (the modal
+  -- value under 'Eq'); 'Shikumi.Combinator.majorityVoteBy' passes a custom
+  -- reducer. Each sample is run with its 'TempSchedule' temperature applied to
+  -- the wire (see 'TempSchedule'). The reducer is opaque to the parameter
+  -- traversal and to 'ProgramShape' (omitted, exactly like 'Ensemble'\'s), so a
+  -- @MajorityVote@ exposes the sub-program's 'Params' once. The @Eq o@ that
+  -- 'modal' needs now lives on the smart constructor, not the GADT.
+  MajorityVote :: Int -> TempSchedule -> (NonEmpty o -> o) -> Program i o -> Program i o
   -- | Run several programs on the same input, collect their (homogeneous)
   -- results, and fold them with a total reducer.
   Ensemble :: [Program i r] -> ([r] -> o) -> Program i o
@@ -271,8 +278,8 @@ runProgram (Parallel pa pb) i = (,) <$> runProgram pa i <*> runProgram pb i
 runProgram (Retry n p) i = retryWith runProgram (const True) n p i
 runProgram (RetryWhen ok n p) i = retryWith runProgram ok n p i
 runProgram (Validate v p) i = runProgram p i >>= acceptOrReject v
-runProgram (MajorityVote k sched p) i =
-  modal <$> traverse (\mt -> withSampleTemp mt (runProgram p i)) (sampleTemps (max 1 k) sched)
+runProgram (MajorityVote k sched reduce p) i =
+  reduce <$> traverse (\mt -> withSampleTemp mt (runProgram p i)) (sampleTemps k sched)
 runProgram (Ensemble ps reduce) i = reduce <$> traverse (\p -> runProgram p i) ps
 runProgram (Embed f) i = f i
 
@@ -295,8 +302,8 @@ runProgramConc (Parallel pa pb) i = concurrently (runProgramConc pa i) (runProgr
 runProgramConc (Retry n p) i = retryWith runProgramConc (const True) n p i
 runProgramConc (RetryWhen ok n p) i = retryWith runProgramConc ok n p i
 runProgramConc (Validate v p) i = runProgramConc p i >>= acceptOrReject v
-runProgramConc (MajorityVote k sched p) i =
-  modal <$> mapConcurrently (\mt -> withSampleTemp mt (runProgramConc p i)) (sampleTemps (max 1 k) sched)
+runProgramConc (MajorityVote k sched reduce p) i =
+  reduce <$> mapConcurrently (\mt -> withSampleTemp mt (runProgramConc p i)) (sampleTemps k sched)
 runProgramConc (Ensemble ps reduce) i = reduce <$> mapConcurrently (\p -> runProgramConc p i) ps
 -- The body requires only @(LLM, Error ShikumiError)@, a subset of this row, so it
 -- runs unchanged; an embedded agent that wants concurrency uses 'runProgramConc'
@@ -359,23 +366,32 @@ parseResponse sig' resp =
     -- Not JSON: the fallback / marker wire shape. Exact prior behaviour.
     Left _ -> parse (fallbackAdapter @i @o) sig' resp
 
--- | The per-sample temperatures for a 'MajorityVote' of @k@ samples. 'Nothing'
--- leaves the provider default in place; 'Just t' is stamped onto the sample's
--- requests. The multiset is identical between 'runProgram' and 'runProgramConc'.
-sampleTemps :: Int -> TempSchedule -> [Maybe Double]
-sampleTemps k (TempFixed xs)
-  | null xs = replicate k Nothing
-  | otherwise = map Just (take k (cycle xs))
-sampleTemps k (TempSpread base spread) = map Just (spreadTemps k base spread)
+-- | The per-sample temperatures for a 'MajorityVote' of @k@ samples (at least
+-- one — @k@ is clamped up to 1 here so the executors need not). 'Nothing' leaves
+-- the provider default in place; 'Just t' is stamped onto the sample's requests.
+-- The multiset is identical between 'runProgram' and 'runProgramConc'.
+sampleTemps :: Int -> TempSchedule -> NonEmpty (Maybe Double)
+sampleTemps k sched = case sched of
+  TempFixed xs
+    | null xs -> NE.fromList (replicate k' Nothing)
+    | otherwise -> NE.fromList (map Just (take k' (cycle xs)))
+  TempSpread base spread -> NE.map Just (spreadTemps k' base spread)
+  where
+    k' = max 1 k
 
--- | @k@ temperatures fanned evenly across @[base-spread, base+spread]@; a single
--- sample sits exactly on @base@.
-spreadTemps :: Int -> Double -> Double -> [Double]
+-- | @k@ temperatures (@k >= 1@) fanned evenly across @[base-spread, base+spread]@;
+-- a single sample sits exactly on @base@. Every derived value is clamped to
+-- @[0, 2]@ — the widest range a mainstream provider accepts — so a wide spread
+-- never sends a negative (or absurdly high) temperature to the wire. Note this
+-- clamps only the /derived/ 'TempSpread' fan-out; 'TempFixed' values are the user's
+-- explicit choice and pass through 'sampleTemps' unclamped.
+spreadTemps :: Int -> Double -> Double -> NonEmpty Double
 spreadTemps k base spread
-  | k <= 1 = [base]
-  | otherwise = [base - spread + fromIntegral i * step | i <- [0 .. k - 1]]
+  | k <= 1 = clampTemp base :| []
+  | otherwise = NE.fromList [clampTemp (base - spread + fromIntegral i * step) | i <- [0 .. k - 1]]
   where
     step = (2 * spread) / fromIntegral (k - 1)
+    clampTemp t = max 0 (min 2 t)
 
 -- | Run an action with one sample's temperature stamped onto every outgoing
 -- 'Complete' (via the private metadata channel the router realizes). 'Nothing' runs
@@ -414,16 +430,19 @@ retryWith run ok n p i = go (max 1 n)
       run p i `catchError` \_cs e ->
         if ok e && left > 1 then go (left - 1) else throwError e
 
--- | The modal value of a non-empty list: most frequent under 'Eq', ties broken
--- by first appearance. Tallies in first-seen order, then keeps the first entry
--- whose count is strictly greatest.
-modal :: (Eq o) => [o] -> o
-modal = pickBest . foldl' tally []
+-- | The modal value of a non-empty collection of samples: most frequent under
+-- 'Eq', ties broken by first appearance. Tallies in first-seen order, then keeps
+-- the first entry whose count is strictly greatest. Total: the 'NonEmpty' input
+-- guarantees a winner, so there is no empty-list crash.
+modal :: (Eq o) => NonEmpty o -> o
+modal xs = pickBest (foldl' tally [] (NE.toList xs))
   where
     tally acc x = case break ((== x) . fst) acc of
       (pre, (y, c) : post) -> pre ++ (y, c + 1) : post
       (pre, []) -> pre ++ [(x, 1 :: Int)]
-    pickBest [] = error "Shikumi.Program.modal: empty sample list"
+    -- The tally of a non-empty input is non-empty, so the @[]@ case is
+    -- unreachable; it returns the first sample to stay total.
+    pickBest [] = NE.head xs
     pickBest (z : zs) =
       fst (foldl' (\best cur -> if snd cur > snd best then cur else best) z zs)
 
@@ -465,7 +484,7 @@ paramsTraversal h (Parallel pa pb) = Parallel <$> paramsTraversal h pa <*> param
 paramsTraversal h (Retry n p) = Retry n <$> paramsTraversal h p
 paramsTraversal h (RetryWhen ok n p) = RetryWhen ok n <$> paramsTraversal h p
 paramsTraversal h (Validate v p) = Validate v <$> paramsTraversal h p
-paramsTraversal h (MajorityVote k sched p) = MajorityVote k sched <$> paramsTraversal h p
+paramsTraversal h (MajorityVote k sched reduce p) = MajorityVote k sched reduce <$> paramsTraversal h p
 paramsTraversal h (Ensemble ps reduce) = Ensemble <$> traverse (paramsTraversal h) ps <*> pure reduce
 -- 'Embed' carries no 'Params' (its body is an opaque closure, like 'FMap'\'s
 -- function), so it is a traversal leaf — preserved untouched.
@@ -503,7 +522,7 @@ nodeFieldsIndexed = go
     go (Retry _ p) = go p
     go (RetryWhen _ _ p) = go p
     go (Validate _ p) = go p
-    go (MajorityVote _ _ p) = go p
+    go (MajorityVote _ _ _ p) = go p
     go (Ensemble ps _) = concatMap go ps
     go (Embed _) = []
 
@@ -526,7 +545,7 @@ nodeInstructionsIndexed = go
     go (Retry _ p) = go p
     go (RetryWhen _ _ p) = go p
     go (Validate _ p) = go p
-    go (MajorityVote _ _ p) = go p
+    go (MajorityVote _ _ _ p) = go p
     go (Ensemble ps _) = concatMap go ps
     go (Embed _) = []
 
@@ -566,9 +585,9 @@ mapParamsAt n f = fst . go 0
     go idx (Validate v p) =
       let (p', idx') = go idx p
        in (Validate v p', idx')
-    go idx (MajorityVote k sched p) =
+    go idx (MajorityVote k sched reduce p) =
       let (p', idx') = go idx p
-       in (MajorityVote k sched p', idx')
+       in (MajorityVote k sched reduce p', idx')
     go idx (Ensemble ps reduce) =
       let (ps', idx') = goList idx ps
        in (Ensemble ps' reduce, idx')
@@ -635,7 +654,7 @@ programShape (Parallel a b) = ShapeParallel (programShape a) (programShape b)
 programShape (Retry n p) = ShapeRetry n (programShape p)
 programShape (RetryWhen _ n p) = ShapeRetryWhen n (programShape p)
 programShape (Validate _ p) = ShapeValidate (programShape p)
-programShape (MajorityVote k sched p) = ShapeMajorityVote k sched (programShape p)
+programShape (MajorityVote k sched _ p) = ShapeMajorityVote k sched (programShape p)
 programShape (Ensemble ps _) = ShapeEnsemble (map programShape ps)
 programShape (Embed _) = ShapeEmbed
 
@@ -687,9 +706,9 @@ setProgramParams ps prog
     go qs (Validate v p) =
       let (p', qs') = go qs p
        in (Validate v p', qs')
-    go qs (MajorityVote k sched p) =
+    go qs (MajorityVote k sched reduce p) =
       let (p', qs') = go qs p
-       in (MajorityVote k sched p', qs')
+       in (MajorityVote k sched reduce p', qs')
     go qs (Ensemble ms reduce) =
       let (ms', qs') = goList qs ms
        in (Ensemble ms' reduce, qs')

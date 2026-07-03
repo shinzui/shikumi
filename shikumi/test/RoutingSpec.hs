@@ -29,6 +29,7 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (nub, sort)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
@@ -41,7 +42,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack)
 import ProgramFixtures (Outline, Topic (..), outlineResponse, topicToOutline)
 import Shikumi.Adapter (metaNativeDemosKey, metaNativePromptKey, metaResponseSchemaKey, metaTemperatureKey)
-import Shikumi.Combinator (majorityVote)
+import Shikumi.Combinator (majorityVote, majorityVoteBy)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), Response)
 import Shikumi.Module (predict)
@@ -71,6 +72,7 @@ tests =
       fallbackPromptUnchangedAndStampsStripped,
       routesStreamModelAndStripsMetadata,
       spreadSetsDistinctTemps,
+      majorityVoteBySetsDistinctTemps,
       fixedSetsExactTemps,
       concurrentAgreesOnTemps
     ]
@@ -288,6 +290,22 @@ spreadSetsDistinctTemps =
     assertBool
       "private temperature key stripped before transport"
       (all (\(_, _, o) -> Map.notMember metaTemperatureKey (o ^. #metadata)) captured)
+
+majorityVoteBySetsDistinctTemps :: TestTree
+majorityVoteBySetsDistinctTemps =
+  testCase "majorityVoteBy applies its TempSchedule per sample (EP-35)" $ do
+    -- Before EP-35 majorityVoteBy ignored its schedule (defined via Ensemble), so
+    -- zero temperatures reached the wire. The reducer is irrelevant here (we assert
+    -- on captured temperatures); pickFirst is any total [o] -> o.
+    let pickFirst = NE.head . NE.fromList
+    captured <-
+      captureRouted
+        openai_gpt_4o_mini
+        (majorityVoteBy 3 (TempSpread 0.5 0.4) pickFirst (predict topicToOutline))
+        (Topic "cats")
+    let temps = capturedTemps captured
+    length temps @?= 3
+    map round3 (sort temps) @?= [0.1, 0.5, 0.9]
 
 fixedSetsExactTemps :: TestTree
 fixedSetsExactTemps =

@@ -231,7 +231,7 @@ streamProgram prog i cb = case prog of
   -- chunks where per-field streaming is ambiguous or the body is opaque).
   Map _ _ -> blockingNode prog i cb
   Parallel _ _ -> blockingNode prog i cb
-  MajorityVote _ _ _ -> blockingNode prog i cb
+  MajorityVote _ _ _ _ -> blockingNode prog i cb
   Embed _ -> blockingNode prog i cb
   _ -> blockingNode prog i cb
 

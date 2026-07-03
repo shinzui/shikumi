@@ -10,6 +10,7 @@ module CombinatorSpec (tests) where
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (runEff)
@@ -171,7 +172,7 @@ pipelineTests =
         r <- runSeq pipe [outlineResponse, draftResponse] (Topic "haskell")
         r @?= Right (Draft "A fine essay about the outline."),
       testCase "chain composes n same-type stages, returning the last stage's output" $ do
-        let pipe = chain [cellP, cellP, cellP]
+        let pipe = chain (cellP :| [cellP, cellP])
         r <- runSeq pipe [cellResp "a", cellResp "b", cellResp "c"] (Cell "in")
         r @?= Right (Cell "c")
     ]
@@ -268,7 +269,11 @@ majorityVoteTests =
       testCase "majorityVoteBy applies the custom reducer" $ do
         let prog = majorityVoteBy 3 sched1 concatCells cellP
         r <- runSeq prog [cellResp "x", cellResp "y", cellResp "z"] (Cell "in")
-        r @?= Right (Cell "xyz")
+        r @?= Right (Cell "xyz"),
+      testCase "majorityVoteBy exposes the sub-program's params once, not K times" $
+        -- EP-35: it is a single node sampled K times (reducer carried on
+        -- MajorityVote), not K distinct Ensemble members.
+        length (foldParams (majorityVoteBy 3 sched1 concatCells cellP)) @?= 1
     ]
 
 ensembleTests :: TestTree
@@ -289,9 +294,9 @@ ensembleTests =
 deepProg :: Program Cell Cell
 deepProg =
   chain
-    [ retry 2 (majorityVote 3 sched1 cellP),
-      validate (const True) "always ok" cellP
-    ]
+    ( retry 2 (majorityVote 3 sched1 cellP)
+        :| [validate (const True) "always ok" cellP]
+    )
 
 crossCuttingTests :: TestTree
 crossCuttingTests =

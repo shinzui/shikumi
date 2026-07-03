@@ -85,6 +85,6 @@ install ctx
     go (Retry n p) = Retry n (go p)
     go (RetryWhen ok n p) = RetryWhen ok n (go p)
     go (Validate v p) = Validate v (go p)
-    go (MajorityVote k sched p) = MajorityVote k sched (go p)
+    go (MajorityVote k sched r p) = MajorityVote k sched r (go p)
     go (Ensemble ps reduce) = Ensemble (map go ps) reduce
     go (Embed f) = Embed f -- an agent node has no 'Predict' to rewrite; pass through

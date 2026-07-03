@@ -73,6 +73,6 @@ cot (Parallel a b) = Parallel (cot a) (cot b)
 cot (Retry n p) = Retry n (cot p)
 cot (RetryWhen ok n p) = RetryWhen ok n (cot p)
 cot (Validate v p) = Validate v (cot p)
-cot (MajorityVote k sched p) = MajorityVote k sched (cot p)
+cot (MajorityVote k sched r p) = MajorityVote k sched r (cot p)
 cot (Ensemble ps reduce) = Ensemble (map cot ps) reduce
 cot (Embed f) = Embed f -- an agent node has no 'Predict' to rewrite; pass through
