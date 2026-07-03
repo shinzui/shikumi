@@ -6,7 +6,7 @@ import Shikumi.Module (predict)
 import Shikumi.Optimize.Search (effectiveInstructionAt, instructionAt, setNodeInstr, setNodeInstrIfNew)
 import Shikumi.Program (Program)
 import Shikumi.Signature (Signature, mkSignature)
-import StubLM (Label, Sentence, ruleInstruction, sentimentProg)
+import StubLM (Label, Sentence, ruleInstruction, ruled, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -15,9 +15,6 @@ echoSig = mkSignature "Echo the sentiment label unchanged."
 
 twoNode :: Program Sentence Label
 twoNode = sentimentProg >>> predict echoSig
-
-ruled :: Program Sentence Label
-ruled = predict (mkSignature ruleInstruction)
 
 tests :: TestTree
 tests =

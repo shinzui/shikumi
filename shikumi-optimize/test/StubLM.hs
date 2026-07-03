@@ -39,6 +39,7 @@ module StubLM
     -- * Signature and program
     sentimentSig,
     sentimentProg,
+    ruled,
 
     -- * Ground truth and helpers
     goldLabel,
@@ -131,6 +132,11 @@ sentimentSig = mkSignature ""
 -- | The single-node sentiment program.
 sentimentProg :: Program Sentence Label
 sentimentProg = predict sentimentSig
+
+-- | A single-node sentiment program whose signature instruction already solves the
+-- task under the stub. Optimizers must preserve it when "keep current" wins.
+ruled :: Program Sentence Label
+ruled = predict (mkSignature ruleInstruction)
 
 -- ---------------------------------------------------------------------------
 -- Ground truth and helpers

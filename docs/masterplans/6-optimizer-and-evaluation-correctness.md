@@ -192,7 +192,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
 - [x] EP-36: M1 — effective-instruction helpers in Search.hs, unit-tested
-- [ ] EP-36: M2 — instructionSearch and COPRO seed from the effective instruction
+- [x] EP-36: M2 — instructionSearch and COPRO seed from the effective instruction
 - [ ] EP-36: M3 — MIPROv2 baseline/applyVec preserve the student; original demos are a candidate
 - [ ] EP-36: M4 — GEPA reflects on the effective instruction
 - [ ] EP-36: M5 — fixture diversification (non-empty signature instruction, two-node pipeline) and acceptance suite green

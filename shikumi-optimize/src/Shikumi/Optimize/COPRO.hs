@@ -9,7 +9,8 @@
 -- COPRO consumes EP-19's grounded proposer ('Shikumi.Optimize.Propose.proposeInstructions')
 -- directly: each round's call passes the node's current instruction and its scored
 -- 'PastInstruction' history, and the proposer returns ranked candidates with the
--- current instruction always retained (the safety property — a node never degrades).
+-- current effective instruction always retained. Keeping that candidate writes no
+-- redundant override, preserving the safety property that a node never degrades.
 --
 -- Output is V1's 'Shikumi.Compile.Types.CompiledProgram' via 'freezeProgram', invoked
 -- through 'Shikumi.Optimize.optimize' and serialized unchanged (integration point #4).
@@ -22,7 +23,6 @@ where
 
 import Control.Monad (foldM)
 import Data.Aeson (ToJSON)
-import Data.Maybe (fromMaybe)
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
@@ -38,7 +38,7 @@ import Shikumi.Optimize.Propose
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (freezeProgram, instructionAt, scoreOn, setNodeInstr)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program (Program, foldParams)
 
@@ -96,7 +96,7 @@ optimizeNode cfg train metric idx (prog0, calls0) = goRound 1 prog0 calls0 []
     goRound r prog calls evald
       | r > dpth = pure (setBest prog evald, calls)
       | otherwise = do
-          let cur = fromMaybe "" (instructionAt idx prog)
+          let cur = effectiveInstructionAt idx prog
               hist = [PastInstruction i s | (i, s) <- evald]
           (cands, calls1) <-
             if calls + proposerCost <= maxCalls
@@ -128,7 +128,7 @@ optimizeNode cfg train metric idx (prog0, calls0) = goRound 1 prog0 calls0 []
       | calls + dsSize > maxCalls = pure (evald, calls)
       | length evald >= maxCands = pure (evald, calls)
       | otherwise = do
-          s <- scoreOn train metric (setNodeInstr idx c prog)
+          s <- scoreOn train metric (setNodeInstrIfNew idx c prog)
           scoreNew prog (calls + dsSize) (evald ++ [(c, s)]) cs
 
     -- Candidates not already scored, de-duplicated against each other (order-preserving).
@@ -142,6 +142,6 @@ optimizeNode cfg train metric idx (prog0, calls0) = goRound 1 prog0 calls0 []
     -- Set node idx to the highest-scoring instruction recorded (earliest on ties).
     setBest prog evald = case evald of
       [] -> prog
-      (e : es) -> setNodeInstr idx (fst (foldl' pick e es)) prog
+      (e : es) -> setNodeInstrIfNew idx (fst (foldl' pick e es)) prog
       where
         pick best c = if snd c > snd best then c else best

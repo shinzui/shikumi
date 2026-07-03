@@ -58,8 +58,10 @@ This section must always reflect the actual current state of the work.
       `shikumi-optimize/src/Shikumi/Optimize/Search.hs`; unit tests in a new
       `shikumi-optimize/test/SearchSpec.hs` (registered in the cabal file and
       `test/Main.hs`); `cabal test shikumi-optimize` passed with 46 tests.
-- [ ] M2: re-point `Instruction.hs` (instructionSearch) and `COPRO.hs` at the new
-      helpers; failing-before tests for both
+- [x] M2 completed 2026-07-03 — re-pointed `Instruction.hs` (instructionSearch) and
+      `COPRO.hs` at the new helpers; added failing-before tests for both in
+      `shikumi-optimize/test/SeedingSpec.hs`; `cabal test shikumi-optimize` passed
+      with 48 tests after the fix.
 - [ ] M3: fix MIPROv2 — effective-instruction seeding, per-node original demos as demo
       candidate 0, identity `applyVec` at the base vector; failing-before test plus a
       `bootstrapDemoCandidates` unit test
@@ -83,6 +85,12 @@ implementation. Provide concise evidence.
   override text when present, and the second node's base instruction in a two-node
   pipeline. Evidence: the `Search` test group passed and the full suite reported `All
   46 tests passed`.
+
+- 2026-07-03: The new M2 regression tests failed before the `Instruction.hs` and
+  `COPRO.hs` source rewiring exactly as expected: `instructionSearch: expected 0.0 >=
+  1.0` and `copro: expected 0.0 >= 1.0`, showing both optimizers blanked a solved
+  signature instruction. After switching both read paths to `effectiveInstructionAt`
+  and writes to `setNodeInstrIfNew`, the same suite reported `All 48 tests passed`.
 
 
 ## Decision Log

@@ -18,6 +18,7 @@ import OptimizeSpec qualified
 import ProposeSpec qualified
 import RandomSearchSpec qualified
 import SearchSpec qualified
+import SeedingSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -37,5 +38,6 @@ main =
         KNNSpec.tests,
         RandomSearchSpec.tests,
         SearchSpec.tests,
+        SeedingSpec.tests,
         AcceptanceSpec.tests
       ]

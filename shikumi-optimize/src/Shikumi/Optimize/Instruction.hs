@@ -9,8 +9,10 @@
 -- The proposer and its signal-gatherers are themselves ordinary shikumi 'Program's, so
 -- they are typed, cached, traced, and testable with the same stub-LM machinery as
 -- everything else — the optimizer is written in the framework it optimizes. The
--- /current/ instruction is always retained as a candidate (the proposer guarantees it),
--- so a node can never end up worse than where it started.
+-- /current/ effective instruction (override, or signature base when no override is
+-- present) is always retained as a candidate (the proposer guarantees it), and keeping
+-- that candidate writes no redundant override, so a node can never end up worse than
+-- where it started.
 --
 -- __Budget.__ The grounded proposer makes @4 + proposalsPerNode@ LM calls per node
 -- (dataset summary, program describe, module describe, and one generation per proposal);
@@ -31,14 +33,13 @@ where
 
 import Control.Monad (foldM)
 import Data.Aeson (ToJSON)
-import Data.Maybe (fromMaybe)
 import Shikumi.Eval (datasetSize)
 import Shikumi.Optimize.Propose
   ( ProposeRequest (..),
     ProposeResult (..),
     proposeInstructions,
   )
-import Shikumi.Optimize.Search (freezeProgram, instructionAt, scoreOn, setNodeInstr)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, scoreOn, setNodeInstrIfNew)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
 import Shikumi.Program (foldParams)
 
@@ -58,7 +59,7 @@ instructionSearch proposalsPerNode budget = Optimizer $ \train metric student ->
         (c : rest)
           | calls + dsSize > maxLmCalls budget -> pure (best, calls)
           | otherwise -> do
-              s <- scoreOn train metric (setNodeInstr idx c prog)
+              s <- scoreOn train metric (setNodeInstrIfNew idx c prog)
               let best' = case best of
                     Nothing -> Just (c, s)
                     Just (_, bs) -> if s > bs then Just (c, s) else best
@@ -66,7 +67,7 @@ instructionSearch proposalsPerNode budget = Optimizer $ \train metric student ->
 
       -- Optimize one node, holding the others fixed.
       stepNode (prog, calls) idx = do
-        let curInstr = fromMaybe "" (instructionAt idx prog)
+        let curInstr = effectiveInstructionAt idx prog
         (cands, calls1) <-
           if calls + proposerCost <= maxLmCalls budget
             then do
@@ -86,7 +87,7 @@ instructionSearch proposalsPerNode budget = Optimizer $ \train metric student ->
               pure (cs, calls + proposerCost)
             else pure ([curInstr], calls)
         (best, calls2) <- scoreCands calls1 Nothing idx prog cands
-        pure (setNodeInstr idx (maybe curInstr fst best) prog, calls2)
+        pure (setNodeInstrIfNew idx (maybe curInstr fst best) prog, calls2)
 
   (final, _) <- foldM stepNode (student, 0) [0 .. nNodes - 1]
   pure (freezeProgram final)
