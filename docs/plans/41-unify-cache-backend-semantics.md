@@ -4,7 +4,7 @@ slug: unify-cache-backend-semantics
 title: "Unify Cache Backend Semantics"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeamsehst07eh4n7kp8a7"
 master_plan: "docs/masterplans/7-cache-trace-and-replay-hardening.md"
 ---
 
@@ -29,10 +29,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `CacheConfig` type + `defaultCacheConfig`; `cachedLLMWith`; never-cache-error guard; race documented
-- [ ] M2: `bestEffortIO` helper; SQLite handlers degrade instead of throwing; SQLite WAL + busy_timeout pragmas
-- [ ] M2: Redis default TTL removed (opt-in via `openRedisCacheWithTTL`); Redis lookup/store best-effort against thrown exceptions
-- [ ] M2: Postgres connection released on schema failure
+- [x] M1: `CacheConfig` type + `defaultCacheConfig`; `cachedLLMWith`; never-cache-error guard; race documented (2026-07-03)
+- [x] M2: `bestEffortIO` helper; SQLite handlers degrade instead of throwing; SQLite WAL + busy_timeout pragmas (2026-07-03)
+- [x] M2: Redis default TTL removed (opt-in via `openRedisCacheWithTTL`); Redis lookup/store best-effort against thrown exceptions (2026-07-03)
+- [x] M2: Postgres connection released on schema failure (2026-07-03)
 - [ ] M3: new tests — error-response non-caching, TTL expiry, SQLite corrupt-row MISS, SQLite dropped-table degradation, Redis/Postgres closed-handle degradation, Redis storage-TTL knob
 - [ ] M3: loud SKIPPED banners in redis/postgres suites (CI gating deferred to masterplan 9)
 - [ ] Full suites green: `just test-one shikumi-cache`, `just test-one shikumi-cache-redis` (with services up), `just test-one shikumi-cache-postgres`
@@ -43,7 +43,15 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-03: The code batch for M1/M2 compiled across `shikumi-cache`, `shikumi-cache-redis`, and `shikumi-cache-postgres` before the new tests were added. Evidence:
+
+```text
+nix develop .#ghc9124 --command cabal build shikumi-cache shikumi-cache-redis shikumi-cache-postgres
+...
+Linking ... shikumi-cache-test
+Linking ... shikumi-cache-redis-test
+Linking ... shikumi-cache-postgres-test
+```
 
 
 ## Decision Log
@@ -358,7 +366,7 @@ Commit per milestone with conventional-commit subjects (e.g. `fix(cache-sqlite):
 ```text
 MasterPlan: docs/masterplans/7-cache-trace-and-replay-hardening.md
 ExecPlan: docs/plans/41-unify-cache-backend-semantics.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeamsehst07eh4n7kp8a7
 ```
 
 

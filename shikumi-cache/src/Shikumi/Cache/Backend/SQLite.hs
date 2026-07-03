@@ -11,7 +11,9 @@
 -- The store is a thin embedded SQLite database (no server) accessed via
 -- @direct-sqlite@. A single 'Database.SQLite3.Database' handle is guarded by an
 -- 'MVar' so the 'Cache' effect's lookups and stores are serialized (SQLite's
--- default threading mode does not allow concurrent use of one connection).
+-- default threading mode does not allow concurrent use of one connection). WAL
+-- mode and a busy timeout make separate processes cooperate better. Lookup and
+-- store failures are best-effort: they degrade to a MISS or no-op.
 module Shikumi.Cache.Backend.SQLite
   ( SQLiteCache,
     openSQLiteCache,
@@ -39,6 +41,7 @@ import Database.SQLite3 qualified as SQL
 import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.Cache (Cache (..), CacheKey (unCacheKey), CachedResponse (..))
+import Shikumi.Cache.Backend.Effort (bestEffortIO)
 
 -- | A handle to an open SQLite-backed cache. The 'Database' is behind an 'MVar'
 -- so all access through the 'Cache' effect is serialized.
@@ -46,7 +49,8 @@ newtype SQLiteCache = SQLiteCache {db :: MVar Database}
 
 -- | The schema. The @key@ is the 64-hex 'CacheKey' (already version-namespaced
 -- via the @version@ field baked into the hash). @value@ is the UTF-8 JSON of
--- 'CachedResponse'. @stored_at@ is ISO-8601 for inspection/eviction.
+-- 'CachedResponse'. @stored_at@ is ISO-8601 for inspection; policy-layer TTL
+-- uses the same timestamp inside the JSON value.
 createTableSQL :: Text
 createTableSQL =
   """
@@ -78,6 +82,8 @@ openSQLiteCache :: FilePath -> IO SQLiteCache
 openSQLiteCache path = do
   db <- SQL.open (T.pack path)
   SQL.exec db createTableSQL
+  SQL.exec db "PRAGMA journal_mode=WAL;"
+  SQL.exec db "PRAGMA busy_timeout=5000;"
   SQLiteCache <$> newMVar db
 
 -- | Close the underlying database handle.
@@ -93,8 +99,8 @@ withSQLiteCache path = bracket (openSQLiteCache path) closeSQLiteCache
 -- simply re-fetched and overwritten — never returned.
 runCacheSQLite :: (IOE :> es) => SQLiteCache -> Eff (Cache : es) a -> Eff es a
 runCacheSQLite (SQLiteCache mv) = interpret $ \_ -> \case
-  LookupCache k -> liftIO (withMVar mv (sqliteLookup k))
-  StoreCache k v -> liftIO (withMVar mv (\db -> sqliteStore db k v))
+  LookupCache k -> liftIO (bestEffortIO Nothing (withMVar mv (sqliteLookup k)))
+  StoreCache k v -> liftIO (bestEffortIO () (withMVar mv (\db -> sqliteStore db k v)))
 
 -- | SELECT the JSON for a key and decode it; 'Nothing' on absent key or decode
 -- failure.

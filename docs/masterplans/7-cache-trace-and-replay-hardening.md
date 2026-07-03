@@ -42,7 +42,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
-| 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Not Started |
+| 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | In Progress |
 | 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Not Started |
 | 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Not Started |
 

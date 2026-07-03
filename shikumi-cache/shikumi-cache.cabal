@@ -36,6 +36,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Shikumi.Cache
+    Shikumi.Cache.Backend.Effort
     Shikumi.Cache.Backend.Memory
     Shikumi.Cache.Backend.SQLite
     Shikumi.Cache.Key
