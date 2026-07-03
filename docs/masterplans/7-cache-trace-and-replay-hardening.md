@@ -43,7 +43,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 |---|-------|------|-----------|-----------|--------|
 | 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
 | 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Complete |
-| 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | In Progress |
+| 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Complete |
 | 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -83,7 +83,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-41: M3 — degradation/TTL/corrupt-row tests green; redis/postgres skips loud
 - [x] EP-42: M1 — replay index fails closed on conflicting duplicate keys (tests included)
 - [x] EP-42: M2 — trace state atomic + loud stack-corruption check; concurrency contract documented
-- [ ] EP-42: M3 — tail: multi-root rendering, live `bumpRetry`, numeric sibling ordering, v1 trace files accepted
+- [x] EP-42: M3 — tail: multi-root rendering, live `bumpRetry`, numeric sibling ordering, v1 trace files accepted
 - [ ] EP-43: M1 — provider released on export exception (bracket)
 - [ ] EP-43: M2 — status propagation, honest response model, open-span handling, cycle guard
 - [ ] EP-43: M3 — four new otel tests green
@@ -121,3 +121,5 @@ Compare the result against the original vision.
 2026-07-03: EP-40 is complete. The cache key now hashes endpoint identity and behavior-affecting headers while ignoring message construction timestamps, and trace continues to reproduce the same key byte-for-byte under v2. This unblocks EP-42, whose replay-divergence fixtures should use the post-v2 key function and pinned digest.
 
 2026-07-03: EP-41 is complete. Cache policy now has uniform TTL semantics through `cachedLLMWith`, error-shaped responses are not memoized, SQLite/Redis/Postgres storage failures degrade instead of escaping, Redis defaults to no server-side expiry, and the server-backed suites advertise skips loudly without changing CI policy ownership.
+
+2026-07-03: EP-42 is complete. Replay now rejects conflicting duplicate-key traces at index-build time, deterministic duplicate calls still replay, trace-state updates are atomic with a loud stack-corruption check, multi-root rendering works, retry counts are recorded, sibling ordering is numeric for `span-N` ids, and additive v1 trace files are readable. `just test-one shikumi-trace` passed 27 tests; `cabal build shikumi-jitsurei shikumi-cli` also passed.

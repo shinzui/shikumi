@@ -37,11 +37,11 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: M1: `replayIndex` returns `Either Text (Map CacheKey Value)`; equal duplicates dedupe, conflicting duplicates fail closed
 - [x] 2026-07-03: M1: all four call sites updated (Demo, jitsurei TraceReplay, cli Runtime, trace tests); duplicate-key tests added
 - [x] 2026-07-03: M2: all `TraceState` mutations atomic; `closeSpan` verifies its pop; concurrency contract documented on `runTrace` and `runCurrentNode`
-- [ ] M3: `renderTree` renders every parentless root (forest)
-- [ ] M3: `runProgramTraced` bumps retries on re-attempts; retry-count test with a fail-once stub
-- [ ] M3: `childrenOf` numeric sibling ordering; ≥10-siblings test
-- [ ] M3: `readTraceFile` accepts formatVersion 1..current; v1-acceptance test
-- [ ] Full suite green: `just test-one shikumi-trace` (plus `cabal build shikumi-jitsurei shikumi-cli`)
+- [x] 2026-07-03: M3: `renderTree` renders every parentless root (forest)
+- [x] 2026-07-03: M3: `runProgramTraced` bumps retries on re-attempts; retry-count test with a fail-once stub
+- [x] 2026-07-03: M3: `childrenOf` numeric sibling ordering; ≥10-siblings test
+- [x] 2026-07-03: M3: `readTraceFile` accepts formatVersion 1..current; v1-acceptance test
+- [x] 2026-07-03: Full suite green: `just test-one shikumi-trace` (27 tests) and `cabal build shikumi-jitsurei shikumi-cli`
 
 
 ## Surprises & Discoveries
@@ -79,7 +79,7 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+2026-07-03: EP-42 is complete. Replay index construction now fails closed on conflicting duplicate cache keys while preserving deterministic duplicate calls with equal responses; all replay callers handle index-build errors explicitly. Trace-state writes are atomic and span closing verifies LIFO stack discipline, converting unsupported concurrent tracing into a loud failure instead of silent corruption. The fidelity tail is fixed: `renderTree` renders every parentless root, traced retry combinators increment `shikumi.retries`, sibling ordering uses numeric `span-N` ordering when timestamps tie, and additive formatVersion 1 trace files read successfully. Validation passed with `just test-one shikumi-trace` (27 tests) and `cabal build shikumi-jitsurei shikumi-cli`.
 
 
 ## Context and Orientation

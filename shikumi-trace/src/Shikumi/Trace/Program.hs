@@ -46,7 +46,7 @@ import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, localSeqUnlift, send)
-import Effectful.Error.Static (Error)
+import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Exception (bracket_)
 import Effectful.Prim (Prim)
 import Effectful.Prim.IORef (newIORef, readIORef, writeIORef)
@@ -67,7 +67,6 @@ import Shikumi.Program
         Validate
       ),
     acceptOrReject,
-    retryWith,
     runProgram,
     sampleTemps,
     withSampleTemp,
@@ -76,6 +75,7 @@ import Shikumi.Trace
   ( SpanKind (CombinatorSpan, LlmCallSpan, ModuleSpan),
     Trace,
     annotateSpan,
+    bumpRetry,
     llmAttrs,
     llmLabel,
     withSpan,
@@ -175,9 +175,9 @@ runProgramTraced = go []
     go prefix (Parallel a b) i =
       withSpan CombinatorSpan "Parallel" ((,) <$> go (StepParallelL : prefix) a i <*> go (StepParallelR : prefix) b i)
     go prefix (Retry n p) i =
-      withSpan CombinatorSpan "Retry" (retryWith (go (StepRetry : prefix)) (const True) n p i)
+      withSpan CombinatorSpan "Retry" (tracedRetry (go (StepRetry : prefix)) (const True) n p i)
     go prefix (RetryWhen ok n p) i =
-      withSpan CombinatorSpan "RetryWhen" (retryWith (go (StepRetryWhen : prefix)) ok n p i)
+      withSpan CombinatorSpan "RetryWhen" (tracedRetry (go (StepRetryWhen : prefix)) ok n p i)
     go prefix (Validate v p) i =
       withSpan CombinatorSpan "Validate" (go (StepValidate : prefix) p i >>= acceptOrReject v)
     go prefix (MajorityVote k sched reduce p) i =
@@ -188,3 +188,19 @@ runProgramTraced = go []
         reduce <$> sequence [go (StepEnsemble idx : prefix) p i | (idx, p) <- zip [0 ..] ps]
     go _ (Embed f) i =
       withSpan CombinatorSpan "Embed" (f i)
+
+tracedRetry ::
+  (Trace :> es, Error ShikumiError :> es) =>
+  (Program x y -> x -> Eff es y) ->
+  (ShikumiError -> Bool) ->
+  Int ->
+  Program x y ->
+  x ->
+  Eff es y
+tracedRetry run ok n p i = attempt (max 1 n)
+  where
+    attempt left =
+      run p i `catchError` \_cs e ->
+        if ok e && left > 1
+          then bumpRetry >> attempt (left - 1)
+          else throwError e

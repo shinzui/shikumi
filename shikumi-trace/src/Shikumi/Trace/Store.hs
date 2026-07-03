@@ -16,6 +16,7 @@
 -- 'Shikumi.Cache.Key.CacheKey' mapped to its recorded response JSON.
 module Shikumi.Trace.Store
   ( TraceFile (..),
+    minSupportedFormatVersion,
     currentFormatVersion,
     writeTraceFile,
     readTraceFile,
@@ -52,6 +53,11 @@ data TraceFile = TraceFile
 currentFormatVersion :: Int
 currentFormatVersion = 2
 
+-- | The oldest trace format this build still reads. v1→v2 was additive (the
+-- optional @SpanAttrs.nodePath@ field), so v1 files decode without migration.
+minSupportedFormatVersion :: Int
+minSupportedFormatVersion = 1
+
 -- | Write a tree to @path@ atomically: encode to a sibling @.tmp@ file, then
 -- 'renameFile' it into place (an atomic rename on the same filesystem).
 writeTraceFile :: FilePath -> TraceTree -> IO ()
@@ -68,11 +74,13 @@ readTraceFile path = do
   pure $ case eitherDecode bs of
     Left e -> Left ("trace parse error: " <> T.pack e)
     Right tf
-      | formatVersion tf /= currentFormatVersion ->
+      | formatVersion tf < minSupportedFormatVersion || formatVersion tf > currentFormatVersion ->
           Left
             ( "unsupported trace formatVersion "
                 <> T.pack (show (formatVersion tf))
-                <> " (expected "
+                <> " (supported: "
+                <> T.pack (show minSupportedFormatVersion)
+                <> ".."
                 <> T.pack (show currentFormatVersion)
                 <> ")"
             )

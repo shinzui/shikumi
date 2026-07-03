@@ -90,6 +90,7 @@ import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.Trace.Node (NodePath (..))
 import Shikumi.Trace.ResponseJSON ()
+import Text.Read (readMaybe)
 
 -- ---------------------------------------------------------------------------
 -- Span and tree types
@@ -183,12 +184,15 @@ data TraceTree = TraceTree
   deriving anyclass (ToJSON, FromJSON)
 
 -- | The children of a span, in creation order (sorted by start time, ties broken
--- by span id).
+-- by numeric @span-N@ id when possible).
 childrenOf :: TraceTree -> SpanId -> [SpanId]
 childrenOf t sid =
   map (^. #spanId) $
-    sortOn (\s -> (s ^. #startedAt, s ^. #spanId)) $
+    sortOn (\s -> (s ^. #startedAt, spanOrdKey (s ^. #spanId))) $
       [s | s <- Map.elems (t ^. #spans), (s ^. #parent) == Just sid]
+
+spanOrdKey :: SpanId -> (Maybe Int, Text)
+spanOrdKey (SpanId t) = (T.stripPrefix "span-" t >>= readMaybe . T.unpack, t)
 
 -- ---------------------------------------------------------------------------
 -- The effect
@@ -389,8 +393,12 @@ toolCallsOf resp =
 renderTree :: TraceTree -> Text
 renderTree t
   | Map.null (t ^. #spans) = "(empty trace)\n"
-  | otherwise = T.concat (go (0 :: Int) (t ^. #root))
+  | otherwise = T.concat (concatMap (go (0 :: Int)) roots)
   where
+    roots =
+      map (^. #spanId) $
+        sortOn (\s -> (s ^. #startedAt, spanOrdKey (s ^. #spanId))) $
+          [s | s <- Map.elems (t ^. #spans), (s ^. #parent) == Nothing]
     go depth sid = case Map.lookup sid (t ^. #spans) of
       Nothing -> []
       Just s -> line depth s : concatMap (go (depth + 1)) (childrenOf t sid)

@@ -22,7 +22,7 @@ import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Cache.Key (CacheKey (..))
 import Shikumi.Cache.Key qualified as Key
-import Shikumi.Combinator (majorityVote, majorityVoteBy, parallel2, (>>>))
+import Shikumi.Combinator (majorityVote, majorityVoteBy, parallel2, retry, (>>>))
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM, complete)
@@ -74,6 +74,7 @@ import Shikumi.Trace.Replay (ReplayDivergence (..), runLLMReplay)
 import Shikumi.Trace.Store
   ( TraceFile (..),
     currentFormatVersion,
+    minSupportedFormatVersion,
     readTraceFile,
     replayIndex,
     writeTraceFile,
@@ -90,6 +91,7 @@ import TraceFixtures
     responseText,
     runFixedLLM,
     runKeyedCountingLLM,
+    runSequencedLLM,
     stubModel,
   )
 
@@ -143,7 +145,18 @@ treeTests =
         let out = renderTree tree
         assertBool "two llm-call model lines present" (T.count "stub/stub-model" out == 2)
         assertBool "llm-call lines are indented under modules" (T.isInfixOf "    llm-call  stub/stub-model" out)
-        assertBool "module lines present" (T.count "module" out == 2)
+        assertBool "module lines present" (T.count "module" out == 2),
+      testCase "renderTree shows every top-level root" $ do
+        ((), tree) <-
+          runEff . runPrim . runTime . runTrace $ do
+            withSpan ProgramSpan "first-root" (pure ())
+            withSpan ProgramSpan "second-root" (pure ())
+        let out = renderTree tree
+        assertBool "first root is rendered" ("first-root" `T.isInfixOf` out)
+        assertBool "second root is rendered" ("second-root" `T.isInfixOf` out),
+      testCase "childrenOf orders 10+ siblings numerically" $ do
+        let tree = numericSiblingTree
+        childrenOf tree (SpanId "span-1") @?= map (SpanId . ("span-" <>) . T.pack . show) ([2 .. 12] :: [Int])
     ]
 
 -- ---------------------------------------------------------------------------
@@ -176,6 +189,14 @@ storeTests =
           case res of
             Left msg -> assertBool "the error names the offending version" (T.isInfixOf "999" msg)
             Right _ -> assertFailure "expected Left on a foreign formatVersion",
+      testCase "reading a formatVersion 1 file succeeds" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          tree <- buildTree
+          let p = dir <> "/v1.json"
+          minSupportedFormatVersion @?= 1
+          BL.writeFile p (encode (TraceFile 1 tree))
+          res <- readTraceFile p
+          res @?= Right tree,
       testCase "replayIndex maps each llm-call cacheKey to its response" $ do
         tree <- buildTree
         idx <- replayIndexOrFail tree
@@ -389,6 +410,31 @@ duplicateKeyTree firstResp secondResp =
       ss = [rootSpan, child 1 firstResp, child 2 secondResp]
    in TraceTree (SpanId "span-0") (Map.fromList [(spanId s, s) | s <- ss])
 
+numericSiblingTree :: TraceTree
+numericSiblingTree =
+  let rootSpan =
+        Span
+          { spanId = SpanId "span-1",
+            parent = Nothing,
+            kind = ProgramSpan,
+            label = "root",
+            startedAt = baseTime,
+            endedAt = Just (addUTCTime 1 baseTime),
+            attrs = emptyAttrs
+          }
+      child n =
+        Span
+          { spanId = SpanId ("span-" <> T.pack (show n)),
+            parent = Just (SpanId "span-1"),
+            kind = ModuleSpan,
+            label = "child-" <> T.pack (show n),
+            startedAt = baseTime,
+            endedAt = Just (addUTCTime 1 baseTime),
+            attrs = emptyAttrs
+          }
+      ss = rootSpan : map child ([2 .. 12] :: [Int])
+   in TraceTree (SpanId "span-1") (Map.fromList [(spanId s, s) | s <- ss])
+
 -- ---------------------------------------------------------------------------
 -- A small generator of random trees for the round-trip property
 -- ---------------------------------------------------------------------------
@@ -565,7 +611,27 @@ correlateTests =
               let p = dir <> "/trace.json"
               writeTraceFile p tree
               loaded <- readTraceFile p
-              loaded @?= Right tree
+              loaded @?= Right tree,
+      testCase "Retry re-attempts are counted on the Retry span" $ do
+        responses <- newIORef [mkResponse "unparseable", cellResp]
+        res <-
+          runEff
+            . runErrorNoCallStack @ShikumiError
+            . runPrim
+            . runTime
+            . runTrace
+            . runCurrentNode
+            . runSequencedLLM responses
+            . tracedNodeLLM
+            $ runProgramTraced (retry 2 (predict cellSig)) (Cell "x")
+        case res of
+          Left e -> assertFailure ("retry traced run failed: " <> show e)
+          Right (out, tree) -> do
+            out @?= Cell "echoed"
+            let retrySpans = [s | s <- Map.elems (spans tree), label s == "Retry"]
+            case retrySpans of
+              [s] -> retries (attrs s) @?= 1
+              _ -> assertFailure ("expected one Retry span, found " <> show (length retrySpans))
     ]
 
 -- | M3: the per-node feedback channel round-trips writes and reads.

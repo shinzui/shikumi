@@ -13,6 +13,7 @@ module TraceFixtures
     runFixedLLM,
     runKeyedLLM,
     runKeyedCountingLLM,
+    runSequencedLLM,
   )
 where
 
@@ -100,4 +101,16 @@ runKeyedLLM f = interpret $ \_ -> \case
 runKeyedCountingLLM :: (IOE :> es) => IORef Int -> (Context -> Response) -> Eff (LLM : es) a -> Eff es a
 runKeyedCountingLLM ref f = interpret $ \_ -> \case
   Complete _ c _ -> liftIO (atomicModifyIORef' ref (\n -> (n + 1, ()))) >> pure (f c)
+  Stream {} -> pure []
+
+-- | A base @LLM@ interpreter that returns and removes the next response from an
+-- 'IORef' list on each completion. Used for retry tests that need attempt one
+-- and attempt two to receive different payloads.
+runSequencedLLM :: (IOE :> es) => IORef [Response] -> Eff (LLM : es) a -> Eff es a
+runSequencedLLM ref = interpret $ \_ -> \case
+  Complete {} ->
+    liftIO $
+      atomicModifyIORef' ref $ \case
+        r : rs -> (rs, r)
+        [] -> ([], mkResponse "runSequencedLLM: exhausted")
   Stream {} -> pure []
