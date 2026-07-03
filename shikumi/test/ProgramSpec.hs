@@ -6,6 +6,7 @@ import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.IORef (newIORef)
 import Data.List (foldl1')
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (runEff)
@@ -29,6 +30,7 @@ import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program
   ( Params,
     Program (Compose, Predict),
+    TempSchedule (..),
     emptyParams,
     foldParams,
     mapParams,
@@ -37,9 +39,10 @@ import Shikumi.Program
     pipeline,
     runProgram,
     runProgramConc,
+    sampleTemps,
   )
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 import Test.Tasty.QuickCheck (NonNegative (..), Positive (..), testProperty, (===))
 
 -- A two-stage program reused across the param tests.
@@ -89,6 +92,12 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
             runProgram (Predict topicToOutline emptyParams) (Topic "haskell")
         out @?= Left (SchemaMismatch "points: expected array, got number"),
+      testCase "EP-35: TempSpread temperatures are clamped to [0, 2]" $ do
+        -- Before the clamp, TempSpread 0.1 0.5 fans to [-0.4, 0.1, 0.6]; the -0.4
+        -- would be sent to a provider that rejects it.
+        let ts = [t | Just t <- NE.toList (sampleTemps 3 (TempSpread 0.1 0.5))]
+        length ts @?= 3
+        assertBool ("all temperatures in [0, 2], got " <> show ts) (all (\t -> t >= 0 && t <= 2) ts),
       testCase "M2: foldParams returns nodes in stage order" $
         foldParams twoStage @?= [emptyParams, emptyParams],
       testCase "M5: nodeInstructionsIndexed returns signature instructions in node order" $

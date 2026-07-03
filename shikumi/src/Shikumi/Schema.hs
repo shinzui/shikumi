@@ -367,16 +367,20 @@ instance (KnownNat n, ReflectConstraints cs Text) => ReflectConstraints ('MaxLen
     | otherwise = checkConstraints (Proxy @cs) t
 
 instance forall s cs a. (KnownSymbol s, ToScientificLeaf a, ReflectConstraints cs a) => ReflectConstraints ('MinVal s ': cs) a where
-  constraintSchema _ = constraintSchema @cs @a Proxy . withMinimum (parseBound (Proxy @s))
-  checkConstraints _ x
-    | toScientificLeaf x < parseBound (Proxy @s) = Left ("minimum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
-    | otherwise = checkConstraints (Proxy @cs) x
+  constraintSchema _ = constraintSchema @cs @a Proxy . maybe id withMinimum (parseBound (Proxy @s))
+  checkConstraints _ x = case parseBound (Proxy @s) of
+    Nothing -> Left ("invalid numeric bound symbol: " <> T.pack (symbolVal (Proxy @s)))
+    Just b
+      | toScientificLeaf x < b -> Left ("minimum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
+      | otherwise -> checkConstraints (Proxy @cs) x
 
 instance forall s cs a. (KnownSymbol s, ToScientificLeaf a, ReflectConstraints cs a) => ReflectConstraints ('MaxVal s ': cs) a where
-  constraintSchema _ = constraintSchema @cs @a Proxy . withMaximum (parseBound (Proxy @s))
-  checkConstraints _ x
-    | toScientificLeaf x > parseBound (Proxy @s) = Left ("maximum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
-    | otherwise = checkConstraints (Proxy @cs) x
+  constraintSchema _ = constraintSchema @cs @a Proxy . maybe id withMaximum (parseBound (Proxy @s))
+  checkConstraints _ x = case parseBound (Proxy @s) of
+    Nothing -> Left ("invalid numeric bound symbol: " <> T.pack (symbolVal (Proxy @s)))
+    Just b
+      | toScientificLeaf x > b -> Left ("maximum " <> T.pack (symbolVal (Proxy @s)) <> " violated")
+      | otherwise -> checkConstraints (Proxy @cs) x
 
 instance (KnownSymbols ss, ReflectConstraints cs Text) => ReflectConstraints ('EnumOneOf ss ': cs) Text where
   constraintSchema _ = constraintSchema @cs @Text Proxy . withEnum (symbolTexts (Proxy @ss))
@@ -404,11 +408,14 @@ instance KnownSymbols '[] where symbolTexts _ = []
 instance (KnownSymbol s, KnownSymbols ss) => KnownSymbols (s ': ss) where
   symbolTexts _ = T.pack (symbolVal (Proxy @s)) : symbolTexts (Proxy @ss)
 
--- | Parse a numeric-bound 'Symbol' (e.g. @"100"@, @"-3.5"@) to a 'Sci.Scientific'.
-parseBound :: forall s. (KnownSymbol s) => Proxy s -> Sci.Scientific
-parseBound _ = case readMaybe (symbolVal (Proxy @s)) of
-  Just v -> v
-  Nothing -> error ("Shikumi.Schema: invalid numeric bound symbol " <> symbolVal (Proxy @s))
+-- | Parse a numeric-bound 'Symbol' (e.g. @"100"@, @"-3.5"@) to a 'Sci.Scientific',
+-- or 'Nothing' when the symbol is not a number. Total — a malformed bound (e.g.
+-- @MinVal "abc"@) no longer crashes the process at schema-derivation time; instead
+-- the schema keyword is silently omitted and every decode of the field fails with a
+-- located 'ValidationFailure' naming the bad symbol (see the @MinVal@/@MaxVal@
+-- 'ReflectConstraints' instances).
+parseBound :: forall s. (KnownSymbol s) => Proxy s -> Maybe Sci.Scientific
+parseBound _ = readMaybe (symbolVal (Proxy @s))
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

@@ -4,7 +4,7 @@ slug: combinator-and-budget-semantics-cleanup
 title: "Combinator and Budget Semantics Cleanup"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfe4dhetqa7m7g3n6zq03a"
 master_plan: "docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md"
 ---
 
@@ -40,11 +40,11 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `MajorityVote` constructor carries its reducer; `majorityVote`/`majorityVoteBy` rebuilt on it; `modal`/`sampleTemps` total via `NonEmpty`; downstream pattern matches updated (`shikumi`, `shikumi-trace`, `shikumi-compile`)
-- [ ] M1: routed-temperature test for `majorityVoteBy` added (fails before); stale `majorityVote` docstring fixed
-- [ ] M2: `tryReserve` renamed to `admitCall` with honest docs; concurrent overshoot test added
-- [ ] M3: `chain` takes `NonEmpty`; `parseBound` total (schema keyword dropped + decode-time `ValidationFailure` on malformed bounds); `spreadTemps` clamped to `[0, 2]`; `refine` survives advice-call failure with best-so-far
-- [ ] Full matrix green (`cabal build all && cabal test all`); CHANGELOG entry
+- [x] M1 (2026-07-03): `MajorityVote` constructor carries its reducer; `majorityVote`/`majorityVoteBy` rebuilt on it; `modal`/`sampleTemps` total via `NonEmpty`; downstream pattern matches updated (`shikumi`, `shikumi-trace`, `shikumi-compile`; also `Refine.hs` consumes `sampleTemps` via `NE.toList`)
+- [x] M1 (2026-07-03): routed-temperature test for `majorityVoteBy` added; params-exposed-once test added; stale `majorityVote` docstring fixed
+- [x] M2 (2026-07-03): `tryReserve` renamed to `admitCall` with honest docs; concurrent overshoot test added (barrier stub keeps four calls in flight)
+- [x] M3 (2026-07-03): `chain` takes `NonEmpty` (done with M1's NonEmpty work); `parseBound` total (schema keyword dropped + decode-time `ValidationFailure` on malformed bounds); `spreadTemps` clamped to `[0, 2]` (done with M1); `refine` survives advice-call failure with best-so-far
+- [x] Full matrix green (2026-07-03): `cabal build all && cabal test all` EXIT 0; CHANGELOG entry added
 
 
 ## Surprises & Discoveries
@@ -52,7 +52,21 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Extra `sampleTemps` consumer beyond the plan's enumerated blast radius:
+  `shikumi/src/Shikumi/Refine.hs` calls `sampleTemps` in two places
+  (`bestOfN` and `multiChainComparison`) and treats the result as a plain list. With
+  `sampleTemps` now returning `NonEmpty`, both sites were adapted with `NE.toList`
+  (the reducer/loop logic is unchanged). Found by `cabal build all`.
+- Test-side blast radius the plan did not enumerate: `shikumi/test/RefineStub.hs`
+  (uses `modal` on a list → wrapped in `NE.fromList`) and `shikumi/test/CombinatorSpec.hs`
+  (two `chain [..]` call sites → `chain (a :| [..])`). Found by `cabal build all`.
+- `head` as a `majorityVoteBy` reducer in the routing test triggered `-Wx-partial`
+  (partial `Prelude.head`); replaced with `NE.head . NE.fromList` to keep the build
+  warning-clean.
+- Pre-existing, out-of-scope warnings surfaced by the full rebuild (not caused by
+  this plan, both in other master plans' packages): `shikumi-cache-postgres`
+  (`Postgres.hs`, unused import/binding — master plan 7) and `shikumi-eval`
+  (`EvaluateSpec.hs:27` unused import — master plan 6). Left untouched.
 
 
 ## Decision Log
@@ -114,7 +128,25 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+All three milestones delivered; the combinator and resilience surface is now honest.
+`majorityVoteBy` applies its `TempSchedule` (routed test proves three distinct
+temperatures) and exposes the sub-program's `Params` once (pinned test), via a
+`MajorityVote` constructor that carries its reducer — threaded through every
+pattern-match site in `shikumi`, `shikumi-trace`, and `shikumi-compile`. The
+partial-function tail is closed: `modal`/`sampleTemps`/`chain` are total through
+`NonEmpty`, `TempSpread` is clamped to `[0, 2]`, a malformed `Constrained` numeric
+bound omits its schema keyword and fails decode with a located `ValidationFailure`
+(no process crash), and `refine` survives a failed advice call with its best-so-far.
+The budget gate is renamed `admitCall` with its optimistic overshoot documented and
+pinned by a concurrency test. `cabal build all && cabal test all` is green (the only
+remaining warnings are pre-existing, in other master plans' packages).
+
+Deviations/discoveries recorded in Surprises: two extra `sampleTemps` consumers in
+`Refine.hs`, two extra test-side call sites, and a `-Wx-partial` from `head`. The
+plan's suggested commit split was adjusted: `chain` and the `spreadTemps` clamp
+landed in the M1 commit rather than M3, because they were architecturally coupled to
+the same `NonEmpty`/`sampleTemps` totality change (M3's commit is `parseBound` +
+`refine` advice). No behavioral gaps versus the plan's seven acceptance criteria.
 
 
 ## Context and Orientation
@@ -393,7 +425,7 @@ Every commit uses a conventional-commit subject and MUST carry these trailers:
 ```text
 MasterPlan: docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md
 ExecPlan: docs/plans/35-combinator-and-budget-semantics-cleanup.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfe4dhetqa7m7g3n6zq03a
 ```
 
 Suggested split: `feat(program)!: MajorityVote carries its reducer; majorityVoteBy applies

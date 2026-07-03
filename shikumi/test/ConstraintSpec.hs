@@ -11,6 +11,7 @@ import Data.Aeson (Value (..))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Text (Text)
+import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
@@ -45,6 +46,18 @@ instance FromModel BioUnchecked
 
 instance Validatable BioUnchecked
 
+-- A record with a /malformed/ numeric bound symbol (EP-35): @"abc"@ is not a
+-- number. Deriving its schema must not crash, and decoding must fail cleanly.
+newtype BadBound = BadBound
+  {n :: Constrained '[ 'MinVal "abc"] Int}
+  deriving stock (Generic, Show, Eq)
+
+instance ToSchema BadBound
+
+instance FromModel BadBound
+
+instance Validatable BadBound
+
 -- | Drill into @properties.<field>@ of a record schema 'Value'.
 propOf :: Text -> Value -> Maybe Value
 propOf name (Object o) = do
@@ -78,7 +91,13 @@ tests =
           @?= Left (ValidationFailure "score: maximum 100 violated"),
       testCase "contrast: the unconstrained record accepts the short value" $
         fromModel @BioUnchecked (obj "short" 50)
-          @?= Right (BioUnchecked {tagline = "short", score = 50})
+          @?= Right (BioUnchecked {tagline = "short", score = 50}),
+      testCase "EP-35: a malformed numeric bound omits the schema keyword (no crash)" $
+        (propOf "n" (deriveSchema @BadBound) >>= keyword "minimum") @?= Nothing,
+      testCase "EP-35: a malformed numeric bound fails decode with a ValidationFailure naming it" $
+        case fromModel @BadBound (Object (KM.fromList [("n", Number 5)])) of
+          Left (ValidationFailure m) | "abc" `T.isInfixOf` m -> pure ()
+          other -> assertFailure ("expected ValidationFailure mentioning abc, got " <> show other)
     ]
   where
     obj t s =

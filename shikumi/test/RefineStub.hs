@@ -39,6 +39,7 @@ module RefineStub
     decideTemp,
     decideRefine,
     decideMCC,
+    decideAdviceFailure,
 
     -- * Stub interpreters
     runStub,
@@ -172,6 +173,15 @@ decideRefine :: Context -> Options -> Text
 decideRefine ctx _
   | hasField "advice" ctx = markerBody [("advice", "State the keyword clearly.")]
   | hasField "Hint from a previous attempt" ctx = markerBody [("answer", "good")]
+  | otherwise = markerBody [("answer", "bad")]
+
+-- | EP-35 rule: the advice call replies with a body that has no @advice@ field, so
+-- @generateAdvice@'s decode fails; every classify call answers @bad@ (always
+-- sub-threshold). Exercises 'Shikumi.Refine.refine' surviving an advice-call
+-- failure and returning its best-so-far instead of aborting.
+decideAdviceFailure :: Context -> Options -> Text
+decideAdviceFailure ctx _
+  | hasField "advice" ctx = markerBody [("notadvice", "unusable")]
   | otherwise = markerBody [("answer", "bad")]
 
 -- | M3 multi-chain rule: a reasoning call answers a temperature-chosen candidate; a

@@ -214,6 +214,11 @@ refine ::
 refine n = refineWith n (max 1 n)
 
 -- | 'refine' with an explicit @failCount@ budget.
+--
+-- The advice-generation call between attempts is auxiliary: if it fails, the loop
+-- keeps the previous advice (if any) and continues the remaining attempts without
+-- consuming the @failCount@ budget, so a failed advice call never discards a valid
+-- best-so-far output. @failCount@ guards /inner-program/ failures only.
 refineWith ::
   -- | @N@ attempts (clamped to @>= 1@)
   Int ->
@@ -245,8 +250,13 @@ refineWith n failCount threshold reward inner = embed $ \i ->
                         if k == cnt - 1
                           then finish best' lastErr
                           else do
-                            adv <- generateAdvice r threshold
-                            go (k + 1) best' lastErr (Just adv) budget
+                            -- The advice call is auxiliary: if it fails, keep the
+                            -- previous advice (if any) and continue — never discard
+                            -- a valid best-so-far, and do not consume the failCount
+                            -- error budget (it guards inner-program failures only).
+                            advE <- tryShikumi (generateAdvice r threshold)
+                            let mAdvice' = either (const mAdvice) Just advE
+                            go (k + 1) best' lastErr mAdvice' budget
       finish (Just (o, _)) _ = pure o
       finish Nothing (Just e) = throwError e
       finish Nothing Nothing = throwError (ProviderFailure "Shikumi.Refine.refine: no attempt produced an output")

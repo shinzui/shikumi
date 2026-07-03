@@ -4,6 +4,22 @@
 
 ### Changed
 
+- **BREAKING** Combinator and budget semantics cleanup. `MajorityVote` now carries
+  its reducer, so `majorityVoteBy` applies its `TempSchedule` per sample (routed
+  temperatures reach the wire) and exposes the sub-program's `Params` once instead
+  of K times — parameter vectors saved from an old `majorityVoteBy` program no
+  longer load and must be re-saved. `chain` takes a `NonEmpty` (empty is a compile
+  error, not a runtime crash); `modal` and `sampleTemps` take/return `NonEmpty`.
+  `TempSpread` temperatures are clamped to `[0, 2]` (`TempFixed` values pass through
+  unclamped). A malformed numeric bound in a `Constrained` field
+  (e.g. `MinVal "abc"`) no longer crashes at schema-derivation time — the schema
+  keyword is omitted and every decode of the field fails with a located
+  `ValidationFailure` naming the bad symbol. `Shikumi.LLM.Budget.tryReserve` is
+  renamed `admitCall` with documented optimistic-admission semantics (concurrent
+  calls can overshoot the ceiling; no reservation is held). `refine` survives a
+  failed advice-generation call, returning its best-so-far output instead of
+  aborting.
+
 - **BREAKING** `Validatable` is now opt-in and enforced by the decode path in
   every program runner. The catch-all `instance {-# OVERLAPPABLE #-} Validatable a`
   has been removed, so a type's `Validatable` rule is no longer silently skipped

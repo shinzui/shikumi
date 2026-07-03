@@ -21,6 +21,7 @@ import RefineStub
   ( Answer (..),
     Sentence (..),
     classifyProg,
+    decideAdviceFailure,
     decideMCC,
     decideRefine,
     decideTemp,
@@ -58,6 +59,7 @@ tests =
       bestOfNShortCircuits,
       bestOfNExhaustsFailCount,
       refineClimbsViaAdvice,
+      refineSurvivesAdviceFailure,
       multiChainSynthesizes,
       moduleComposes,
       moduleIsTransparent,
@@ -186,6 +188,16 @@ refineClimbsViaAdvice =
     assertBool
       "feedback strictly improves the reward"
       (rewardOf goodReward wrapped > rewardOf goodReward single)
+
+refineSurvivesAdviceFailure :: TestTree
+refineSurvivesAdviceFailure =
+  testCase "refine returns best-so-far when the advice call fails (EP-35)" $ do
+    -- Every classify answers "bad" (sub-threshold); the advice call between
+    -- attempts fails to decode. Before EP-35 that error aborted the whole refine;
+    -- now it is non-fatal and the best-so-far output is returned.
+    let reward = mkReward goodReward
+    (wrapped, _) <- runCounted decideAdviceFailure (refine 2 1.0 reward classifyProg) (Sentence "x")
+    wrapped @?= Right (Answer "bad")
 
 -- ---------------------------------------------------------------------------
 -- M3 — multiChainComparison
