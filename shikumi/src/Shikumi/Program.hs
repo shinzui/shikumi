@@ -64,6 +64,8 @@ module Shikumi.Program
     modal,
     sampleTemps,
     withSampleTemp,
+    effectiveSignature,
+    parseResponse,
 
     -- * Parameter interface (the optimizer/compiler contract)
     paramsTraversal,
@@ -429,6 +431,10 @@ modal = pickBest . foldl' tally []
 -- override (when present) and decode the JSON demos into the signature's typed
 -- demo channel. A demo whose JSON does not decode is reported as the located
 -- 'ShikumiError' from 'fromModel'.
+--
+-- Exported as an execution internal: "Shikumi.Stream".@streamPredict@ reuses it
+-- (with 'parseResponse') so the streamed and blocking paths overlay 'Params' and
+-- decode the reply through one definition, not two divergent copies.
 effectiveSignature ::
   (FromModel i, FromModel o, Error ShikumiError :> es) =>
   Signature i o ->

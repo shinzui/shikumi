@@ -182,6 +182,26 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref $
             streamProgram (predict topicToVerdict) (Topic "haskell") (\_ -> pure ())
         out @?= Left (ValidationFailure "score: must be at most 10"),
+      testCase "EP-34: streamPredict decodes a native-shaped (JSON) terminal via parseResponse" $ do
+        -- The terminal body is a JSON object (the native wire shape). Before the
+        -- shared parseResponse, the fallback-only parser found no markers and
+        -- reported MissingField; now the JSON body decodes correctly.
+        ref <- newIORef [streamEventsFor ["{\"ans"] "{\"answer\": \"Hello\"}"]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref $
+            streamProgram (predict qToAnswer) (Question "q?") (\_ -> pure ())
+        out @?= Right (Answer "Hello"),
+      testCase "EP-34: streamProgram equals runProgram on a JSON-shaped script" $ do
+        let script = [streamEventsFor ["{\"ans"] "{\"answer\": \"Hello\"}"]
+        ref1 <- newIORef script
+        streamed <-
+          runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref1 $
+            streamProgram (predict qToAnswer) (Question "q?") (\_ -> pure ())
+        ref2 <- newIORef script
+        blocking <-
+          runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref2 $
+            runProgram (predict qToAnswer) (Question "q?")
+        streamed @?= blocking,
       testCase "M3: a chain of predicts brackets each LM with status and streams both fields" $ do
         let script =
               [ streamEventsFor ["pts"] (markerBody [("points", "[\"intro\", \"body\", \"end\"]")]),

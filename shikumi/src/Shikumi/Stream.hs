@@ -62,21 +62,21 @@ import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor)
+import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor, attachNativeRender, attachSchema, nativeRenderPieces)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM, stream)
 import Shikumi.Program
-  ( Demo (..),
-    Params (..),
+  ( Params,
     Program (Compose, Embed, FMap, MajorityVote, Map, Parallel, Predict, Retry, RetryWhen, Validate),
     acceptOrReject,
+    effectiveSignature,
+    parseResponse,
     retryWith,
     runProgram,
   )
-import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModel)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema)
 import Shikumi.Schema.Types qualified as ST
-import Shikumi.Signature (Signature, getInstruction, outputFields, setDemos, setInstruction)
-import Shikumi.Signature qualified as Sig
+import Shikumi.Signature (Signature, outputFields)
 
 -- ---------------------------------------------------------------------------
 -- Event types
@@ -231,10 +231,20 @@ streamProgram prog i cb = case prog of
   Embed _ -> blockingNode prog i cb
   _ -> blockingNode prog i cb
 
--- | Stream a single 'Predict': overlay its 'Params', render via the (fallback)
--- adapter, stream the first output field's chunks bracketed by @LmStart@/@LmEnd@,
--- then run the identical 'parse' on the reassembled response so the typed result
--- equals 'runProgram'\'s.
+-- | Stream a single 'Predict', mirroring 'Shikumi.Program.runPredict' exactly so
+-- the streamed and blocking paths share one wire + decode definition. It overlays
+-- 'Params' via the exported 'effectiveSignature', renders model-agnostically, stamps
+-- the derived schema and the native render alternative onto the metadata channel
+-- (so the router can attach a native @responseFormat@ and swap the native prompt for
+-- native-capable models), streams the first output field's chunks bracketed by
+-- @LmStart@/@LmEnd@, and decodes the reassembled response through the shared
+-- 'Shikumi.Program.parseResponse' (dual-format: JSON body → native parser keeping
+-- its located error, marker body → fallback parser).
+--
+-- Chunk-attribution caveat (unchanged): field chunks are honest only for the
+-- marker/raw-text wire shape; a routed native (JSON) stream still delivers chunks of
+-- the raw JSON text, though the /final typed value/ now decodes correctly via
+-- 'parseResponse'.
 streamPredict ::
   forall i o es.
   (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
@@ -245,16 +255,18 @@ streamPredict ::
   (StreamEvent -> Eff es ()) ->
   Eff es o
 streamPredict sig ps i cb = do
-  sig' <- effectiveSig sig ps
+  sig' <- effectiveSignature sig ps
   let adapter = adapterFor _Model
-      (ctx, opts) = render adapter sig' i
+      (ctx, opts0) = render adapter sig' i
+      (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
+      opts = attachNativeRender nativeSys nativeDemos (attachSchema (deriveSchema @o) opts0)
       fieldNm = case map ST.fieldName (outputFields sig') of
         (x : _) -> x
         [] -> ""
   cb (StreamStatus (Status LmStart "LM call started"))
   resp <- streamComplete fieldNm _Model ctx opts cb
   cb (StreamStatus (Status LmEnd "LM call finished"))
-  either throwError pure (parse adapter sig' resp)
+  either throwError pure (parseResponse sig' resp)
 
 -- | Bracket an action with @NodeStart@/@NodeEnd@ status messages.
 bracketNode :: (StreamEvent -> Eff es ()) -> Eff es a -> Eff es a
@@ -272,17 +284,3 @@ blockingNode ::
   (StreamEvent -> Eff es ()) ->
   Eff es o
 blockingNode prog i cb = bracketNode cb (runProgram prog i)
-
--- | Overlay a node's 'Params' onto its signature (effective instruction + decoded
--- demos), replicating 'Shikumi.Program.runProgram'\'s internal @effectiveSignature@
--- so a streamed 'Predict' renders byte-for-byte as the blocking one would.
-effectiveSig ::
-  (FromModel i, FromModel o, Error ShikumiError :> es) =>
-  Signature i o ->
-  Params ->
-  Eff es (Signature i o)
-effectiveSig sig (Params {instructionOverride = ovr, demos = ds}) = do
-  typed <- either throwError pure (traverse decodeDemo ds)
-  pure (setDemos typed (setInstruction (fromMaybe (getInstruction sig) ovr) sig))
-  where
-    decodeDemo (Demo inJ outJ) = Sig.Demo <$> fromModel inJ <*> fromModel outJ

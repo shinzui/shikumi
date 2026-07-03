@@ -11,12 +11,15 @@ module RoutingSpec (tests) where
 
 import Baikai
   ( AssistantContent (..),
+    AssistantMessageEvent (..),
     Context,
     Message (..),
     Model,
     Options,
     ResponseFormat (..),
+    StopReason (..),
     TextContent (..),
+    doneTerminal,
     _Model,
   )
 import Baikai.Models.Generated (openai_gpt_4o_mini)
@@ -52,6 +55,7 @@ import Shikumi.Program
   )
 import Shikumi.Routing (routeLLM, runRouting)
 import Shikumi.Schema (deriveSchema)
+import Shikumi.Stream (streamProgram)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -65,6 +69,7 @@ tests =
       nativeReceivesNativeGuide,
       nativeReceivesJsonDemos,
       fallbackPromptUnchangedAndStampsStripped,
+      routesStreamModelAndStripsMetadata,
       spreadSetsDistinctTemps,
       fixedSetsExactTemps,
       concurrentAgreesOnTemps
@@ -87,7 +92,11 @@ runCapturingLLM ref resp = interpret $ \_ -> \case
   Complete m ctx o -> do
     liftIO (modifyIORef' ref (++ [(m, ctx, o)]))
     pure resp
-  Stream _ _ _ -> pure []
+  Stream m ctx o -> do
+    liftIO (modifyIORef' ref (++ [(m, ctx, o)]))
+    -- A minimal successful stream whose terminal reassembles to @resp@, so a
+    -- routed 'streamProgram' decodes exactly as the blocking path would.
+    pure [EventDone (doneTerminal Stop (AssistantMessage (resp ^. #message)))]
 
 -- | Run a program sequentially under @routeLLM . runRouting model@ over a capturing
 -- stub and return the captured requests.
@@ -232,6 +241,33 @@ fallbackPromptUnchangedAndStampsStripped =
           "native demos key stripped before transport"
           (Map.notMember metaNativeDemosKey (o ^. #metadata))
       other -> assertBool ("expected exactly one request, got " <> show (length other)) False
+
+-- ---------------------------------------------------------------------------
+-- EP-34 — the Stream operation is routed exactly like Complete
+-- ---------------------------------------------------------------------------
+
+routesStreamModelAndStripsMetadata :: TestTree
+routesStreamModelAndStripsMetadata =
+  testCase "routes the ambient model and strips metadata on Stream" $ do
+    ref <- newIORef []
+    res <-
+      runEff
+        . runErrorNoCallStack @ShikumiError
+        . runRouting openai_gpt_4o_mini
+        . runCapturingLLM ref outlineResponse
+        . routeLLM
+        $ streamProgram (predict topicToOutline) (Topic "cats") (\_ -> pure ())
+    assertBool "routed streaming program decodes without error" (isRight res)
+    captured <- readIORef ref
+    case captured of
+      [(m, _, o)] -> do
+        m ^. #modelId @?= openai_gpt_4o_mini ^. #modelId
+        o ^. #responseFormat
+          @?= Just (JsonSchema {name = "output", schema = deriveSchema @Outline, strict = True})
+        assertBool
+          "private schema key stripped before transport"
+          (Map.notMember metaResponseSchemaKey (o ^. #metadata))
+      other -> assertBool ("expected exactly one Stream request, got " <> show (length other)) False
 
 -- ---------------------------------------------------------------------------
 -- M3 — per-sample temperature from MajorityVote's TempSchedule

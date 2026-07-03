@@ -53,7 +53,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Vector qualified as V
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
-import Effectful.Dispatch.Dynamic (interpose, interpret, passthrough, send)
+import Effectful.Dispatch.Dynamic (interpose, interpret, send)
 import Shikumi.Adapter
   ( ModelCapability (..),
     capabilityFor,
@@ -62,7 +62,7 @@ import Shikumi.Adapter
     metaResponseSchemaKey,
     metaTemperatureKey,
   )
-import Shikumi.LLM (LLM (..), complete)
+import Shikumi.LLM (LLM (..), complete, stream)
 
 -- | The ambient model-routing effect. Its single operation reads the model every
 -- 'Predict' node should dispatch against. It is supplied by an interpreter at the
@@ -82,18 +82,24 @@ currentModel = send CurrentModel
 runRouting :: Model -> Eff (Routing : es) a -> Eff es a
 runRouting m = interpret (\_ CurrentModel -> pure m)
 
--- | The router. Re-interpret the @LLM@ effect so each outgoing 'Complete' is
--- dispatched against the ambient model (overwriting the placeholder model the
--- model-agnostic 'Shikumi.Program.runProgram' passes), with the private metadata
--- channel translated to real wire options and stripped. 'Stream' is forwarded
--- unchanged ('runProgram' never streams).
+-- | The router. Re-interpret the @LLM@ effect so each outgoing call — /both/
+-- 'Complete' and 'Stream' — is dispatched against the ambient model (overwriting
+-- the placeholder model the model-agnostic 'Shikumi.Program.runProgram' /
+-- 'Shikumi.Stream.streamProgram' passes), with the private metadata channel
+-- translated to real wire options (and the marker 'Context' swapped for the native
+-- one for native-capable models) and stripped. The two operations are rewritten
+-- identically through the single 'translateForWire', so a streamed call gets the
+-- same real model id and wire options a blocking call does.
 routeLLM :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a
-routeLLM = interpose $ \env -> \case
+routeLLM = interpose $ \_ -> \case
   Complete _placeholder ctx opts -> do
     m <- currentModel
     let (ctx', opts') = translateForWire m ctx opts
     complete m ctx' opts'
-  other -> passthrough env other
+  Stream _placeholder ctx opts -> do
+    m <- currentModel
+    let (ctx', opts') = translateForWire m ctx opts
+    stream m ctx' opts'
 
 -- | Realize the private request-metadata channel against the real model. For a
 -- native-capable model: attach the native @responseFormat@ from the stamped

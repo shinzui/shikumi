@@ -45,8 +45,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `routeLLM` rewrites `Stream` (ambient model + `translateForWire` + key stripping); routed-streaming test added
-- [ ] M2: `Shikumi.Program` exports `effectiveSignature` and `parseResponse`; `streamPredict` reuses them and `attachSchema`; duplicate `effectiveSig` deleted; parity tests added
+- [x] M1 (2026-07-03): `routeLLM` rewrites `Stream` (ambient model + `translateForWire` + key stripping); routed-streaming test added (`RoutingSpec` "routes the ambient model and strips metadata on Stream", green)
+- [x] M2 (2026-07-03): `Shikumi.Program` exports `effectiveSignature` and `parseResponse`; `streamPredict` reuses them, `attachSchema`, and `attachNativeRender`; duplicate `effectiveSig` deleted; JSON-stream decode + parity tests added (`StreamSpec`)
 - [ ] M3: interpreters map terminal `EventError` to an out-of-band `ShikumiError` (budget charged first); streaming failing-stub added to `StubProvider`; stream-retry test added
 - [ ] Docs: `LLM.stream` contract, budget-on-error behavior, and `Shikumi.Stream` haddocks updated; CHANGELOG entry
 
