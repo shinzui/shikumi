@@ -4,7 +4,7 @@ slug: optimizer-and-evaluation-correctness
 title: "Optimizer and Evaluation Correctness"
 kind: master-plan
 created_at: 2026-07-02T03:29:36Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaf8e86bvx2arbh7nk2c"
 ---
 
 # Optimizer and Evaluation Correctness
@@ -95,7 +95,7 @@ suite, and the seeding fix is urgent while the budget work is not.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |----|-------|------|-----------|-----------|--------|
-| 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | Not Started |
+| 36 | Fix Optimizer Instruction Seeding | docs/plans/36-fix-optimizer-instruction-seeding.md | None | None | In Progress |
 | 37 | Enforce the Optimizer Budget Contract | docs/plans/37-enforce-the-optimizer-budget-contract.md | None | EP-36 | Not Started |
 | 38 | Compiled Program Serialization Fidelity | docs/plans/38-compiled-program-serialization-fidelity.md | None | None | Not Started |
 | 39 | Evaluation Accounting and API Tail | docs/plans/39-evaluation-accounting-and-api-tail.md | None | None | Not Started |
@@ -191,7 +191,7 @@ second converges the duplicates and records the outcome in Surprises & Discoveri
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-36: M1 — effective-instruction helpers in Search.hs, unit-tested
+- [x] EP-36: M1 — effective-instruction helpers in Search.hs, unit-tested
 - [ ] EP-36: M2 — instructionSearch and COPRO seed from the effective instruction
 - [ ] EP-36: M3 — MIPROv2 baseline/applyVec preserve the student; original demos are a candidate
 - [ ] EP-36: M4 — GEPA reflects on the effective instruction

@@ -12,12 +12,15 @@ module Shikumi.Optimize.Search
     scoreOn,
     freezeProgram,
     setNodeInstr,
+    setNodeInstrIfNew,
     instructionAt,
+    effectiveInstructionAt,
   )
 where
 
 import Control.Lens ((&), (?~))
 import Data.Generics.Labels ()
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
@@ -29,7 +32,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric, Report (aggregateScore), evaluatePure)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize.Types (Budget (..), Scored (..))
-import Shikumi.Program (Params (..), Program, foldParams, mapParamsAt)
+import Shikumi.Program (Params (..), Program, foldParams, mapParamsAt, nodeInstructionsIndexed)
 
 -- | Score every candidate (left to right), stopping once the candidate budget is
 -- hit, and return the best by score (ties: earliest wins). The scorer is the
@@ -76,6 +79,24 @@ freezeProgram = CompiledProgram
 -- @instructionSearch@ and @copro@.
 setNodeInstr :: Int -> Text -> Program i o -> Program i o
 setNodeInstr idx instr = mapParamsAt idx (\ps -> ps & #instructionOverride ?~ instr)
+
+-- | The instruction node @idx@ actually runs with: its 'instructionOverride' when
+-- set, otherwise its signature's base instruction. This mirrors the runtime
+-- precedence in 'Shikumi.Program.effectiveSignature'. Out-of-range indices yield
+-- the empty string.
+effectiveInstructionAt :: Int -> Program i o -> Text
+effectiveInstructionAt idx prog =
+  case drop idx (zip (nodeInstructionsIndexed prog) (foldParams prog)) of
+    ((base, ps) : _) -> fromMaybe base (instructionOverride ps)
+    [] -> ""
+
+-- | Set node @idx@'s instruction override unless @instr@ is already its effective
+-- instruction. Keeping the current signature instruction therefore leaves
+-- 'instructionOverride' as 'Nothing' instead of serializing a redundant override.
+setNodeInstrIfNew :: Int -> Text -> Program i o -> Program i o
+setNodeInstrIfNew idx instr prog
+  | instr == effectiveInstructionAt idx prog = prog
+  | otherwise = setNodeInstr idx instr prog
 
 -- | The instruction override stored at node @idx@ (in @foldParams@ order), if any.
 instructionAt :: Int -> Program i o -> Maybe Text

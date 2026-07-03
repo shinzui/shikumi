@@ -4,7 +4,7 @@ slug: fix-optimizer-instruction-seeding
 title: "Fix Optimizer Instruction Seeding"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaf8e86bvx2arbh7nk2c"
 master_plan: "docs/masterplans/6-optimizer-and-evaluation-correctness.md"
 ---
 
@@ -54,10 +54,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `effectiveInstructionAt` and `setNodeInstrIfNew` to
+- [x] M1 completed 2026-07-03 — added `effectiveInstructionAt` and `setNodeInstrIfNew` to
       `shikumi-optimize/src/Shikumi/Optimize/Search.hs`; unit tests in a new
       `shikumi-optimize/test/SearchSpec.hs` (registered in the cabal file and
-      `test/Main.hs`)
+      `test/Main.hs`); `cabal test shikumi-optimize` passed with 46 tests.
 - [ ] M2: re-point `Instruction.hs` (instructionSearch) and `COPRO.hs` at the new
       helpers; failing-before tests for both
 - [ ] M3: fix MIPROv2 — effective-instruction seeding, per-node original demos as demo
@@ -77,6 +77,12 @@ Document unexpected behaviors, bugs, optimizations, or insights discovered durin
 implementation. Provide concise evidence.
 
 (None yet.)
+
+- 2026-07-03: M1's helper tests passed under `cabal test shikumi-optimize`, proving
+  `effectiveInstructionAt` reads the signature base instruction when no override exists,
+  override text when present, and the second node's base instruction in a two-node
+  pipeline. Evidence: the `Search` test group passed and the full suite reported `All
+  46 tests passed`.
 
 
 ## Decision Log
@@ -515,7 +521,7 @@ fix(optimize): seed instruction search from the effective instruction
 
 MasterPlan: docs/masterplans/6-optimizer-and-evaluation-correctness.md
 ExecPlan: docs/plans/36-fix-optimizer-instruction-seeding.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaf8e86bvx2arbh7nk2c
 ```
 
 (Adjust the subject per commit: `test(optimize): …` for fixture/test-only commits,

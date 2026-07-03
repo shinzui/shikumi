@@ -17,6 +17,7 @@ import Miprov2Spec qualified
 import OptimizeSpec qualified
 import ProposeSpec qualified
 import RandomSearchSpec qualified
+import SearchSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -35,5 +36,6 @@ main =
         GepaSpec.tests,
         KNNSpec.tests,
         RandomSearchSpec.tests,
+        SearchSpec.tests,
         AcceptanceSpec.tests
       ]

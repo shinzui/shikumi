@@ -92,6 +92,7 @@ test-suite shikumi-optimize-test
     OptimizeSpec
     ProposeSpec
     RandomSearchSpec
+    SearchSpec
     StubLM
 
   build-depends:
