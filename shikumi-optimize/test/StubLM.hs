@@ -57,6 +57,7 @@ module StubLM
 
     -- * The reflective task (EP-22, GEPA)
     runGepaStubLM,
+    runGepaStubLMCapturing,
   )
 where
 
@@ -266,6 +267,15 @@ respondTo = respondWith answerSentiment
 runGepaStubLM :: Eff (LLM : es) a -> Eff es a
 runGepaStubLM = interpret $ \_ -> \case
   Complete _ ctx _ -> pure (mkResponse (respondGepa ctx))
+  Stream {} -> pure []
+
+-- | Like 'runGepaStubLM' but records each request's rendered text for prompt-signal
+-- assertions.
+runGepaStubLMCapturing :: (IOE :> es) => IORef [Text] -> Eff (LLM : es) a -> Eff es a
+runGepaStubLMCapturing ref = interpret $ \_ -> \case
+  Complete _ ctx _ -> do
+    liftIO (modifyIORef' ref (++ [fullRequestText ctx]))
+    pure (mkResponse (respondGepa ctx))
   Stream {} -> pure []
 
 respondGepa :: Context -> Text

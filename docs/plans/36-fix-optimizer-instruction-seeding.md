@@ -66,7 +66,9 @@ This section must always reflect the actual current state of the work.
       original demos as demo candidate 0, and identity `applyVec` behavior at the base
       vector; added a failing-before test plus a `bootstrapDemoCandidates` unit test;
       `cabal test shikumi-optimize` passed with 50 tests after the fix.
-- [ ] M4: GEPA reflects on the effective instruction; capturing-stub test
+- [x] M4 completed 2026-07-03 — GEPA reflects on the effective instruction; added a
+      capturing-stub test for the first reflective proposer request; `cabal test
+      shikumi-optimize` passed with 51 tests after the fix.
 - [ ] M5: fixture diversification — `ruled` (non-empty signature instruction) and
       `sentimentPipeline` (two-node) fixtures in StubLM; multi-node acceptance tests
       for all four optimizers; full `cabal test shikumi-optimize` green
@@ -98,6 +100,11 @@ implementation. Provide concise evidence.
   existing demos. After making demo candidate 0 the current demos, seeding proposals
   from `effectiveInstructionAt`, and applying instructions through `setNodeInstrIfNew`,
   the suite reported `All 50 tests passed`.
+
+- 2026-07-03: The first GEPA reflection request rendered `currentInstruction:` as an
+  empty field before the fix, even when the student's signature instruction contained
+  the RULE text. After changing `mutateNode` to use `effectiveInstructionAt`, the new
+  capturing-stub test passed and the suite reported `All 51 tests passed`.
 
 
 ## Decision Log

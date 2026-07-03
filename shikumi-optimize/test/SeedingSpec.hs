@@ -5,6 +5,8 @@ module SeedingSpec (tests) where
 
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, readIORef)
+import Data.Text qualified as T
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -13,6 +15,7 @@ import Shikumi.Compile.Types (compiledProgram)
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, dataset, exactMatch, example)
+import Shikumi.Eval qualified as Eval
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
   ( Budget (..),
@@ -22,17 +25,19 @@ import Shikumi.Optimize
     bootstrapDemoCandidates,
     copro,
     defaultBudget,
+    gepa,
     instructionAt,
     instructionSearch,
     miprov2Auto,
     miprov2With,
     optimize,
     recoverDemo,
+    reflectiveProposer,
     scoreOn,
     withDemos,
   )
 import Shikumi.Program (Demo)
-import StubLM (Label (..), Sentence (..), ruled, runJointStubLM, runStubLM)
+import StubLM (Label (..), Sentence (..), ruleInstruction, ruled, runGepaStubLMCapturing, runJointStubLM, runStubLM)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -139,5 +144,21 @@ tests =
           Right [sets] -> do
             take 1 sets @?= [coveringDemos]
             assertBool "empty demo set remains available" ([] `elem` sets)
-          Right other -> assertFailure ("expected one node, got " <> show (length other))
+          Right other -> assertFailure ("expected one node, got " <> show (length other)),
+      testCase "gepa reflection prompt sees the effective signature instruction" $ do
+        ref <- newIORef []
+        let fbMetric _ _ = (Eval.boolScore False, "be more specific")
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runGepaStubLMCapturing ref (optimize (gepa reflectiveProposer fbMetric defaultBudget) trainset exactMatch ruled)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        captured <- readIORef ref
+        case filter ("proposedInstruction" `T.isInfixOf`) captured of
+          firstReflection : _ ->
+            assertBool
+              "expected first GEPA reflection request to include the effective RULE instruction"
+              (("currentInstruction: " <> ruleInstruction) `T.isInfixOf` firstReflection)
+          [] -> assertFailure "expected at least one GEPA reflection request"
     ]

@@ -36,7 +36,6 @@ where
 import Control.Lens ((&), (?~))
 import Control.Monad (forM, forM_, when)
 import Data.Generics.Labels ()
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
@@ -61,11 +60,10 @@ import Shikumi.Eval
 import Shikumi.LLM (LLM)
 import Shikumi.Module (predict)
 import Shikumi.Optimize.Pareto (Candidate (..), paretoFrontier, sampleParent)
-import Shikumi.Optimize.Search (freezeProgram)
+import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
 import Shikumi.Program
   ( NodeFields (..),
-    Params (..),
     Program,
     foldParams,
     mapParamsAt,
@@ -176,18 +174,12 @@ mutateNode proposer progSummary dataSummary fields fblog paths idx prog =
        in if null crits
             then pure prog
             else do
-              let cur = fromMaybe "" (instructionOverride (paramsAt idx prog))
+              let cur = effectiveInstructionAt idx prog
                   fldSummary = renderFields (drop idx fields)
                   fb = T.intercalate "\n" crits
               ReflectOut newInstr <-
                 runProgram proposer (ReflectIn cur fb progSummary dataSummary fldSummary)
               pure (mapParamsAt idx (\ps -> ps & #instructionOverride ?~ newInstr) prog)
-
--- | The 'Params' at a node index (empty if out of range).
-paramsAt :: Int -> Program i o -> Params
-paramsAt idx prog = case drop idx (foldParams prog) of
-  (ps : _) -> ps
-  [] -> Params Nothing []
 
 -- | Render a node's field names for the proposer prompt.
 renderFields :: [NodeFields] -> Text
