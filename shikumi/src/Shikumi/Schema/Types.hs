@@ -151,9 +151,11 @@ boolSchema = object ["type" .= ("boolean" :: Text)]
 arraySchema :: Value -> Value
 arraySchema items = object ["type" .= ("array" :: Text), "items" .= items]
 
--- | @{"enum":[...]}@ for an enum-like sum of nullary constructors.
+-- | @{"type":"string","enum":[...]}@ for an enum-like sum of nullary
+-- constructors. OpenAI strict mode requires every schema node to carry an explicit
+-- type; the enum values are the constructor names, so the type is @"string"@.
 enumSchema :: [Text] -> Value
-enumSchema names = object ["enum" .= names]
+enumSchema names = object ["type" .= ("string" :: Text), "enum" .= names]
 
 -- | Permit JSON @null@ in addition to the wrapped schema. The @anyOf@ form is
 -- used (more portable across providers than @"type":["T","null"]@).

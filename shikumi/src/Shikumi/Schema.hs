@@ -122,8 +122,16 @@ instance (Selector s, FieldSchema t) => GRecordFields (S1 s (K1 R t)) where
      in ([(nm, sch)], [nm | req])
 
 -- | Per-field schema and whether the field is required. The general
--- (overlappable) case is "required, no description"; 'Maybe' is optional/nullable;
--- 'Field' attaches the description and preserves the inner required-ness.
+-- (overlappable) case is "required, no description"; 'Maybe' is
+-- required-but-nullable (see below); 'Field' attaches the description and
+-- preserves the inner required-ness.
+--
+-- A 'Maybe' field is /required/ in the JSON Schema and expresses its optionality
+-- as nullability (a nullable schema). OpenAI strict mode (@strict: true@, which
+-- the router always requests) requires every property to appear in @required@;
+-- omitting a property is rejected. The decode side is unaffected —
+-- @FromField (Maybe a)@ accepts a missing key, an explicit @null@, or a value —
+-- so a fallback-model reply that omits the field still decodes.
 class FieldSchema t where
   fieldSchema :: Proxy t -> (Value, Bool)
 
@@ -131,7 +139,7 @@ instance {-# OVERLAPPABLE #-} (ToSchema a) => FieldSchema a where
   fieldSchema _ = (toSchema (Proxy @a), True)
 
 instance (ToSchema a) => FieldSchema (Maybe a) where
-  fieldSchema _ = (nullableSchema (toSchema (Proxy @a)), False)
+  fieldSchema _ = (nullableSchema (toSchema (Proxy @a)), True)
 
 instance (KnownSymbol d, FieldSchema a) => FieldSchema (Field d a) where
   fieldSchema _ =

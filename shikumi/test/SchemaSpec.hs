@@ -15,6 +15,12 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
 
 -- | The schema we expect @deriveSchema \@Summary@ to produce.
+--
+-- Pinned to the OpenAI strict-mode shape (EP-33): the @sentiment@ enum carries an
+-- explicit @"type": "string"@, and the nullable @note@ appears in @required@
+-- (strict mode expresses optionality as required-but-nullable, not by omission).
+-- The pre-EP-33 golden pinned the strict-mode-violating shape; this update is
+-- deliberate, not a regression.
 expectedSummarySchema :: Value
 expectedSummarySchema =
   object
@@ -37,10 +43,10 @@ expectedSummarySchema =
                   "required" .= ["name" :: Text],
                   "additionalProperties" .= False
                 ],
-            "sentiment" .= object ["enum" .= (["Positive", "Neutral", "Negative"] :: [Text])],
+            "sentiment" .= object ["type" .= s "string", "enum" .= (["Positive", "Neutral", "Negative"] :: [Text])],
             "note" .= object ["anyOf" .= [object ["type" .= s "string"], object ["type" .= s "null"]]]
           ],
-      "required" .= (["headline", "bullets", "author", "sentiment"] :: [Text]),
+      "required" .= (["headline", "bullets", "author", "sentiment", "note"] :: [Text]),
       "additionalProperties" .= False
     ]
   where

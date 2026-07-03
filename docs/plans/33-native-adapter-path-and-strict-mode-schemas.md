@@ -43,7 +43,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] M1 (2026-07-03): `parseResponse` keeps the native error when the body parses as JSON; regression test added (`ProgramSpec` "EP-33: a native JSON body of the wrong shape keeps the located native error" — asserts `Left (SchemaMismatch "points: expected array, got number")`, green)
-- [ ] M2: `Maybe` fields required-but-nullable; `enumSchema` gains `"type": "string"`; `SchemaSpec` golden deliberately updated; repo-wide schema-pin survey done
+- [x] M2 (2026-07-03): `Maybe` fields required-but-nullable; `enumSchema` gains `"type": "string"`; `SchemaSpec` golden deliberately updated; repo-wide schema-pin survey done (see Surprises)
 - [ ] M3: native demo rendering (`nativeDemoMessages`) implemented in `nativeAdapter`
 - [ ] M3: native render channel — `runPredict` stamps the native system prompt and demo texts; `translateForWire` swaps them in for native-capable models and strips the keys; router tests added
 - [ ] Docs: `xmlAdapter` reachability documented; haddocks updated; CHANGELOG entry
@@ -54,7 +54,28 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- M2 schema-pin survey (`grep -rn '"required"|"enum"'` across all packages). Only
+  one derived-schema golden pins a `Maybe` or enum field and thus needed the
+  strict-mode update: `expectedSummarySchema` in `shikumi/test/SchemaSpec.hs`
+  (has both the `note :: Maybe Text` field and the `sentiment` enum). Everything
+  else is unaffected:
+  - `shikumi/test/RoutingSpec.hs:120` compares `responseFormat` against
+    `deriveSchema @Outline` symbolically — self-updates, and `Outline` has no
+    `Maybe`/enum field anyway.
+  - `shikumi-tools/test/Fixtures.hs` `expectedReqSchema` (WeatherReq) lists both
+    fields as `required` with no `Maybe`/enum, so it is byte-identical after the
+    change; its two consuming specs (`AcceptanceSpec`, `SchemaSpec`) stay green.
+  - `shikumi/test/ConstraintSpec.hs` checks individual keyword values
+    (`minLength`/`minimum`/`maximum`) via `propOf`/`keyword`, not full-schema
+    equality, and touches no `Maybe`/enum field.
+- Out-of-scope finding for EP-45 (builtin tool hardening): `GrepReq`/`GlobReq` in
+  `shikumi-tools/src/Shikumi/Tool/Builtin/Fs.hs` hand-write their schema via a
+  local `toolInputSchema` that hardcodes `required = ["pattern"]` while
+  `path`/`glob`/`ignoreCase` are `Maybe`. That is the old, strict-mode-violating
+  shape, but it is a hand-written schema (not produced by the generic
+  `FieldSchema`/`enumSchema` emitters this plan fixes), so EP-33's change does not
+  touch it and no test broke. Fixing those hand-written tool schemas belongs to
+  `docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md`.
 
 
 ## Decision Log
