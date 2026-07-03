@@ -62,7 +62,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-03: M4: MIPROv2 phases 1–2 metered (teacher runs, proposer calls) sharing one meter
       with phase 3
 - [x] 2026-07-03: M5: GEPA seed-evaluation gate
-- [ ] M6: bootstrap per-teacher-run accounting; random search shares one meter across
+- [x] 2026-07-03: M6: bootstrap per-teacher-run accounting; random search shares one meter across
       inner bootstraps and its own scoring
 - [ ] M7: `ensembleSearchWith` with exact call counting between members
 - [ ] M8: rewrite the `Budget` haddock (Types.hs) to the honest accounting model;
@@ -91,6 +91,15 @@ implementation. Provide concise evidence.
   single-node fixture. The seed evaluation costs 2 predicted completions, so the
   optimizer now returns the student before evaluation; `withLmCallCount` observes
   exactly 0 LM calls.
+
+- 2026-07-03: M6's bootstrap regression uses a 4-example trainset, a two-node
+  teacher, and `maxLmCalls = 6`. The old prefix-by-example accounting would run all
+  4 examples and spend 8 actual completions; `bootstrapKeptDemos` now gates each
+  teacher run at cost 2 and the test asserts actual calls are `<= 6`. The random
+  search regression uses 5 seeds with `maxLmCalls = 20`; the previous implementation
+  handed a full budget to each inner bootstrap and then scored candidates on top,
+  while the new implementation shares one meter across seed demo recovery and final
+  scoring and asserts actual calls are `<= 20`.
 
 
 ## Decision Log

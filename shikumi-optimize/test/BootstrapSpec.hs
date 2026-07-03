@@ -9,6 +9,7 @@
 -- teacher correct on, and the mislabelled one is excluded.
 module BootstrapSpec (tests) where
 
+import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -22,9 +23,9 @@ import Shikumi.LLM (LLM)
 import Shikumi.Optimize
 import Shikumi.Program (Demo (..), Params (..), Program, programParams)
 import Shikumi.Schema (fromModel)
-import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, sentimentProg)
+import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, runStubLMCounting, sentimentPipeline, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertFailure, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (Either ShikumiError a)
 runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
@@ -42,6 +43,15 @@ trainset =
     [ example (Sentence "good film") (Label "positive"),
       example (Sentence "bad film") (Label "negative"),
       example (Sentence "good soup") (Label "negative")
+    ]
+
+budgetTrainset :: Dataset Sentence Label
+budgetTrainset =
+  dataset
+    [ example (Sentence "good film") (Label "positive"),
+      example (Sentence "bad film") (Label "negative"),
+      example (Sentence "good show") (Label "positive"),
+      example (Sentence "bad play") (Label "negative")
     ]
 
 -- | The demos baked into a compiled single-node program.
@@ -68,5 +78,16 @@ tests =
                 outs = traverse (\d -> fromModel (output d)) ds :: Either ShikumiError [Label]
             length ds @?= 2
             ins @?= Right [Sentence "good film", Sentence "bad film"]
-            outs @?= Right [Label "positive", Label "negative"]
+            outs @?= Right [Label "positive", Label "negative"],
+      testCase "bootstrapFewShot charges a teacher run by predict-node count" $ do
+        ref <- newIORef (0 :: Int)
+        let budget = Budget {maxLmCalls = 6, maxCandidates = 32}
+        res <-
+          runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+            runStubLMCounting ref (optimize (bootstrapFewShot sentimentPipeline budget) budgetTrainset exactMatch sentimentProg)
+        case res of
+          Left e -> assertFailure ("unexpected error: " <> show e)
+          Right _ -> pure ()
+        count <- readIORef ref
+        assertBool ("expected 0 < calls <= 6, got " <> show count) (count > 0 && count <= 6)
     ]

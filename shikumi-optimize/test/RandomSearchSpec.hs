@@ -5,6 +5,7 @@
 -- the best compiled output round-trips through serialization.
 module RandomSearchSpec (tests) where
 
+import Data.IORef (newIORef, readIORef)
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -16,7 +17,8 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, dataset, exactMatch, example)
 import Shikumi.LLM (LLM)
 import Shikumi.Optimize
-  ( bootstrapFewShot,
+  ( Budget (..),
+    bootstrapFewShot,
     bootstrapRandomSearch,
     defaultBudget,
     optimize,
@@ -24,7 +26,7 @@ import Shikumi.Optimize
     setNodeInstr,
   )
 import Shikumi.Program (Program)
-import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, sentimentProg)
+import StubLM (Label (..), Sentence (..), ruleInstruction, runStubLM, runStubLMCounting, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -57,7 +59,7 @@ runStub :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (
 runStub act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runStubLM act
 
 tests :: TestTree
-tests = testGroup "RandomSearch" [bestOfNAtLeastSingle, reproducible, roundTrips]
+tests = testGroup "RandomSearch" [bestOfNAtLeastSingle, reproducible, budgetRespected, roundTrips]
 
 bestOfNAtLeastSingle :: TestTree
 bestOfNAtLeastSingle =
@@ -89,6 +91,20 @@ reproducible =
     case res of
       Left e -> assertFailure ("unexpected error: " <> show e)
       Right (sa, sb) -> sa @?= sb
+
+budgetRespected :: TestTree
+budgetRespected =
+  testCase "bootstrapRandomSearch shares one budget across seeds and scoring" $ do
+    ref <- newIORef (0 :: Int)
+    let budget = Budget {maxLmCalls = 20, maxCandidates = 100}
+    res <-
+      runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+        runStubLMCounting ref (optimize (bootstrapRandomSearch teacher 5 budget) trainset exactMatch sentimentProg)
+    case res of
+      Left e -> assertFailure ("unexpected error: " <> show e)
+      Right _ -> pure ()
+    count <- readIORef ref
+    assertBool ("expected 0 < calls <= 20, got " <> show count) (count > 0 && count <= 20)
 
 roundTrips :: TestTree
 roundTrips =

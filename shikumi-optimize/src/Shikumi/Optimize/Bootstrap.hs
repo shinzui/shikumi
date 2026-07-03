@@ -21,6 +21,7 @@
 module Shikumi.Optimize.Bootstrap
   ( bootstrapFewShot,
     bootstrapFewShotWith,
+    bootstrapKeptDemos,
     BootstrapConfig (..),
     defaultBootstrapConfig,
     recoverDemo,
@@ -28,14 +29,17 @@ module Shikumi.Optimize.Bootstrap
 where
 
 import Data.Aeson (ToJSON, toJSON)
-import Effectful.Error.Static (catchError)
+import Effectful (Eff, (:>))
+import Effectful.Error.Static (Error, catchError)
+import Effectful.Prim (Prim)
 import GHC.Generics (Generic)
 import Shikumi.Error (ShikumiError)
-import Shikumi.Eval (Example (..), datasetExamples, prediction, unScore)
+import Shikumi.Eval (Dataset, Example (..), Metric, datasetExamples, prediction, unScore)
+import Shikumi.LLM (LLM)
 import Shikumi.Optimize.LabeledFewShot (withDemos)
-import Shikumi.Optimize.Search (freezeProgram)
+import Shikumi.Optimize.Search (BudgetMeter, freezeProgram, newBudgetMeter, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
-import Shikumi.Program (Demo (..), Program, runProgram)
+import Shikumi.Program (Demo (..), Program, foldParams, runProgram)
 
 -- | Tunables for a bootstrap search.
 data BootstrapConfig = BootstrapConfig
@@ -73,11 +77,22 @@ bootstrapFewShotWith ::
   Budget ->
   Optimizer i o
 bootstrapFewShotWith cfg teacher budget = Optimizer $ \train metric student -> do
-  -- Bound the number of teacher runs by the budget (each run is >= 1 LM call).
-  let exs = take (max 0 (maxLmCalls budget)) (datasetExamples train)
-      -- Run the teacher on one example; if it succeeds and the metric passes,
-      -- emit its recovered demo, else emit nothing. Recovery is total: a teacher
-      -- error yields no demo rather than aborting the search.
+  meter <- newBudgetMeter budget
+  kept <- bootstrapKeptDemos cfg meter teacher train metric
+  pure (freezeProgram (withDemos kept student))
+
+-- | Recover metric-passing demos from teacher runs under a shared budget meter.
+bootstrapKeptDemos ::
+  (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
+  BootstrapConfig ->
+  BudgetMeter ->
+  Program i o ->
+  Dataset i o ->
+  Metric o ->
+  Eff es [Demo]
+bootstrapKeptDemos cfg meter teacher train metric = do
+  let teacherCost = max 1 (length (foldParams teacher))
+      cap = max 0 (maxBootstrappedDemos cfg)
       keepIfPassing (Example inp expd) =
         ( do
             out <- runProgram teacher inp
@@ -85,5 +100,16 @@ bootstrapFewShotWith cfg teacher budget = Optimizer $ \train metric student -> d
             pure [recoverDemo inp out | s >= passThreshold cfg]
         )
           `catchError` \_ (_ :: ShikumiError) -> pure []
-  kept <- concat <$> mapM keepIfPassing exs
-  pure (freezeProgram (withDemos (take (maxBootstrappedDemos cfg) kept) student))
+      collect kept []
+        | length kept >= cap = pure (take cap kept)
+        | otherwise = pure kept
+      collect kept (ex : rest)
+        | length kept >= cap = pure (take cap kept)
+        | otherwise = do
+            fits <- tryCharge meter teacherCost
+            if not fits
+              then pure kept
+              else do
+                newKept <- keepIfPassing ex
+                collect (kept ++ newKept) rest
+  collect [] (datasetExamples train)
