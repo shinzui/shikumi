@@ -4,7 +4,7 @@
 -- rate limit caps in-flight calls.
 module ResilienceSpec (tests) where
 
-import Baikai (flattenAssistantBlocks)
+import Baikai (AssistantMessageEvent (..), flattenAssistantBlocks)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
@@ -21,11 +21,14 @@ import Shikumi.LLM
     defaultLLMConfig,
     newRateLimiter,
     runLLMResilient,
+    stream,
   )
 import Shikumi.LLM.Budget (newBudget)
 import StubProvider
   ( concurrencyStubRegistry,
     costStubRegistry,
+    failingStreamCostStubRegistry,
+    failingStreamStubRegistry,
     failingStubRegistry,
     flattenAssistantText,
     invalidStubRegistry,
@@ -93,10 +96,51 @@ tests =
         r1 @?= Right "ok"
         r2 @?= Right "ok"
         observedMax <- readTVarIO mx
-        assertBool ("observed max concurrency " <> show observedMax <> " should be <= 1") (observedMax <= 1)
+        assertBool ("observed max concurrency " <> show observedMax <> " should be <= 1") (observedMax <= 1),
+      testCase "EP-34: stream retry recovers after 2 failures" $ do
+        -- A stream that fails twice (terminal EventError) then succeeds. The
+        -- interpreter now raises the in-band error out-of-band, so retrying fires.
+        ref <- newIORef 0
+        reg <- failingStreamStubRegistry ref 2 "ok"
+        let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5}
+        res <- runStream cfg
+        case res of
+          Right evs -> assertBool "successful stream ends with EventDone" (any isEventDone evs)
+          other -> assertFailure ("expected Right events, got " <> show other)
+        n <- readIORef ref
+        n @?= 3,
+      testCase "EP-34: a permanently failing stream surfaces a transient ProviderFailure" $ do
+        ref <- newIORef 0
+        reg <- failingStreamStubRegistry ref 5 "ok" -- more failures than attempts
+        let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5}
+        res <- runStream cfg
+        case res of
+          Left (ProviderFailure _) -> pure ()
+          other -> assertFailure ("expected Left (ProviderFailure ...), got " <> show other)
+        n <- readIORef ref
+        n @?= 3, -- retried up to maxAttempts
+      testCase "EP-34: a failed stream still charges the budget (charge precedes the throw)" $ do
+        -- First call: budget gate passes, stream fails after charging its cost, so
+        -- the failure surfaces AND the cost is recorded. Second call: the gate now
+        -- refuses because the first (failed) call already consumed the ceiling.
+        reg <- failingStreamCostStubRegistry (1 % 100)
+        b <- newBudget (Just (1 % 100))
+        let cfg = (defaultLLMConfig reg) {budget = Just b, retryPolicy = RetryPolicy 1 1 5}
+        res1 <- runStream cfg
+        case res1 of
+          Left (ProviderFailure _) -> pure ()
+          other -> assertFailure ("expected Left (ProviderFailure ...), got " <> show other)
+        res2 <- runStream cfg
+        case res2 of
+          Left (BudgetExceeded _) -> pure ()
+          other -> assertFailure ("expected Left (BudgetExceeded ...) after the failed call charged, got " <> show other)
     ]
   where
     runText cfg =
       runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $ do
         r <- complete stubModel stubContext stubOptions
         pure (flattenAssistantText (flattenAssistantBlocks r))
+    runStream cfg =
+      runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $
+        stream stubModel stubContext stubOptions
+    isEventDone = \case EventDone _ -> True; _ -> False

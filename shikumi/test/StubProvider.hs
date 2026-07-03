@@ -14,6 +14,8 @@ module StubProvider
     stubRegistry,
     costStubRegistry,
     failingStubRegistry,
+    failingStreamStubRegistry,
+    failingStreamCostStubRegistry,
     invalidStubRegistry,
     concurrencyStubRegistry,
   )
@@ -133,6 +135,61 @@ failingStubRegistry ref failTimes t =
     if n <= failTimes
       then throwIO (providerError ("stub transient failure #" <> T.pack (show n)))
       else pure (stubResponse t)
+
+-- | A terminal-failing event sequence: an 'EventError' whose assembled message
+-- carries @errorMessage@ (and optionally a dollar cost). Shikumi's @LLM@
+-- interpreters map this to a transient 'Shikumi.Error.ProviderFailure'.
+streamErrorEvents :: Rational -> Text -> [AssistantMessageEvent]
+streamErrorEvents cost msg =
+  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message)},
+    EventError (doneTerminal ErrorReason (AssistantMessage errPayload))
+  ]
+  where
+    errPayload =
+      (_Response ^. #message)
+        & #errorMessage
+        .~ Just msg
+        & #usage
+        . #cost
+        . #usd
+        .~ cost
+
+-- | A registry whose /stream/ fails (a terminal 'EventError') the first
+-- @failTimes@ calls, then streams success. @complete@ is irrelevant (stream-only
+-- tests). The 'IORef' records the total number of stream attempts, so a retry test
+-- can assert the loop fired.
+failingStreamStubRegistry :: IORef Int -> Int -> Text -> IO ProviderRegistry
+failingStreamStubRegistry ref failTimes t = do
+  reg <- newProviderRegistry
+  registerApiProviderWith
+    reg
+    ApiProvider
+      { apiTag = stubApi,
+        complete = \_ _ _ -> pure (stubResponse t),
+        stream = \_ _ _ -> Stream.concatEffect $ do
+          n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
+          pure $
+            Stream.fromList $
+              if n <= failTimes
+                then streamErrorEvents 0 ("stub stream failure #" <> T.pack (show n))
+                else stubEvents t
+      }
+  pure reg
+
+-- | A registry whose /stream/ always fails with a terminal 'EventError' carrying
+-- the given dollar cost, so a test can assert the budget is charged even though the
+-- stream failed.
+failingStreamCostStubRegistry :: Rational -> IO ProviderRegistry
+failingStreamCostStubRegistry cost = do
+  reg <- newProviderRegistry
+  registerApiProviderWith
+    reg
+    ApiProvider
+      { apiTag = stubApi,
+        complete = \_ _ _ -> pure (stubResponse ""),
+        stream = \_ _ _ -> Stream.fromList (streamErrorEvents cost "stub stream failure")
+      }
+  pure reg
 
 -- | A registry whose @complete@ always throws 'invalidRequest' (a non-transient
 -- failure that maps to 'Shikumi.Error.SchemaMismatch'). The 'IORef' records the

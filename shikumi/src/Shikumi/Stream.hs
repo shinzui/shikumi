@@ -173,10 +173,14 @@ firstTextEnd :: [AssistantMessageEvent] -> Maybe Text
 firstTextEnd evs = listToMaybe [c | TextEnd (BlockEndPayload _ c) <- evs]
 
 -- | Reassemble a 'Response' from the stream's terminal event (its payload's
--- fully-assembled assistant message). 'EventError' surfaces the assembled
--- (possibly-partial) response just like the blocking path, so the caller's 'parse'
--- fails on a bad response identically. Falls back to a response synthesized from
+-- fully-assembled assistant message). Falls back to a response synthesized from
 -- the @TextEnd@ content if no terminal assistant message is present.
+--
+-- The 'EventError' branch is retained for robustness against third-party @LLM@
+-- interpreters, but is /unreachable through shikumi's own interpreters/: they now
+-- convert a terminal 'EventError' to an out-of-band 'ShikumiError' before the event
+-- list ever reaches here (see 'Shikumi.LLM' — @raiseStreamError@), so a streamed
+-- program fails with the real transport error, not a decode of a partial body.
 reassemble :: [AssistantMessageEvent] -> Response
 reassemble evs = case terminalPayloads of
   (p : _) -> _Response & #message .~ p

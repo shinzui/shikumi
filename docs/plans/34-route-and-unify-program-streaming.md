@@ -4,7 +4,7 @@ slug: route-and-unify-program-streaming
 title: "Route and Unify Program Streaming"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfe4dhetqa7m7g3n6zq03a"
 master_plan: "docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md"
 ---
 
@@ -47,8 +47,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1 (2026-07-03): `routeLLM` rewrites `Stream` (ambient model + `translateForWire` + key stripping); routed-streaming test added (`RoutingSpec` "routes the ambient model and strips metadata on Stream", green)
 - [x] M2 (2026-07-03): `Shikumi.Program` exports `effectiveSignature` and `parseResponse`; `streamPredict` reuses them, `attachSchema`, and `attachNativeRender`; duplicate `effectiveSig` deleted; JSON-stream decode + parity tests added (`StreamSpec`)
-- [ ] M3: interpreters map terminal `EventError` to an out-of-band `ShikumiError` (budget charged first); streaming failing-stub added to `StubProvider`; stream-retry test added
-- [ ] Docs: `LLM.stream` contract, budget-on-error behavior, and `Shikumi.Stream` haddocks updated; CHANGELOG entry
+- [x] M3 (2026-07-03): interpreters map terminal `EventError` to an out-of-band `ShikumiError` (`raiseStreamError`; budget charged first); `failingStreamStubRegistry`/`failingStreamCostStubRegistry` added to `StubProvider`; three `ResilienceSpec` cases (retry recovers, permanent failure → transient `ProviderFailure`, budget charged on failure)
+- [x] Docs (2026-07-03): `LLM.stream` contract, budget-on-error behavior, `Shikumi.Stream.reassemble` unreachability note, and `Shikumi.Routing` header updated; CHANGELOG entry added
 
 
 ## Surprises & Discoveries
@@ -56,7 +56,35 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Pinned-baikai deviation from the plan's Decision Log. The plan assumed
+  `TerminalPayload` carries a structured `errorInfo :: Maybe BaikaiError` (so
+  `streamTerminalError` could call `fromBaikaiError`). The baikai version shikumi
+  actually pins (baikai 0.1.x, resolved as baikai-0.1.2.0) has
+  `TerminalPayload { reason :: StopReason, message :: Message }` with /no/
+  `errorInfo` field — the failure detail lives in the assembled message's
+  `errorMessage :: Maybe Text` and `stopReason = ErrorReason`/`Aborted`. So
+  `streamTerminalError` maps every stream failure to a transient `ProviderFailure`
+  carrying `errorMessage` (or the stop reason), rather than dispatching through
+  `fromBaikaiError`. `ProviderFailure` is transient (`isTransient`), so retries
+  still fire — the observable posture the plan wanted is unchanged; only the
+  ShikumiError constructor differs. Evidence: `cabal build shikumi` succeeded with
+  `tp ^. #message`/`tp ^. #reason` but the field `#errorInfo` does not exist in the
+  pinned `TerminalPayload`.
+- Stub streaming is not derived from `complete`. The plan expected baikai's default
+  provider streaming to wrap `complete`, so `failingStubRegistry`'s exception would
+  become a single-`EventError` stream. In fact `StubProvider.mkRegistry` sets the
+  `stream` field explicitly to a fixed /success/ sequence independent of `complete`,
+  so `failingStubRegistry` fails only blocking calls. New stub builders
+  `failingStreamStubRegistry` (fail-N-then-succeed) and `failingStreamCostStubRegistry`
+  (always fail, cost-carrying terminal) were added, whose `stream` field yields a
+  terminal `EventError` directly (via `Stream.concatEffect` for the per-call
+  counter). `Streamly.Data.Stream.concatEffect` is available in the pinned streamly.
+- Budget-on-error is pre-existing, now documented and pinned. `eventCostUSD` already
+  read `EventError` terminals before this plan; M3 keeps that and documents it on
+  `chargeBudgetFromEvents`. The behavioral test ("a failed stream still charges the
+  budget") pins it end-to-end through `runLLMResilient` without exporting internals:
+  a cost-carrying failing stream charges the ceiling, so the next call's optimistic
+  budget gate refuses with `BudgetExceeded`.
 
 
 ## Decision Log
@@ -109,7 +137,29 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+All three milestones delivered. `streamProgram` now works under
+`runRouting … routeLLM` exactly as `runProgram` does: `routeLLM` rewrites the
+`Stream` operation through the same widened `translateForWire` (real model id,
+translated + stripped metadata, native `Context` swap for native-capable models),
+proven by the new `RoutingSpec` routed-stream case. `streamPredict` shares the
+blocking path's `effectiveSignature`, schema/native stamps, and `parseResponse` —
+the duplicated private `effectiveSig` and fallback-only parse are gone, so a native
+JSON stream decodes correctly (new `StreamSpec` cases), and the two predict call
+sites are now textually parallel. Stream failures surface out-of-band as transient
+`ProviderFailure`s that retry policies catch, with budget charged from the terminal
+before the throw (three new `ResilienceSpec` cases). `cabal build all` is
+warning-clean and `cabal test all` is green.
+
+Two deviations from the plan, both recorded in Surprises & Discoveries: the pinned
+baikai's `TerminalPayload` has no structured `errorInfo`, so stream errors map to
+`ProviderFailure` rather than through `fromBaikaiError` (posture unchanged); and the
+test stub's `stream` is a fixed success independent of `complete`, so new
+failing-stream stub builders were added rather than reusing `failingStubRegistry`.
+
+Integration points honored: EP-33's widened `translateForWire` was reused (not
+forked) for the `Stream` case (integration point 3), and the same four metadata keys
+are stripped (integration point 4). Cross-initiative: EP-39 (shikumi-eval usage
+accounting) can now build on the routed `Stream` and the documented error posture.
 
 
 ## Context and Orientation
@@ -411,7 +461,7 @@ Every commit uses a conventional-commit subject and MUST carry these trailers:
 ```text
 MasterPlan: docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md
 ExecPlan: docs/plans/34-route-and-unify-program-streaming.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfe4dhetqa7m7g3n6zq03a
 ```
 
 Suggested split, one commit per milestone: `fix(routing): rewrite the Stream op like

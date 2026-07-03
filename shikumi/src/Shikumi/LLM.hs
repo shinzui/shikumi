@@ -68,7 +68,8 @@ import Control.Concurrent.STM
   )
 import Control.Lens ((^.))
 import Data.Generics.Labels ()
-import Data.Maybe (mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Text qualified as T
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Concurrent (Concurrent, threadDelay)
 import Effectful.Concurrent.STM (atomically)
@@ -81,6 +82,13 @@ import Shikumi.LLM.Budget (Budget, recordCost, tryReserve)
 -- | The provider-neutral LM effect. 'Complete' is a blocking completion;
 -- 'Stream' returns the assembled list of typed events so callers that need
 -- deltas can fold them.
+--
+-- Stream-error contract (all shikumi interpreters): the returned event list
+-- never terminates with an @EventError@. A provider failure — which the
+-- policy-free @Baikai@ transport surfaces in-band as a terminal @EventError@ — is
+-- converted to an out-of-band 'ShikumiError' thrown through @Error ShikumiError@,
+-- so 'stream' failures are transient-retryable and reported exactly like
+-- 'complete' failures.
 data LLM :: Effect where
   Complete :: Model -> Context -> Options -> LLM m Response
   Stream :: Model -> Context -> Options -> LLM m [AssistantMessageEvent]
@@ -121,7 +129,10 @@ runLLMWith reg = reinterpret_ (runBaikaiWith reg) bareHandler
 -- (@Baikai : es@), so it can call the @Baikai@ transport effect and throw
 -- through the @Error ShikumiError@ effect. The blocking path catches baikai's
 -- 'BaikaiError' (thrown by 'BE.complete') and remaps it; the streaming path
--- surfaces failures in-band as a terminal @EventError@, so it does not catch.
+-- collects the events and, via 'raiseStreamError', converts a terminal
+-- @EventError@ into the same out-of-band 'ShikumiError' — so callers of 'stream'
+-- never receive an in-band error terminal and resilience/decoding treat both
+-- operations identically.
 bareHandler ::
   (Baikai :> es, Error ShikumiError :> es) =>
   LLM (Eff localEs) a ->
@@ -130,7 +141,7 @@ bareHandler = \case
   Complete m c o -> do
     res <- try @BaikaiError (BE.complete m c o)
     either (throwError . fromBaikaiError) pure res
-  Stream m c o -> BE.streamCollect m c o
+  Stream m c o -> BE.streamCollect m c o >>= raiseStreamError
 
 -- ---------------------------------------------------------------------------
 -- Resilience: retries, rate limiting, budget
@@ -202,8 +213,10 @@ runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
   Stream m c o ->
     withBudget mb . withRateLimit mr . retrying rp $ do
       evs <- BE.streamCollect m c o
+      -- Charge from the terminal payload (success /or/ error) before raising: a
+      -- failed stream may still have consumed billable tokens.
       liftIO (chargeBudgetFromEvents mb evs)
-      pure evs
+      raiseStreamError evs
   where
     mb = budget cfg
     mr = rateLimit cfg
@@ -269,8 +282,37 @@ chargeBudget (Just b) resp = recordCost b (responseCostUSD resp)
 responseCostUSD :: Response -> Rational
 responseCostUSD resp = resp ^. #message . #usage . #cost . #usd
 
+-- | Enforce the stream-error posture: a terminal 'EventError' becomes an
+-- out-of-band 'ShikumiError' — a 'ProviderFailure' carrying the terminal message's
+-- @errorMessage@ (or the stop reason if none). A successful event list passes
+-- through unchanged, so callers of 'stream' never see an in-band error terminal.
+-- Because both interpreters call this /inside/ their retry loop, a transient stream
+-- failure is retried exactly like a blocking one ('ProviderFailure' is transient
+-- per 'isTransient').
+--
+-- The baikai version shikumi pins does not attach a structured 'BaikaiError' to a
+-- terminal payload (its @TerminalPayload@ is @{reason, message}@; the failure detail
+-- lives in the assembled message's @errorMessage@ and @stopReason@), so all stream
+-- failures map to 'ProviderFailure' rather than through 'fromBaikaiError'.
+raiseStreamError ::
+  (Error ShikumiError :> es) => [AssistantMessageEvent] -> Eff es [AssistantMessageEvent]
+raiseStreamError evs = case [tp | EventError tp <- evs] of
+  (tp : _) -> throwError (streamTerminalError tp)
+  [] -> pure evs
+
+-- | Map a terminal 'EventError' payload to a 'ShikumiError'.
+streamTerminalError :: TerminalPayload -> ShikumiError
+streamTerminalError tp = ProviderFailure ("stream failed: " <> detail)
+  where
+    detail = case tp ^. #message of
+      AssistantMessage p -> fromMaybe (T.pack (show (tp ^. #reason))) (p ^. #errorMessage)
+      _ -> T.pack (show (tp ^. #reason))
+
 -- | Charge a completed streaming call's cost, read from the terminal event's
--- assembled message.
+-- assembled message. Note: an /error/ terminal ('EventError') is charged too — a
+-- failed stream may still have consumed billable tokens, and the terminal
+-- payload's assembled message carries the usage/cost baikai computed; not charging
+-- would silently undercount real spend.
 chargeBudgetFromEvents :: Maybe Budget -> [AssistantMessageEvent] -> IO ()
 chargeBudgetFromEvents Nothing _ = pure ()
 chargeBudgetFromEvents (Just b) evs =

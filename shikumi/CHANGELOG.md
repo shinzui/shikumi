@@ -34,6 +34,18 @@
   from the marker parser. `Shikumi.Routing.translateForWire` widened to
   `Model -> Context -> Options -> (Context, Options)`.
 
+- `streamProgram` now works against real providers. `routeLLM` rewrites the
+  `Stream` operation exactly as it rewrites `Complete` (ambient model, translated
+  and stripped metadata, native `Context` swap), so a routed streaming call sends
+  the real model id and wire options instead of the inert placeholder. `streamPredict`
+  reuses the blocking path's `effectiveSignature`, schema/native stamps, and the
+  dual-format `parseResponse` (both newly exported from `Shikumi.Program`), so a
+  native (JSON) stream decodes correctly. Stream failures now surface out-of-band:
+  a terminal `EventError` becomes a transient `ProviderFailure` thrown through
+  `Error ShikumiError` (so retry policies fire), and the budget is charged from the
+  terminal payload — success or error — before the throw. The event list returned
+  by `Shikumi.LLM.stream` never terminates in `EventError`.
+
 ## 0.2.0.0 - 2026-06-28
 
 ### Added
