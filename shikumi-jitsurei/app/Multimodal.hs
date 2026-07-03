@@ -34,7 +34,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.Jitsurei.Stub (markerResponse, runStubLLM)
 import Shikumi.LLM (complete)
 import Shikumi.Multimodal (Image, imageFromBytes)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Schema.Types (Field, field)
 import Shikumi.Signature (Signature, mkSignature)
 
@@ -53,6 +53,8 @@ newtype Caption = Caption
   {caption :: Field "A short caption answering the question" Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable Caption
 
 describeSig :: Signature Describe Caption
 describeSig = mkSignature "Answer the question about the image."

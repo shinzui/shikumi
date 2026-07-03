@@ -44,7 +44,7 @@ import Shikumi.Adapter (Adapter (..), ToPrompt (..), fallbackAdapter, responseTe
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (complete)
 import Shikumi.Program (Program (FMap, Predict), embed, emptyParams)
-import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable)
+import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable (..))
 import Shikumi.Schema.Types
   ( FieldMeta (..),
     FieldPath,
@@ -104,6 +104,11 @@ instance (ToPrompt o) => ToPrompt (WithReasoning o) where
   imageFields _ = []
   imageFieldNames _ = []
 
+-- | Validation delegates to the wrapped value; the free-form @reasoning@ text
+-- carries no user rules.
+instance (Validatable o) => Validatable (WithReasoning o) where
+  validate wr = (\v -> wr {value = v}) <$> validate (value wr)
+
 -- | Look up a required field in a JSON object, locating a miss precisely.
 getField :: (FromModel a) => FieldPath -> Text -> Object -> Either ShikumiError a
 getField path nm o = case KM.lookup (Key.fromText nm) o of
@@ -111,16 +116,17 @@ getField path nm o = case KM.lookup (Key.fromText nm) o of
   Just v -> fromModelP (pushField nm path) v
 
 -- | Chain-of-thought that yields the bare @o@: build the reasoning-augmented node,
--- then 'FMap' out the answer.
+-- then 'FMap' out the answer. The user's @Validatable o@ rule fires on the
+-- unwrapped answer via the delegating @Validatable (WithReasoning o)@ instance.
 chainOfThought ::
-  (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
+  (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
   Signature i o ->
   Program i o
 chainOfThought sig = FMap value (chainOfThoughtRaw sig)
 
 -- | Chain-of-thought that keeps the reasoning visible in the output.
 chainOfThoughtRaw ::
-  (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
+  (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
   Signature i o ->
   Program i (WithReasoning o)
 chainOfThoughtRaw sig = Predict (withReasoningField sig) emptyParams
@@ -129,6 +135,14 @@ chainOfThoughtRaw sig = Predict (withReasoningField sig) emptyParams
 -- instruction to ask for step-by-step reasoning before the answer. The input
 -- field metadata is carried over from the source signature; the output metadata is
 -- the two fields of 'WithReasoning' (matching its hand-written schema).
+--
+-- Note: signature-level demos are /not/ carried onto the reasoning-augmented
+-- node (@demos = []@), because a @Demo i o@ cannot be turned into a
+-- @Demo i (WithReasoning o)@ without inventing reasoning text — and a fabricated
+-- or empty reasoning string would teach the model to skip reasoning, defeating
+-- the module's purpose. Demos supplied through the node's optimizer @Params@
+-- channel are unaffected: they are stored as JSON and decoded against
+-- @WithReasoning o@, so they already include a @reasoning@ field.
 withReasoningField :: Signature i o -> Signature i (WithReasoning o)
 withReasoningField sig =
   Signature

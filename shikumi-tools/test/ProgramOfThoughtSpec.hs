@@ -18,7 +18,7 @@ import Shikumi.CodeExec.ProgramOfThought (PoTConfig (..), programOfThought, prog
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (foldParams)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -30,6 +30,8 @@ newtype Task = Task {task :: Text}
 newtype CalcAnswer = CalcAnswer {value :: Int}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable CalcAnswer
 
 sig :: Signature Task CalcAnswer
 sig = mkSignature "Compute the requested arithmetic result."

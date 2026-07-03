@@ -36,10 +36,10 @@ import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
-import ProgramFixtures (Draft (..), Topic (..), markerBody, outlineToDraft, topicToOutline)
+import ProgramFixtures (Draft (..), Topic (..), markerBody, outlineToDraft, topicToOutline, topicToVerdict)
 import Shikumi.Adapter (ToPrompt, responseText)
 import Shikumi.Combinator ((>>>))
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program, runProgram)
@@ -176,6 +176,12 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref2 $
             runProgram (predict qToAnswer) (Question "q?")
         streamed @?= blocking,
+      testCase "EP-32: a failing Validatable rule surfaces through streamProgram" $ do
+        ref <- newIORef [streamEventsFor ["99"] (markerBody [("score", "99")])]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runStreamingLLM ref $
+            streamProgram (predict topicToVerdict) (Topic "haskell") (\_ -> pure ())
+        out @?= Left (ValidationFailure "score: must be at most 10"),
       testCase "M3: a chain of predicts brackets each LM with status and streams both fields" $ do
         let script =
               [ streamEventsFor ["pts"] (markerBody [("points", "[\"intro\", \"body\", \"end\"]")]),

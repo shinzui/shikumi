@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Changed
+
+- **BREAKING** `Validatable` is now opt-in and enforced by the decode path in
+  every program runner. The catch-all `instance {-# OVERLAPPABLE #-} Validatable a`
+  has been removed, so a type's `Validatable` rule is no longer silently skipped
+  when a program runs through `runProgram`, `runProgramConc`, `streamProgram`, or
+  `chainOfThought` — a violated rule now surfaces as `Left (ValidationFailure …)`.
+  Migration: declare an instance for every `Predict` output type and every typed
+  tool input. A type with no rules needs one line — `instance Validatable Foo`
+  (the default `validate = Right` applies) or add `Validatable` to a
+  `deriving anyclass (…)` list. `runPredict`, `streamPredict`, `chainOfThought`,
+  and `chainOfThoughtRaw` gained a `Validatable o` constraint, and
+  `WithReasoning o` now has a delegating `Validatable` instance that runs the
+  wrapped value's rule.
+
 ## 0.2.0.0 - 2026-06-28
 
 ### Added

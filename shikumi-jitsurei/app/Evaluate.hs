@@ -14,7 +14,7 @@ import Shikumi.Eval (Dataset, dataset, evaluatePure, exactMatch, example, render
 import Shikumi.Jitsurei.Stub (markerResponse, runStubEval)
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 
 newtype Review = Review {reviewText :: Text}
@@ -24,6 +24,8 @@ newtype Review = Review {reviewText :: Text}
 newtype Label = Label {label :: Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable Label
 
 classify :: Program Review Label
 classify = predict (mkSignature "Classify the review sentiment as positive or negative." :: Signature Review Label)

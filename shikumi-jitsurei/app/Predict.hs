@@ -10,10 +10,17 @@
 --
 --   * a clean decode to a typed 'Summary';
 --   * a missing required field -> 'MissingField';
---   * a domain-rule violation -> 'ValidationFailure'. A domain rule is enforced
---     at the program level with the 'validate' combinator (the runtime decode
---     path does not apply a type's @Validatable@ instance — that instance
---     documents the rule; the combinator is what enforces it in a @Program@).
+--   * a domain-rule violation -> 'ValidationFailure'. A domain rule can be
+--     enforced two ways, both honest. (a) A type's @Validatable@ instance is run
+--     by the decode path in /every/ runner — declare @validate@ on the output
+--     type and any decoded value that breaks the rule surfaces as a
+--     'ValidationFailure', with no combinator required. (b) The 'validate'
+--     combinator ('summarizeChecked' below) attaches a rule at the program level,
+--     for rules that belong to a particular program rather than to the type. This
+--     example keeps the three-to-five-bullets rule on the combinator so the two
+--     mechanisms stay visible side by side; declaring the same rule on 'Summary'
+--     would make the decode path reject the bad reply before the combinator even
+--     ran.
 module Main (main) where
 
 import Data.Text (Text)
@@ -23,7 +30,7 @@ import Shikumi.Combinator (validate)
 import Shikumi.Jitsurei.Stub (markerResponse, runStub)
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Schema.Types (Field, field, unField)
 import Shikumi.Signature (Signature, mkSignature)
 
@@ -56,6 +63,11 @@ data Summary = Summary
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+-- No type-level rule here: this example keeps the 3-to-5-bullets rule on the
+-- 'validate' combinator ('summarizeChecked') to contrast the two mechanisms.
+-- The decode path would enforce any rule declared here in every runner.
+instance Validatable Summary
 
 -- ---------------------------------------------------------------------------
 -- Declare the program. One line for the prediction; one combinator to attach a

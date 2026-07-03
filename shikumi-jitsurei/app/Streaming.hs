@@ -41,7 +41,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Stream (StreamEvent, streamProgram)
 
@@ -52,7 +52,7 @@ newtype Question = Question {question :: Text}
 
 newtype Answer = Answer {answer :: Text}
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 qToAnswer :: Signature Question Answer
 qToAnswer = mkSignature "Answer the question."

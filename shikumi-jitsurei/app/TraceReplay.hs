@@ -30,7 +30,7 @@ import Shikumi.Jitsurei.Stub (markerResponse, runStubLLM)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program, runProgram)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Trace (SpanKind (ProgramSpan), renderTree, runTrace, tracedLLM, withSpan)
 import Shikumi.Trace.Replay (runLLMReplay)
@@ -45,6 +45,8 @@ newtype Question = Question {question :: Text}
 newtype Answer = Answer {answer :: Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable Answer
 
 qa :: Program Question Answer
 qa = predict (mkSignature "Answer the question concisely." :: Signature Question Answer)

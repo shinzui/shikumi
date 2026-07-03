@@ -24,7 +24,7 @@ import Shikumi.Agent.ReAct
     reactWithTrajectory,
   )
 import Shikumi.Jitsurei.Stub (mkTextResponse, runAgent)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 
@@ -36,9 +36,13 @@ data WeatherReq = WeatherReq {city :: !Text, units :: !Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
+instance Validatable WeatherReq
+
 data WeatherResp = WeatherResp {tempC :: !Double, summary :: !Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt, ToJSON)
+
+instance Validatable WeatherResp
 
 newtype AskWeather = AskWeather {question :: Text}
   deriving stock (Generic, Show, Eq)

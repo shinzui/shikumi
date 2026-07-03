@@ -15,7 +15,7 @@ import Shikumi.Combinator (ensemble, majorityVote, mapP, retry, validateRetry)
 import Shikumi.Jitsurei.Stub (markerResponse, runStub)
 import Shikumi.Module (predict)
 import Shikumi.Program (Program, TempSchedule (..))
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 
 newtype Review = Review {reviewText :: Text}
@@ -25,6 +25,8 @@ newtype Review = Review {reviewText :: Text}
 newtype Label = Label {label :: Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable Label
 
 classifySig :: Signature Review Label
 classifySig = mkSignature "Classify the review sentiment as positive or negative."

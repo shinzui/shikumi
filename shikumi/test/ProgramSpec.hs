@@ -9,19 +9,22 @@ import Data.List (foldl1')
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (runEff)
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
 import ProgramFixtures
   ( Cell (..),
     Draft,
     Outline (..),
     Topic (..),
+    badVerdictResponse,
     cellSig,
     outlineResponse,
     outlineToDraft,
     runScriptedLLM,
     topicToOutline,
+    topicToVerdict,
   )
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program
   ( Params,
     Program (Compose, Predict),
@@ -32,6 +35,7 @@ import Shikumi.Program
     nodeInstructionsIndexed,
     pipeline,
     runProgram,
+    runProgramConc,
   )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -63,6 +67,18 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
             runProgram (Predict topicToOutline emptyParams) (Topic "haskell")
         out @?= Right (Outline {points = ["intro", "body", "end"]}),
+      testCase "EP-32: a failing Validatable rule surfaces as ValidationFailure through runProgram" $ do
+        ref <- newIORef [badVerdictResponse]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
+            runProgram (Predict topicToVerdict emptyParams) (Topic "haskell")
+        out @?= Left (ValidationFailure "score: must be at most 10"),
+      testCase "EP-32: a failing Validatable rule surfaces through runProgramConc" $ do
+        ref <- newIORef [badVerdictResponse]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runScriptedLLM ref $
+            runProgramConc (Predict topicToVerdict emptyParams) (Topic "haskell")
+        out @?= Left (ValidationFailure "score: must be at most 10"),
       testCase "M2: foldParams returns nodes in stage order" $
         foldParams twoStage @?= [emptyParams, emptyParams],
       testCase "M5: nodeInstructionsIndexed returns signature instructions in node order" $

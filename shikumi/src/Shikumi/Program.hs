@@ -303,7 +303,7 @@ runProgramConc (Embed f) i = f i
 -- executors so the wire behaviour is defined once.
 runPredict ::
   forall i o es.
-  (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
+  (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
   (LLM :> es, Error ShikumiError :> es) =>
   Signature i o ->
   Params ->

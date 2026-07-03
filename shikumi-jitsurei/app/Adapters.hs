@@ -23,7 +23,7 @@ import Shikumi.Adapter (Adapter (..), ToPrompt, xmlAdapter)
 import Shikumi.Jitsurei.Stub (markerResponse, mkTextResponse, runAgent, systemContains)
 import Shikumi.Module (twoStep)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema, deriveSchema, fromModel)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
 import Shikumi.Schema.Types (Constrained, Constraint (..), Field)
 import Shikumi.Signature (Signature, mkSignature)
 
@@ -41,6 +41,8 @@ data Memo = Memo
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable Memo
 
 memoSig :: Signature Ask Memo
 memoSig = mkSignature "Summarise the question into a headline and key points."

@@ -73,7 +73,7 @@ import Shikumi.Program
     retryWith,
     runProgram,
   )
-import Shikumi.Schema (FromModel, ToSchema, fromModel)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModel)
 import Shikumi.Schema.Types qualified as ST
 import Shikumi.Signature (Signature, getInstruction, outputFields, setDemos, setInstruction)
 import Shikumi.Signature qualified as Sig
@@ -237,7 +237,7 @@ streamProgram prog i cb = case prog of
 -- equals 'runProgram'\'s.
 streamPredict ::
   forall i o es.
-  (FromModel i, FromModel o, ToSchema o, ToPrompt i, ToPrompt o) =>
+  (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
   (LLM :> es, Error ShikumiError :> es) =>
   Signature i o ->
   Params ->

@@ -307,14 +307,22 @@ instance (Constructor c) => GEnumParse (C1 c U1) where
 -- Validation hook
 -- ---------------------------------------------------------------------------
 
--- | A domain rule applied after a successful decode. Defaults to "always valid";
--- override per output type to enforce rules (e.g. "bullets has 3-5 elements").
+-- | A domain rule applied after a successful decode, enforced by the decode path
+-- in every program runner (@runProgram@, @runProgramConc@, @streamProgram@, and
+-- the derived modules). Override per output type to enforce rules (e.g.
+-- "bullets has 3-5 elements"); a violation surfaces as a
+-- 'Shikumi.Error.ValidationFailure'.
+--
+-- Instances are opt-in: there is no catch-all. Every type used as a @Predict@
+-- output (or a tool input) must declare an instance. A type with no rules
+-- declares an empty instance — @instance Validatable Foo@ (no body; the default
+-- @validate = Right@ applies) — or adds @Validatable@ to a @deriving anyclass@
+-- list (@DeriveAnyClass@ is a default extension in every package). Making the
+-- no-rules case explicit is deliberate: it prevents a forgotten constraint from
+-- silently regressing to "always valid".
 class Validatable a where
   validate :: a -> Either Text a
   validate = Right
-
--- | Default "always valid" for any type without an explicit rule.
-instance {-# OVERLAPPABLE #-} Validatable a
 
 -- ---------------------------------------------------------------------------
 -- Declarative field constraints (EP-26)

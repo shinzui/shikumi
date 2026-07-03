@@ -16,8 +16,9 @@ import ProgramFixtures
     mkResponse,
     runScriptedLLM,
     topicToOutline,
+    topicToVerdict,
   )
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Module (WithReasoning (..), chainOfThought, chainOfThoughtRaw, predict)
 import Shikumi.Program (emptyParams, foldParams, mapParamsAt, runProgram)
 import Test.Tasty (TestTree, testGroup)
@@ -59,6 +60,20 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
             runProgram (chainOfThought topicToOutline) (Topic "haskell")
         out @?= Right (Outline {points = ["x", "y"]}),
+      testCase "EP-32: a failing Validatable rule surfaces through chainOfThought" $ do
+        ref <-
+          newIORef
+            [ mkResponse
+                ( markerBody
+                    [ ("reasoning", "thinking"),
+                      ("value", "{\"score\": 99}")
+                    ]
+                )
+            ]
+        out <-
+          runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
+            runProgram (chainOfThought topicToVerdict) (Topic "haskell")
+        out @?= Left (ValidationFailure "score: must be at most 10"),
       testCase "the chain-of-thought node's params are reachable via mapParamsAt 0" $
         foldParams (mapParamsAt 0 (\p -> p & #instructionOverride .~ Just "cot") (chainOfThought topicToOutline))
           @?= [emptyParams & #instructionOverride .~ Just "cot"]

@@ -29,7 +29,7 @@ import Shikumi.Eval (Dataset, Metric, dataset, exactMatch, example)
 import Shikumi.Module (predict)
 import Shikumi.Optimize (Optimizer, bootstrapFewShot, defaultBudget, labeledFewShot)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (mkSignature)
 
 -- | One product review.
@@ -41,6 +41,8 @@ newtype ReviewInput = ReviewInput {reviewText :: Text}
 newtype SentimentOutput = SentimentOutput {label :: Text}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt, ToJSON)
+
+instance Validatable SentimentOutput
 
 -- | The program: a single typed prediction from a review to a sentiment label.
 sentiment :: Program ReviewInput SentimentOutput

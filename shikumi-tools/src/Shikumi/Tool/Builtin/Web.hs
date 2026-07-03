@@ -12,7 +12,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (Tool, mkTool)
 import Shikumi.Tool.Web (FetchResult, SearchResult, WebClient (..))
 
@@ -21,14 +21,14 @@ data FetchReq = FetchReq
     maxBytes :: !(Maybe Int)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 data SearchReq = SearchReq
   { query :: !Text,
     maxResults :: !(Maybe Int)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 webFetchTool :: WebClient -> Tool FetchReq FetchResult
 webFetchTool client =

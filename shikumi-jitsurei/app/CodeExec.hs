@@ -25,7 +25,7 @@ import Shikumi.Agent.ReAct (Action (..), Step (..), Trajectory (..))
 import Shikumi.CodeExec.CodeAct (codeActWithTrajectory, defaultCodeActConfig)
 import Shikumi.CodeExec.ProgramOfThought (programOfThought)
 import Shikumi.Jitsurei.Stub (mkTextResponse, runAgent)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 
@@ -37,9 +37,13 @@ newtype CalcAnswer = CalcAnswer {value :: Int}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
+instance Validatable CalcAnswer
+
 newtype AddIn = AddIn {n :: Int}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel)
+
+instance Validatable AddIn
 
 calcSig :: Signature Task CalcAnswer
 calcSig = mkSignature "Compute the requested result, using tools from code when helpful."

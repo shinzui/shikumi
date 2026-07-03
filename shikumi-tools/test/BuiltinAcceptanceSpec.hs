@@ -25,7 +25,7 @@ import Shikumi.Agent.ReAct
     defaultReActConfig,
     reactWithTrajectory,
   )
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool.Builtin (builtinRegistry)
 import Shikumi.Tool.Env (localToolEnv)
@@ -42,6 +42,8 @@ data WorkTask = WorkTask {task :: !Text}
 data WorkAnswer = WorkAnswer {done :: !Bool}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+instance Validatable WorkAnswer
 
 tests :: TestTree
 tests =

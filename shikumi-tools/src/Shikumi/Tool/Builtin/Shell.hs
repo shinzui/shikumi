@@ -12,7 +12,7 @@ import Data.Generics.Labels ()
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Tool (Tool, mkTool)
 import Shikumi.Tool.Env (ExecRequest (..), ToolEnv (..))
 
@@ -23,7 +23,7 @@ data BashReq = BashReq
     stdin :: !(Maybe Text)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 data BashResp = BashResp
   { exitCode :: !Int,

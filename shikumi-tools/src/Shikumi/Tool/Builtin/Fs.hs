@@ -46,7 +46,7 @@ import Effectful.Error.Static (throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Schema (FromModel (..), ToSchema (..), fromModel)
+import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable, fromModel)
 import Shikumi.Tool (Tool, mkTool)
 import Shikumi.Tool.Env
   ( EnvRow,
@@ -69,7 +69,7 @@ data ReadReq = ReadReq
     limit :: !(Maybe Int)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 data ReadResp = ReadResp
   { content :: !Text,
@@ -84,7 +84,7 @@ data WriteReq = WriteReq
     content :: !Text
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 data WriteResp = WriteResp
   { path :: !Text,
@@ -100,7 +100,7 @@ data EditReq = EditReq
     replaceAll :: !(Maybe Bool)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable)
 
 data EditResp = EditResp
   { path :: !Text,
@@ -116,7 +116,7 @@ data GrepReq = GrepReq
     ignoreCase :: !(Maybe Bool)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToPrompt)
+  deriving anyclass (ToPrompt, Validatable)
 
 instance ToSchema GrepReq where
   toSchema _ =
@@ -157,7 +157,7 @@ data GlobReq = GlobReq
     path :: !(Maybe Text)
   }
   deriving stock (Generic, Show, Eq)
-  deriving anyclass (ToPrompt)
+  deriving anyclass (ToPrompt, Validatable)
 
 instance ToSchema GlobReq where
   toSchema _ =

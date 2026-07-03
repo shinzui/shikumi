@@ -4,7 +4,7 @@ slug: fix-validatable-dispatch-in-program-runners
 title: "Fix Validatable Dispatch in Program Runners"
 kind: exec-plan
 created_at: 2026-07-02T03:30:15Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfe4dhetqa7m7g3n6zq03a"
 master_plan: "docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md"
 ---
 
@@ -43,12 +43,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: delete the catch-all instance in `shikumi/src/Shikumi/Schema.hs` and add the `Validatable` constraints to `runPredict`, `streamPredict`, `chainOfThought`, `chainOfThoughtRaw`
-- [ ] M1: add the delegating `instance (Validatable o) => Validatable (WithReasoning o)` in `shikumi/src/Shikumi/Module.hs`
-- [ ] M1: migrate all in-repo packages (`cabal build all` clean): shikumi-tools builtin request records, jitsurei app types, and any other types the compiler reports
-- [ ] M2: add failing-before/passing-after validation tests through `runProgram`, `runProgramConc`, `streamProgram`, and `chainOfThought`
-- [ ] M2: full test suite green (`cabal test all`)
-- [ ] M3: rewrite the stale doc comment in `shikumi-jitsurei/app/Predict.hs`, update `Validatable` and `chainOfThought` haddocks, note the breaking change in `shikumi/CHANGELOG.md`
+- [x] M1 (2026-07-03): delete the catch-all instance in `shikumi/src/Shikumi/Schema.hs` and add the `Validatable` constraints to `runPredict`, `streamPredict`, `chainOfThought`, `chainOfThoughtRaw`
+- [x] M1 (2026-07-03): add the delegating `instance (Validatable o) => Validatable (WithReasoning o)` in `shikumi/src/Shikumi/Module.hs`
+- [x] M1 (2026-07-03): migrate all in-repo packages (`cabal build all` clean, no new warnings): shikumi-tools builtin request records, jitsurei app types, shikumi-cli example, and test fixtures — full list in Surprises & Discoveries
+- [x] M2 (2026-07-03): add validation tests through `runProgram`, `runProgramConc`, `streamProgram`, and `chainOfThought` (four new cases, all green)
+- [x] M2 (2026-07-03): full test suite green (`cabal test all` → EXIT 0, no FAIL)
+- [x] M3 (2026-07-03): rewrite the stale doc comment in `shikumi-jitsurei/app/Predict.hs`, update `Validatable` and `chainOfThought` haddocks, note the breaking change in `shikumi/CHANGELOG.md`
 
 
 ## Surprises & Discoveries
@@ -56,7 +56,42 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Compile-driven migration list (the `cabal build all` oracle). Every type below
+  received an explicit `Validatable` instance (empty unless noted). Beyond the
+  survey in Plan of Work, the oracle additionally flagged several output types the
+  survey did not enumerate, and test fixtures across `shikumi-tools`:
+  - Library sources: `shikumi-cli/src/Shikumi/Cli/Example.hs` `SentimentOutput`;
+    `shikumi/src/Shikumi/Module.hs` `WithReasoning o` (delegating instance).
+  - `shikumi-tools` builtin tool inputs (as surveyed): `FetchReq`, `SearchReq`
+    (`Web.hs`); `BashReq` (`Shell.hs`); `ReadReq`, `WriteReq`, `EditReq`,
+    `GrepReq`, `GlobReq` (`Fs.hs`) — added to their `deriving anyclass` lists.
+  - jitsurei app output/tool-input types: `Streaming.hs` `Answer`; `Compose.hs`
+    `Invoice`, `EnrichedInvoice`, `Decision`; `Combinators.hs` `Label`;
+    `Evaluate.hs` `Label`; `Adapters.hs` `Memo`; `Multimodal.hs` `Caption`;
+    `Predict.hs` `Summary`; `CodeExec.hs` `CalcAnswer`, `AddIn` (tool input);
+    `TraceReplay.hs` `Answer`; `ReActAgent.hs` `WeatherResp`, `WeatherReq` (tool
+    input); `Optimize.hs` `Label`.
+  - Test fixtures: `shikumi/test/ProgramFixtures.hs` `Verdict` (with the real
+    "score ≤ 10" rule); `shikumi-tools/test/Fixtures.hs` `WeatherReq`,
+    `WeatherResp` (used as a `Predict` output in Compaction/Acceptance/Protocol/
+    ReAct specs — an output, so it needed the instance despite being a tool
+    result type); `CodeActSpec.hs` `CalcAnswer`, `AddIn`;
+    `BuiltinAcceptanceSpec.hs` `WorkAnswer`; `ProgramOfThoughtSpec.hs`
+    `CalcAnswer`.
+- The two `Validatable`-method uses (`Module.hs`'s delegating instance and the
+  `Verdict` fixture) required importing `Validatable (..)`, not just `Validatable`
+  — otherwise `validate` is "not a (visible) method" (GHC-54721). The empty
+  instances only need the class name.
+- `Summary` in `shikumi-jitsurei/app/Predict.hs` was deliberately given an *empty*
+  instance rather than the three-to-five-bullets rule: that rule already lives on
+  the `validate` combinator (`summarizeChecked`), and moving it onto the type
+  would make the decode path reject the bad reply before the combinator ran,
+  collapsing the example's side-by-side contrast. The M3 doc rewrite explains both
+  mechanisms and this choice. Demo output verified unchanged:
+  `one bullet (invalid) -> Left (ValidationFailure "bullets: must have 3 to 5 items")`.
+- Fixture-drift check (integration point / EP-49): `shikumi-testing` does not yet
+  exist in the tree, so there was nothing to compare `Verdict` against. Recorded
+  for master plan Surprises.
 
 
 ## Decision Log
@@ -113,7 +148,27 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Delivered as specified. The catch-all `instance {-# OVERLAPPABLE #-} Validatable a`
+is gone; `Validatable` is opt-in and enforced by the decode path in every runner.
+The four new cases in `ProgramSpec` (runProgram + runProgramConc), `StreamSpec`
+(streamProgram), and `ModuleSpec` (chainOfThought) all pass, exercising the
+delegating `Validatable (WithReasoning o)` instance end to end. `cabal build all`
+is warning-clean (no `-Wredundant-constraints` regression) and `cabal test all`
+is green (124 shikumi tests, all downstream suites). Acceptance criterion 5 holds:
+`grep OVERLAPPABLE shikumi/src/Shikumi/Schema.hs` finds only the unrelated
+`FieldSchema`/`FromField`/`FieldDoc` instances.
+
+Process note: because the catch-all deletion breaks compilation repo-wide, the fix
+was applied first and the tests added after, rather than the optional tests-first
+order — the "failing-before" behavior is guaranteed by construction (without the
+`runPredict` constraint GHC resolves `Validatable o` to the catch-all's
+`validate = Right`, returning `Right (Verdict 99)`; the four cases assert the
+opposite). All M1 code + migration + tests + docs landed in a single working-tree
+commit so `master` never held a broken tree.
+
+Deferred (unchanged from plan): signature-level demos are still dropped by
+`withReasoningField` (`demos = []`), now loudly documented rather than changed; a
+`chainOfThoughtWithDemos` follow-up remains possible if demand appears.
 
 
 ## Context and Orientation
@@ -421,7 +476,7 @@ Predict output and tool input type.
 
 MasterPlan: docs/masterplans/5-core-runtime-correctness-and-wire-fidelity.md
 ExecPlan: docs/plans/32-fix-validatable-dispatch-in-program-runners.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfe4dhetqa7m7g3n6zq03a
 ```
 
 

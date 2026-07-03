@@ -10,17 +10,20 @@ module ProgramFixtures
     Outline (..),
     Draft (..),
     Cell (..),
+    Verdict (..),
 
     -- * Signatures
     topicToOutline,
     outlineToDraft,
     cellSig,
+    topicToVerdict,
 
     -- * Canned responses
     mkResponse,
     outlineResponse,
     draftResponse,
     cellResponse,
+    badVerdictResponse,
     markerBody,
 
     -- * Fake LLM interpreters
@@ -48,7 +51,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.LLM (LLM (..))
-import Shikumi.Schema (FromModel, ToSchema, Validatable)
+import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature)
 
 -- ---------------------------------------------------------------------------
@@ -101,6 +104,22 @@ instance ToPrompt Cell
 
 instance Validatable Cell
 
+-- | A record with a real validation rule, for the EP-32 dispatch tests.
+newtype Verdict = Verdict {score :: Int}
+  deriving stock (Generic, Show, Eq)
+
+instance ToSchema Verdict
+
+instance FromModel Verdict
+
+instance ToPrompt Verdict
+
+-- | Domain rule: a score is at most 10.
+instance Validatable Verdict where
+  validate v
+    | score v > 10 = Left "score: must be at most 10"
+    | otherwise = Right v
+
 -- ---------------------------------------------------------------------------
 -- Signatures
 -- ---------------------------------------------------------------------------
@@ -113,6 +132,9 @@ outlineToDraft = mkSignature "Draft prose from the outline"
 
 cellSig :: Signature Cell Cell
 cellSig = mkSignature "Echo the cell"
+
+topicToVerdict :: Signature Topic Verdict
+topicToVerdict = mkSignature "Score the topic"
 
 -- ---------------------------------------------------------------------------
 -- Canned responses (rendered as the fallback adapter's [[ ## field ## ]] sections)
@@ -139,6 +161,10 @@ draftResponse = mkResponse (markerBody [("prose", "A fine essay about the outlin
 -- | Echo a fixed cell value (used by the @Cell -> Cell@ pipelines).
 cellResponse :: Response
 cellResponse = mkResponse (markerBody [("cell", "echoed")])
+
+-- | A reply whose score violates the 'Verdict' rule.
+badVerdictResponse :: Response
+badVerdictResponse = mkResponse (markerBody [("score", "99")])
 
 -- ---------------------------------------------------------------------------
 -- Fake LLM interpreters

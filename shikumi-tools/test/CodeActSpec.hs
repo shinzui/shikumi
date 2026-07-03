@@ -16,7 +16,7 @@ import Shikumi.Adapter (ToPrompt)
 import Shikumi.Agent.ReAct (Step (..), Termination (..), Trajectory (..))
 import Shikumi.CodeExec.CodeAct (codeActWithTrajectory, defaultCodeActConfig)
 import Shikumi.CodeExec.Prompt (encodeText)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 import Test.Tasty (TestTree, testGroup)
@@ -30,9 +30,13 @@ newtype CalcAnswer = CalcAnswer {value :: Int}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
 
+instance Validatable CalcAnswer
+
 newtype AddIn = AddIn {n :: Int}
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel)
+
+instance Validatable AddIn
 
 -- | A tool that adds one to its argument.
 addOneTool :: Tool AddIn Int

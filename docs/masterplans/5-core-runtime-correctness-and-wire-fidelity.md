@@ -4,7 +4,7 @@ slug: core-runtime-correctness-and-wire-fidelity
 title: "Core Runtime Correctness and Wire Fidelity"
 kind: master-plan
 created_at: 2026-07-02T03:29:36Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfe4dhetqa7m7g3n6zq03a"
 ---
 
 # Core Runtime Correctness and Wire Fidelity
@@ -92,7 +92,7 @@ no behavior with them and would blur each plan's acceptance criteria.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Not Started |
+| 32 | Fix Validatable Dispatch in Program Runners | docs/plans/32-fix-validatable-dispatch-in-program-runners.md | None | None | Complete |
 | 33 | Native Adapter Path and Strict-Mode Schemas | docs/plans/33-native-adapter-path-and-strict-mode-schemas.md | None | EP-32 | Not Started |
 | 34 | Route and Unify Program Streaming | docs/plans/34-route-and-unify-program-streaming.md | None | EP-32, EP-33 | Not Started |
 | 35 | Combinator and Budget Semantics Cleanup | docs/plans/35-combinator-and-budget-semantics-cleanup.md | None | None | Not Started |
@@ -199,9 +199,9 @@ whichever plan lands second checks for drift and records any in Surprises & Disc
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-32: M1 — catch-all `Validatable` instance deleted, constraints threaded, all packages migrated and building
-- [ ] EP-32: M2 — validation failures proven through `runProgram`, `runProgramConc`, `streamProgram`, and `chainOfThought`
-- [ ] EP-32: M3 — migration documented (haddocks, jitsurei example prose, CHANGELOG)
+- [x] EP-32: M1 — catch-all `Validatable` instance deleted, constraints threaded, all packages migrated and building (2026-07-03)
+- [x] EP-32: M2 — validation failures proven through `runProgram`, `runProgramConc`, `streamProgram`, and `chainOfThought` (2026-07-03)
+- [x] EP-32: M3 — migration documented (haddocks, jitsurei example prose, CHANGELOG) (2026-07-03)
 - [ ] EP-33: M1 — `parseResponse` keeps the native error for JSON bodies
 - [ ] EP-33: M2 — strict-mode schema shape (required-but-nullable `Maybe`, typed enums) with goldens deliberately updated
 - [ ] EP-33: M3 — native render channel: router swaps guide and demos for native-capable models; native demos rendered as JSON
@@ -218,7 +218,23 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- EP-32 (2026-07-03): the compile-driven migration touched more types than the
+  survey enumerated — notably `WeatherResp` in `shikumi-tools/test/Fixtures.hs`,
+  which is a tool *result* type but is also used as a `Predict` output in the
+  Compaction/Acceptance/Protocol/ReAct specs, so it needed a `Validatable`
+  instance. Downstream plans that add `Predict` output types must remember the
+  now-mandatory instance. Full list in EP-32's Surprises & Discoveries.
+- EP-32 (2026-07-03): fixture-drift check against EP-49's planned
+  `Shikumi.Testing.Fixtures` (integration point / cross-initiative note): the
+  `shikumi-testing` package does not yet exist in the tree, so `Verdict` had
+  nothing to diverge from. When EP-49 lands its `Answer` fixture, whoever lands
+  second should confirm the two rule shapes still align (`Verdict`'s rule is
+  "score ≤ 10", surfaced as `ValidationFailure "score: must be at most 10"`).
+- EP-32 (2026-07-03): integration points 1 and 2 left clean for EP-33/EP-34 — only
+  constraint rows were added to `runPredict` (`Program.hs`) and `streamPredict`
+  (`Stream.hs`); their bodies are untouched, so EP-33/EP-34 rebase onto a
+  `(FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)`
+  row without body conflicts.
 
 
 ## Decision Log

@@ -16,7 +16,7 @@ import Shikumi.Combinator ((>>>))
 import Shikumi.Jitsurei.Stub (markerResponse, runStub, systemContains)
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
-import Shikumi.Schema (FromModel, ToSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Schema.Types (Field, field)
 import Shikumi.Signature (mkSignature)
 
@@ -51,6 +51,14 @@ data Decision = Decision
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+-- These records carry no domain rules; the empty instances make @Validatable@
+-- explicit for every @Predict@ output type.
+instance Validatable Invoice
+
+instance Validatable EnrichedInvoice
+
+instance Validatable Decision
 
 -- ---------------------------------------------------------------------------
 -- Three typed stages, chained into one program.
