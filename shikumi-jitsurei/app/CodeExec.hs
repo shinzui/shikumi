@@ -104,3 +104,4 @@ main = do
           <> maybe "" (\o -> "  (observed: " <> show o <> ")") (observation s)
     describe (CallTool nm _) = "action " <> show nm
     describe Finish = "finish"
+    describe Summarized = "summary"

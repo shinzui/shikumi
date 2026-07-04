@@ -124,6 +124,7 @@ toolNames :: [Step] -> [Text]
 toolNames = foldMap $ \step -> case action step of
   CallTool name _ -> [name]
   Finish -> []
+  Summarized -> []
 
 assertObservation :: String -> Text -> Step -> IO ()
 assertObservation label needle step =

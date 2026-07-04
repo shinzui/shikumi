@@ -33,10 +33,18 @@ tests =
         runRestricted "result = 42" @?= Right "42",
       testCase "parentheses override precedence" $
         runRestricted "(2 + 3) * 4" @?= Right "20",
+      testCase "unary minus works for literals, products, and parenthesized expressions" $ do
+        runRestricted "-3" @?= Right "-3"
+        runRestricted "2 * -3" @?= Right "-6"
+        runRestricted "-(2 + 3)" @?= Right "-5",
       testCase "1 / 0 reports a division error" $
         assertLeftMentions "division" (runRestricted "1 / 0"),
       testCase "len(\"hello\") evaluates to 5" $
         runRestricted "len(\"hello\")" @?= Right "5",
+      testCase "string escapes parse in literals" $ do
+        runRestricted "\"a\\\"b\"" @?= Right "a\"b"
+        runRestricted "\"a\\\\b\"" @?= Right "a\\b"
+        runRestricted "\"a\\n\\t\"" @?= Right "a\n\t",
       testCase "upper(\"ab\") ++ \"C\" concatenates to ABC" $
         runRestricted "upper(\"ab\") ++ \"C\"" @?= Right "ABC",
       testCase "sum([1, 2, 3]) evaluates to 6" $

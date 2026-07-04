@@ -33,11 +33,12 @@
 -- == The restricted DSL
 --
 -- A single expression (optionally prefixed @result = @), built from: integer and
--- rational literals and @+ - * /@ with parentheses; string literals with @++@
--- concatenation and the functions @len@, @upper@, @lower@; and list literals @[a, b,
--- …]@ with @sum@, @length@, @concat@. The value of the expression is rendered to
--- text as the output. A parse error, an unknown identifier/function, a type error,
--- division by zero, or exceeding the step cap is returned as @Left \<message\>@.
+-- rational literals, unary minus, and @+ - * /@ with parentheses; string literals
+-- with @\"@, @\\@, @\n@, and @\t@ escapes plus @++@ concatenation and the functions
+-- @len@, @upper@, @lower@; and list literals @[a, b, …]@ with @sum@, @length@,
+-- @concat@. The value of the expression is rendered to text as the output. A parse
+-- error, an unknown identifier/function, a type error, division by zero, or
+-- exceeding the step cap is returned as @Left \<message\>@.
 module Shikumi.CodeExec.Interpreter
   ( -- * The interpreter value
     CodeInterpreter (..),
@@ -145,11 +146,7 @@ tokenize = go . T.unpack
            in case readNum numStr of
                 Just r -> (TNum r :) <$> go rest
                 Nothing -> Left ("bad number literal: " <> T.pack numStr)
-      | c == '"' =
-          let (str, rest) = break (== '"') cs
-           in case rest of
-                ('"' : rest') -> (TStr (T.pack str) :) <$> go rest'
-                _ -> Left "unterminated string literal"
+      | c == '"' = lexString [] cs
       | isAlpha c || c == '_' =
           let (ident, rest) = span (\x -> isAlphaNum x || x == '_') (c : cs)
            in (identTok ident :) <$> go rest
@@ -170,6 +167,14 @@ tokenize = go . T.unpack
     identTok s = TIdent (T.pack s)
     readNum :: String -> Maybe Rational
     readNum s = (fromInteger <$> (readMaybe s :: Maybe Integer)) <|> (toRational <$> (readMaybe s :: Maybe Double))
+    lexString _ [] = Left "unterminated string literal"
+    lexString acc ('"' : rest) = (TStr (T.pack (reverse acc)) :) <$> go rest
+    lexString acc ('\\' : '"' : rest) = lexString ('"' : acc) rest
+    lexString acc ('\\' : '\\' : rest) = lexString ('\\' : acc) rest
+    lexString acc ('\\' : 'n' : rest) = lexString ('\n' : acc) rest
+    lexString acc ('\\' : 't' : rest) = lexString ('\t' : acc) rest
+    lexString _ ('\\' : esc : _) = Left ("unsupported string escape: \\" <> T.singleton esc)
+    lexString acc (x : rest) = lexString (x : acc) rest
 
 -- ---------------------------------------------------------------------------
 -- Parser (recursive descent)
@@ -221,6 +226,7 @@ parseMul toks = do
     goMul l ts = Right (l, ts)
 
 parseFactor :: P Expr
+parseFactor (TMinus : ts) = parseFactor ts >>= \(e, ts') -> Right (EBin Sub (ENum 0) e, ts')
 parseFactor (TNum n : ts) = Right (ENum n, ts)
 parseFactor (TStr s : ts) = Right (EStr s, ts)
 parseFactor (TLParen : ts) = do

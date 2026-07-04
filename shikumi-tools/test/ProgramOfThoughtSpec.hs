@@ -10,6 +10,7 @@
 module ProgramOfThoughtSpec (tests) where
 
 import Data.Text (Text)
+import Data.Text qualified as T
 import GHC.Generics (Generic)
 import MockLLM (mkTextResponse, runAgent)
 import Shikumi.Adapter (ToPrompt)
@@ -66,8 +67,9 @@ tests =
             (programOfThoughtWith (PoTConfig {maxIters = 2, interpreter = alwaysFail}) sig)
             (Task "multiply 37 by 19 and add 6")
         case out of
-          Left (ProviderFailure _) -> pure ()
-          other -> assertFailure ("expected ProviderFailure, got " <> show other),
+          Left (CodeExecFailed msg) ->
+            assertBool "message names exhausted code attempts" ("code failed after 2 attempts" `T.isInfixOf` msg)
+          other -> assertFailure ("expected CodeExecFailed, got " <> show other),
       testCase "error-then-fix: first snippet errors in the sandbox, second succeeds" $ do
         -- 1/0 really errors in restrictedInterpreter -> regenerate -> 6 succeeds
         out <-

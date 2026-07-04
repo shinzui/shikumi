@@ -83,9 +83,7 @@ potLoop cfg sig i = go 0 Nothing
         Left err
           | iter + 1 >= maxIters cfg ->
               throwError
-                ( ProviderFailure
-                    ("programOfThought: code failed after " <> tshow (iter + 1) <> " attempts: " <> err)
-                )
+                (CodeExecFailed ("programOfThought: code failed after " <> tshow (iter + 1) <> " attempts: " <> err))
           | otherwise -> go (iter + 1) (Just (code, err))
 
     -- Generate (first attempt) or regenerate (with the previous code + error).
@@ -121,8 +119,9 @@ potLoop cfg sig i = go 0 Nothing
 dslGuide :: Text
 dslGuide =
   "Write a snippet in a restricted language that computes the answer. It supports "
-    <> "integer/rational arithmetic (+ - * /) with parentheses, string literals with ++ and "
-    <> "len/upper/lower, and lists with sum/length/concat. The value of the final expression "
+    <> "integer/rational arithmetic (+ - * /), unary minus, and parentheses; string literals "
+    <> "with escapes (\\\", \\\\, \\n, \\t), ++, len/upper/lower; and lists with "
+    <> "sum/length/concat. The value of the final expression "
     <> "(optionally written `result = <expr>`) is the answer."
 
 tshow :: (Show a) => a -> Text

@@ -38,12 +38,15 @@ module Shikumi.Agent.ReAct
     reactWithTrajectory,
 
     -- * The protocol seam
+    Proposal (..),
     ProtocolImpl (..),
     resolveProtocolKind,
     resolveProtocol,
 
     -- * Rendering (exposed for tests/inspection)
     renderTrajectory,
+    renderStepLine,
+    summaryStep,
   )
 where
 
@@ -71,6 +74,8 @@ import Data.Aeson (Value (..), eitherDecodeStrict, encode)
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -81,7 +86,7 @@ import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ModelCapability (..), ToPrompt (toPrompt), attachSchema, capabilityFor)
-import Shikumi.Compaction (CompactionConfig, compactTail, defaultCompactionConfig, usageExceedsWindow)
+import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Program (Program (FMap), embed)
@@ -93,11 +98,16 @@ import Shikumi.Tool (ToolRegistry, registryBaikai, registryTools, renderToolErro
 -- The trajectory data model
 -- ---------------------------------------------------------------------------
 
--- | What the model decided to do at a step: invoke a named tool with a raw JSON
--- arguments object, or declare it is finished.
+-- | What happened at a step: the model invoked a named tool with a raw JSON
+-- arguments object, declared it is finished, or the framework injected a
+-- compaction summary.
 data Action
   = CallTool !Text !Value
   | Finish
+  | -- | Injected by compaction: this step's observation carries a model-written
+    -- summary of earlier steps that were folded away. Never produced by the
+    -- model and never dispatched as a tool.
+    Summarized
   deriving stock (Show, Eq, Generic)
 
 -- | One recorded (thought, action, observation) step. @observation@ is 'Nothing'
@@ -171,7 +181,8 @@ react ::
 react sig reg cfg = FMap fst (reactWithTrajectory sig reg cfg)
 
 -- | Build a ReAct agent that also returns the recorded 'Trajectory', for
--- evaluators/optimizers and tests that assert on the steps.
+-- evaluators/optimizers and tests that assert on the steps. When compaction ran,
+-- the trajectory contains 'Summarized' steps whose observations carry the summary.
 reactWithTrajectory ::
   forall i o.
   (ToPrompt i, ToSchema o, FromModel o, Validatable o) =>
@@ -199,7 +210,9 @@ reactLoop sig reg cfg i = do
     impl :: ProtocolImpl i o
     impl = resolveProtocol (protocol cfg) _Model sig reg
 
-    -- Propose -> dispatch -> observe, accumulating steps (newest first).
+    -- Propose -> dispatch -> observe, accumulating steps (newest first). The
+    -- iteration counter advances once per model turn, even when a native model
+    -- proposes several tool calls in that turn.
     loop :: Int -> [Step] -> Eff es Trajectory
     loop iter acc
       | iter >= maxIters cfg =
@@ -208,12 +221,10 @@ reactLoop sig reg cfg i = do
           (accForPrompt, resp) <- completeProposeRecover acc
           case parsePropose impl resp of
             Left perr -> loop (iter + 1) (correctiveStep perr : accForPrompt)
-            Right (th, Finish) ->
+            Right (th, ProposeFinish) ->
               pure (Trajectory (V.fromList (reverse (Step th Finish Nothing : accForPrompt))) TerminatedFinish)
-            Right (th, CallTool nm args) -> do
-              res <- runToolCall reg (mkToolCall nm args)
-              let obs = either renderToolError id res
-                  acc' = Step th (CallTool nm args) (Just obs) : accForPrompt
+            Right (th, ProposeCalls calls) -> do
+              acc' <- dispatchCalls th calls accForPrompt
               acc'' <- compactAcc (resp ^. #model) (resp ^. #message . #usage) acc'
               loop (iter + 1) acc''
 
@@ -226,6 +237,8 @@ reactLoop sig reg cfg i = do
         catchError
           ((traj,) <$> complete _Model ctx opts)
           ( \_cs -> \case
+              e@(ContextWindowExceeded {})
+                | not (enabled (compaction cfg)) -> throwError e
               ContextWindowExceeded {} -> do
                 compacted <- forceCompactTrajectory traj
                 let (ctx', opts') = renderExtract impl i compacted
@@ -241,6 +254,8 @@ reactLoop sig reg cfg i = do
       catchError
         ((acc,) <$> complete _Model ctx opts)
         ( \_cs -> \case
+            e@(ContextWindowExceeded {})
+              | not (enabled (compaction cfg)) -> throwError e
             ContextWindowExceeded {} -> do
               compacted <- forceCompactAcc acc
               let (ctx', opts') = renderPropose impl i (soFar compacted)
@@ -262,14 +277,27 @@ reactLoop sig reg cfg i = do
       compacted <- compactTail (compaction cfg) _Model renderStepLine summaryStep (V.toList (steps traj))
       pure (traj {steps = V.fromList compacted})
 
+    dispatchCalls :: Text -> NonEmpty (Text, Value) -> [Step] -> Eff es [Step]
+    dispatchCalls th calls acc0 = do
+      (_, acc') <- foldl dispatchOne (pure (True, acc0)) (NE.toList calls)
+      pure acc'
+      where
+        dispatchOne mState (nm, args) = do
+          (isFirst, acc) <- mState
+          res <- runToolCall reg (mkToolCall nm args)
+          let obs = either renderToolError id res
+              stepThought = if isFirst then th else ""
+              step = Step stepThought (CallTool nm args) (Just obs)
+          pure (False, step : acc)
+
     -- A trajectory view of the steps gathered so far (termination is irrelevant
     -- for the propose render).
     soFar :: [Step] -> Trajectory
     soFar acc = Trajectory (V.fromList (reverse acc)) TerminatedFinish
 
 -- | Build a synthetic step recording an unparseable proposal, so the corrective
--- text reaches the model on the next turn (the empty tool name is a sentinel that
--- is never dispatched).
+-- text reaches the model on the next turn. The empty 'CallTool' name is a
+-- documented sentinel only for corrective feedback and is never dispatched.
 correctiveStep :: Text -> Step
 correctiveStep perr =
   Step
@@ -283,7 +311,7 @@ summaryStep :: Text -> Step
 summaryStep summaryText =
   Step
     { thought = "(compacted summary of earlier steps)",
-      action = CallTool "" Null,
+      action = Summarized,
       observation = Just summaryText
     }
 
@@ -299,12 +327,17 @@ mkToolCall nm args = _ToolCall & #name .~ nm & #arguments .~ args
 -- The protocol seam
 -- ---------------------------------------------------------------------------
 
+-- | What one model turn proposed: finish, or one-or-more tool calls to execute
+-- in order before the next model turn.
+data Proposal = ProposeFinish | ProposeCalls !(NonEmpty (Text, Value))
+  deriving stock (Show, Eq, Generic)
+
 -- | The protocol-specific rendering/parsing the loop depends on. Both the native
 -- and the prompt implementations satisfy this interface, so the loop body is
 -- identical under either seam.
 data ProtocolImpl i o = ProtocolImpl
   { renderPropose :: !(i -> Trajectory -> (Context, Options)),
-    parsePropose :: !(Response -> Either Text (Text, Action)),
+    parsePropose :: !(Response -> Either Text (Text, Proposal)),
     renderExtract :: !(i -> Trajectory -> (Context, Options)),
     parseExtract :: !(Response -> Either ShikumiError o)
   }
@@ -355,7 +388,7 @@ promptImpl sig reg =
                 <> proposeGrammar
             msg = user (taskBlock i <> "\n\n" <> historyBlock traj)
          in (buildCtx sys [msg] V.empty Nothing, _Options),
-      parsePropose = \resp -> parseActionText (responseText resp),
+      parsePropose = \resp -> actionToProposal <$> parseActionText (responseText resp),
       renderExtract = \i traj ->
         let sys =
               getInstruction sig
@@ -385,11 +418,15 @@ nativeImpl sig reg =
             msg = user (taskBlock i <> "\n\n" <> historyBlock traj)
             opts = _Options & #toolChoice .~ Just ToolChoiceAuto
          in (buildCtx sys [msg] (registryBaikai reg) Nothing, opts),
-      -- A tool-call block -> CallTool; no tool call (plain text) -> Finish.
+      -- Tool-call blocks -> calls executed in order; no tool call (plain text) -> finish.
       parsePropose = \resp ->
         case toolCallsOf resp of
-          (tc : _) -> Right (responseText resp, CallTool (tc ^. #name) (tc ^. #arguments))
-          [] -> Right (responseText resp, Finish),
+          [] -> Right (responseText resp, ProposeFinish)
+          (tc : tcs) ->
+            Right
+              ( responseText resp,
+                ProposeCalls (fmap (\c -> (c ^. #name, c ^. #arguments)) (tc :| tcs))
+              ),
       renderExtract = \i traj ->
         let sys =
               getInstruction sig
@@ -439,6 +476,7 @@ renderTrajectory traj = T.intercalate "\n" (zipWith one [1 :: Int ..] (V.toList 
         <> maybe "" ("; observation: " <>) (observation s)
     renderAction Finish = "finish"
     renderAction (CallTool nm args) = "call " <> nm <> " " <> encodeText args
+    renderAction Summarized = "summary of earlier steps"
 
 -- | The tool menu: each tool's name, description, and compact argument schema.
 toolMenu :: ToolRegistry -> Text
@@ -512,6 +550,12 @@ parseAction (Object o)
       Right (CallTool nm (maybe (Object KM.empty) id (KM.lookup "args" o)))
   | otherwise = Left "action must be {\"finish\":true} or {\"tool\":..,\"args\":..}"
 parseAction _ = Left "action must be a JSON object"
+
+actionToProposal :: (Text, Action) -> (Text, Proposal)
+actionToProposal (th, Finish) = (th, ProposeFinish)
+actionToProposal (th, CallTool nm args) = (th, ProposeCalls ((nm, args) :| []))
+actionToProposal (_, Summarized) =
+  error "internal invariant violated: Summarized is never parsed from model output"
 
 -- | Strip a leading/trailing Markdown code fence (```… / ```json … ```), if any,
 -- so a fenced JSON reply still decodes. Falls back to the input unchanged.

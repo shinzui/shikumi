@@ -62,7 +62,8 @@ usageExceedsWindow cfg model usage =
   enabled cfg && (model ^. #contextWindow) > 0 && (usage ^. #inputTokens) >= overflowThreshold cfg model
 
 -- | Fold the older portion of an oldest-first list into one synthesized summary
--- item, preserving the most recent 'keepRecent' items verbatim.
+-- item, preserving the most recent 'keepRecent' items verbatim. A disabled
+-- config is the identity and does not call the model.
 compactTail ::
   (LLM :> es, Error ShikumiError :> es) =>
   CompactionConfig ->
@@ -72,6 +73,7 @@ compactTail ::
   [a] ->
   Eff es [a]
 compactTail cfg model render inject xs
+  | not (enabled cfg) = pure xs
   | olderCount <= 0 = pure xs
   | otherwise = do
       requireErrorRow Nothing

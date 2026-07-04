@@ -231,6 +231,7 @@ shikumiErrorText = \case
   ContextWindowExceeded t -> t
   Timeout t -> t
   BudgetExceeded t -> t
+  CodeExecFailed t -> t
 
 -- | Which 'ShikumiError's must escape the agent loop rather than become
 -- observations. Budget and context-window exhaustion are infrastructure faults:

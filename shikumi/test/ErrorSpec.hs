@@ -43,4 +43,5 @@ tests =
         isTransient (InvalidJSON "") @?= False
         isTransient (MissingField "") @?= False
         isTransient (ValidationFailure "") @?= False
+        isTransient (CodeExecFailed "") @?= False
     ]

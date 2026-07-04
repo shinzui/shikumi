@@ -25,8 +25,8 @@ module Shikumi.CodeExec.CodeAct
   )
 where
 
-import Baikai (ToolCall, _Model, _ToolCall)
-import Control.Lens ((&), (.~))
+import Baikai (Model, Response, ToolCall, Usage, _Model, _ToolCall)
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecodeStrict)
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
@@ -36,27 +36,35 @@ import Data.Text qualified as T
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector qualified as V
 import Effectful (Eff, (:>))
-import Effectful.Error.Static (Error, throwError)
+import Effectful.Error.Static (Error, catchError, throwError)
 import Shikumi.Adapter (ToPrompt (toPrompt), responseText)
-import Shikumi.Agent.ReAct (Action (..), Step (..), Termination (..), Trajectory (..), renderTrajectory)
+import Shikumi.Agent.ReAct (Action (..), Step (..), Termination (..), Trajectory (..), renderStepLine, renderTrajectory, summaryStep)
 import Shikumi.CodeExec.Interpreter (CodeInterpreter (..), restrictedInterpreter)
 import Shikumi.CodeExec.Prompt (encodeText, schemaInstruction, simpleContext, stripFences)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Program (Program (FMap), embed)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, parseOutput, toSchema)
 import Shikumi.Signature (Signature, getInstruction)
 import Shikumi.Tool (ToolRegistry, registryTools, renderToolError, runToolCall, someToolDescription, someToolName, someToolSchema)
 
--- | How @codeAct@ runs: the hard iteration cap and the sandbox.
+-- | How @codeAct@ runs: the hard iteration cap, the sandbox, and trajectory
+-- compaction for long runs.
 data CodeActConfig = CodeActConfig
   { maxIters :: !Int,
-    interpreter :: !CodeInterpreter
+    interpreter :: !CodeInterpreter,
+    compaction :: !CompactionConfig
   }
 
 -- | Five iterations, the hermetic 'restrictedInterpreter'.
 defaultCodeActConfig :: CodeActConfig
-defaultCodeActConfig = CodeActConfig {maxIters = 5, interpreter = restrictedInterpreter}
+defaultCodeActConfig =
+  CodeActConfig
+    { maxIters = 5,
+      interpreter = restrictedInterpreter,
+      compaction = defaultCompactionConfig
+    }
 
 -- | Build a @codeAct@ agent returning the typed answer, dropping the trajectory.
 codeAct ::
@@ -85,8 +93,8 @@ codeActLoop ::
   i ->
   Eff es (o, Trajectory)
 codeActLoop cfg sig reg i = do
-  traj <- loop 0 []
-  o <- extract traj
+  traj0 <- loop 0 []
+  (o, traj) <- extract traj0
   pure (o, traj)
   where
     loop :: Int -> [Step] -> Eff es Trajectory
@@ -94,16 +102,16 @@ codeActLoop cfg sig reg i = do
       | iter >= maxIters cfg =
           pure (Trajectory (V.fromList (reverse acc)) (TerminatedMaxIters iter))
       | otherwise = do
-          let (ctx, opts) = simpleContext turnSys (turnUser acc)
-          resp <- complete _Model ctx opts
+          (accForPrompt, resp) <- completeTurnRecover acc
           case parseCodeReply (responseText resp) of
-            Left perr -> loop (iter + 1) (correctiveStep perr : acc)
+            Left perr -> loop (iter + 1) (correctiveStep perr : accForPrompt)
             Right (code, finished) -> do
               (act, obs) <- runAction code
               let step = Step {thought = "", action = act, observation = Just obs}
+              acc' <- compactAcc (resp ^. #model) (resp ^. #message . #usage) (step : accForPrompt)
               if finished
-                then pure (Trajectory (V.fromList (reverse (step : acc))) TerminatedFinish)
-                else loop (iter + 1) (step : acc)
+                then pure (Trajectory (V.fromList (reverse acc')) TerminatedFinish)
+                else loop (iter + 1) acc'
 
     -- A tool call snippet (call("name", args)) dispatches through runToolCall; any
     -- other snippet runs in the sandbox. Both produce an observation text.
@@ -114,14 +122,56 @@ codeActLoop cfg sig reg i = do
         pure (CallTool nm args, either renderToolError id res)
       Nothing -> do
         r <- runCode (interpreter cfg) code
-        pure (CallTool "exec" (String code), either id id r)
+        pure (CallTool "exec" (String code), either ("Error: code failed: " <>) id r)
 
-    extract :: Trajectory -> Eff es o
+    extract :: Trajectory -> Eff es (o, Trajectory)
     extract traj = do
       let prompt = "Task:\n" <> toPrompt i <> "\n\nTrajectory:\n" <> renderTrajectory traj
           (ctx, opts) = simpleContext extractSys prompt
-      resp <- complete _Model ctx opts
-      either throwError pure (parseOutput (stripFences (responseText resp)))
+      (trajForExtract, resp) <-
+        catchError
+          ((traj,) <$> complete _Model ctx opts)
+          ( \_cs -> \case
+              e@(ContextWindowExceeded {})
+                | not (enabled (compaction cfg)) -> throwError e
+              ContextWindowExceeded {} -> do
+                compacted <- forceCompactTrajectory traj
+                let prompt' = "Task:\n" <> toPrompt i <> "\n\nTrajectory:\n" <> renderTrajectory compacted
+                    (ctx', opts') = simpleContext extractSys prompt'
+                (compacted,) <$> complete _Model ctx' opts'
+              e -> throwError e
+          )
+      o <- either throwError pure (parseOutput (stripFences (responseText resp)))
+      pure (o, trajForExtract)
+
+    completeTurnRecover :: [Step] -> Eff es ([Step], Response)
+    completeTurnRecover acc = do
+      let (ctx, opts) = simpleContext turnSys (turnUser acc)
+      catchError
+        ((acc,) <$> complete _Model ctx opts)
+        ( \_cs -> \case
+            e@(ContextWindowExceeded {})
+              | not (enabled (compaction cfg)) -> throwError e
+            ContextWindowExceeded {} -> do
+              compacted <- forceCompactAcc acc
+              let (ctx', opts') = simpleContext turnSys (turnUser compacted)
+              (compacted,) <$> complete _Model ctx' opts'
+            e -> throwError e
+        )
+
+    compactAcc :: Model -> Usage -> [Step] -> Eff es [Step]
+    compactAcc model usage acc
+      | usageExceedsWindow (compaction cfg) model usage = forceCompactAcc acc
+      | otherwise = pure acc
+
+    forceCompactAcc :: [Step] -> Eff es [Step]
+    forceCompactAcc acc =
+      reverse <$> compactTail (compaction cfg) _Model renderStepLine summaryStep (reverse acc)
+
+    forceCompactTrajectory :: Trajectory -> Eff es Trajectory
+    forceCompactTrajectory traj = do
+      compacted <- compactTail (compaction cfg) _Model renderStepLine summaryStep (V.toList (steps traj))
+      pure (traj {steps = V.fromList compacted})
 
     turnUser acc =
       "Task:\n"
@@ -193,6 +243,6 @@ toolMenu reg = case registryTools reg of
 codeActGuide :: Text
 codeActGuide =
   "Each turn, reply with exactly one JSON object {\"code\": \"<snippet>\", \"finished\": <true|false>}. "
-    <> "The snippet runs in a restricted interpreter (arithmetic + - * /, strings with ++ and "
-    <> "len/upper/lower, lists with sum/length/concat). To call a tool, make the snippet exactly "
+    <> "The snippet runs in a restricted interpreter (arithmetic + - * / with unary minus, "
+    <> "strings with escapes, ++, and len/upper/lower, lists with sum/length/concat). To call a tool, make the snippet exactly "
     <> "call(\"<toolName>\", <argsJSON>). Set finished to true once you have the answer."

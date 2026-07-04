@@ -2,6 +2,7 @@ module CompactionSpec (tests) where
 
 import Baikai (_Model, _Usage)
 import Control.Lens ((&), (.~))
+import Data.Aeson (Value (..))
 import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Vector qualified as V
@@ -63,6 +64,11 @@ tests =
           runEffMock [mkTextResponse "S"] $
             compactTail cfg _Model id ("summary:" <>) (["e1", "e2", "e3", "e4", "e5", "e6"] :: [Text])
         res @?= Right ["summary:S", "e5", "e6"],
+      testCase "compactTail with enabled=False is the identity and calls no model" $ do
+        let cfg = defaultCompactionConfig {enabled = False, keepRecent = 0}
+            items = ["e1", "e2", "e3"] :: [Text]
+        res <- runEffMock [] $ compactTail cfg _Model id ("summary:" <>) items
+        res @?= Right items,
       testCase "agent on tiny window compacts and completes" $ do
         let cfg =
               defaultReActConfig
@@ -85,6 +91,7 @@ tests =
             termination traj @?= TerminatedFinish
             let ss = V.toList (steps traj)
             assertBool "trajectory contains a summary step" (any isSummary ss)
+            assertBool "summary path does not use empty corrective tool sentinel" (not (any isEmptyToolCall ss))
             case ss of
               [summary, recent, finish] -> do
                 assertBool "first step is summary" (isSummary summary)
@@ -118,6 +125,26 @@ tests =
           Right (_ :: WeatherResp, traj) ->
             assertBool "trajectory contains a summary step after recovery" (any isSummary (V.toList (steps traj)))
           Left e -> assertFailure ("agent failed: " <> show e),
+      testCase "reactive compaction is skipped when disabled" $ do
+        let cfg =
+              defaultReActConfig
+                { maxIters = 5,
+                  protocol = ProtocolPrompt,
+                  compaction = defaultCompactionConfig {enabled = False, reserveTokens = 10, keepRecent = 0}
+                }
+            script =
+              [ mkUsageResponse (_Model & #contextWindow .~ 100) 10 (callReply "first"),
+                mkTextResponse "unused summary",
+                mkTextResponse finishReply,
+                mkTextResponse extractReply
+              ]
+            prog = reactWithTrajectory weatherSignature weatherRegistry cfg
+        res <-
+          runEff
+            . runErrorNoCallStack @ShikumiError
+            . runMockLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
+            $ runProgram prog weatherQuestion
+        res @?= Left (ContextWindowExceeded "context length exceeded"),
       testCase "extract overflow is caught, compacted, and retried once" $ do
         let cfg =
               defaultReActConfig
@@ -176,4 +203,7 @@ extractReply :: Text
 extractReply = "{\"tempC\": 12.0, \"summary\": \"mild\"}"
 
 isSummary :: Step -> Bool
-isSummary s = thought s == "(compacted summary of earlier steps)"
+isSummary s = action s == Summarized
+
+isEmptyToolCall :: Step -> Bool
+isEmptyToolCall s = action s == CallTool "" Null

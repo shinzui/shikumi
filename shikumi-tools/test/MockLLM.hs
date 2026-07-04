@@ -14,6 +14,7 @@ module MockLLM
     mkTextResponse,
     mkUsageResponse,
     mkToolCallResponse,
+    mkToolCallsResponse,
   )
 where
 
@@ -121,9 +122,15 @@ mkUsageResponse model inputTokens text =
 
 -- | An assistant 'Response' carrying a single native tool-call block.
 mkToolCallResponse :: Text -> Text -> Value -> Response
-mkToolCallResponse callId nm args =
+mkToolCallResponse callId nm args = mkToolCallsResponse [(callId, nm, args)]
+
+-- | An assistant 'Response' carrying several native tool-call blocks in order.
+mkToolCallsResponse :: [(Text, Text, Value)] -> Response
+mkToolCallsResponse calls =
   _Response
     & #message
       . #content
-      .~ V.singleton
-        (AssistantToolCall (_ToolCall & #id_ .~ callId & #name .~ nm & #arguments .~ args))
+      .~ V.fromList
+        [ AssistantToolCall (_ToolCall & #id_ .~ callId & #name .~ nm & #arguments .~ args)
+        | (callId, nm, args) <- calls
+        ]

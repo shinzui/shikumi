@@ -140,5 +140,23 @@ tests =
                 assertBool "observation is a rendered tool failure" ("failed" `T.isInfixOf` obs)
                 assertBool "observation includes validation reason" ("nothing to see" `T.isInfixOf` obs)
               other -> assertFailure ("expected first step to be flaky tool call with observation, got " <> show other)
+          Left e -> assertFailure ("agent failed: " <> show e),
+      testCase "an unparseable reply produces a corrective step and the loop recovers" $ do
+        res <-
+          runAgent
+            (mkTextResponse "this is not json" : promptScript)
+            (reactWithTrajectory weatherSignature weatherRegistry defaultReActConfig)
+            weatherQuestion
+        case res of
+          Right (o :: WeatherResp, traj) -> do
+            o @?= expectedWeather
+            assertBool
+              "trajectory contains corrective parse feedback"
+              (any hasCorrectiveObservation (V.toList (steps traj)))
           Left e -> assertFailure ("agent failed: " <> show e)
     ]
+
+hasCorrectiveObservation :: Step -> Bool
+hasCorrectiveObservation Step {observation = Just obs} =
+  "not a valid action JSON object" `T.isInfixOf` obs
+hasCorrectiveObservation _ = False

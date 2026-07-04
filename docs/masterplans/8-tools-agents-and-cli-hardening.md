@@ -103,7 +103,7 @@ integration point instead.
 |---|-------|------|-----------|-----------|--------|
 | 44 | Tool Error Posture: Infra Errors Escape the Loop | docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md | None | None | Complete |
 | 45 | Builtin Tool Hardening: Fs, Web, and Timeouts | docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md | None | None | Complete |
-| 46 | ReAct and CodeAct Behavior Fixes | docs/plans/46-react-and-codeact-behavior-fixes.md | None | EP-44 | Not Started |
+| 46 | ReAct and CodeAct Behavior Fixes | docs/plans/46-react-and-codeact-behavior-fixes.md | None | EP-44 | Complete |
 | 47 | CLI Hardening and CLI-Layer Tests | docs/plans/47-cli-hardening-and-cli-layer-tests.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -191,12 +191,12 @@ and the milestone.
 - [x] EP-45: M2 — web fetch: streamed byte cap and configurable SSRF policy
 - [x] EP-45: M3 — exec timeout clamped; truthful truncation flags; symlink-safe walk
 - [x] EP-45: M4 — schema helper tidied; security-posture docs for Shell/Env/Interpreter
-- [ ] EP-46: M1 — compaction honors `enabled` (core + ReAct reactive path)
-- [ ] EP-46: M2 — explicit `Summarized` action; consumers updated
-- [ ] EP-46: M3 — native multi-tool-call execution; corrective-step test
-- [ ] EP-46: M4 — CodeAct error tagging and compaction wiring
-- [ ] EP-46: M5 — DSL unary minus + string escapes; guides updated
-- [ ] EP-46: M6 — `CodeExecFailed` constructor; programOfThought honest failure
+- [x] EP-46: M1 — compaction honors `enabled` (core + ReAct reactive path)
+- [x] EP-46: M2 — explicit `Summarized` action; consumers updated
+- [x] EP-46: M3 — native multi-tool-call execution; corrective-step test
+- [x] EP-46: M4 — CodeAct error tagging and compaction wiring
+- [x] EP-46: M5 — DSL unary minus + string escapes; guides updated
+- [x] EP-46: M6 — `CodeExecFailed` constructor; programOfThought honest failure
 - [ ] EP-47: M1 — trace-id sanitization and distinct replay failure messages
 - [ ] EP-47: M2 — CLI-layer test suite through `parseCommand`/`dispatch`
 
@@ -214,6 +214,10 @@ interactions between child plans. Provide concise evidence.
 - EP-45 confirmed that the built-in tool hardening is local to `shikumi-tools`:
   extending `DirEntry` and exporting the web fetch policy did not require changes
   outside that package. `cabal build all` stayed green.
+  Date: 2026-07-04
+- EP-46 confirmed that adding the `CodeExecFailed` constructor to core `shikumi`
+  required no downstream package edits beyond the planned `shikumiErrorText` and
+  `ErrorSpec` updates. `cabal build all` rebuilt dependents successfully.
   Date: 2026-07-04
 
 
@@ -256,4 +260,11 @@ Compare the result against the original vision.
 - EP-45 complete: filesystem glob/cap/symlink behavior, web fetch streaming/policy,
   shell timeout clamping, schema pins, and security-posture docs all landed.
   Validated with `just test-one shikumi-tools` and `cabal build all`.
+  Date: 2026-07-04
+- EP-46 complete: ReAct and CodeAct edge behavior landed — disabled compaction is
+  respected on reactive paths, summaries are `Summarized` trajectory actions,
+  native multi-tool-call responses execute in order, CodeAct errors are tagged and
+  compacted, the restricted DSL accepts unary minus/string escapes, and
+  `programOfThought` now throws `CodeExecFailed`. Validated with `just test-one
+  shikumi-tools`, `just test-one shikumi`, and `cabal build all`.
   Date: 2026-07-04

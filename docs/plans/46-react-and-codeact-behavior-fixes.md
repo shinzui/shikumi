@@ -4,7 +4,7 @@ slug: react-and-codeact-behavior-fixes
 title: "ReAct and CodeAct Behavior Fixes"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaw5e2f84jyjm4j6mdj0"
 master_plan: "docs/masterplans/8-tools-agents-and-cli-hardening.md"
 ---
 
@@ -49,20 +49,23 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 here, even if it requires splitting a partially completed task into two ("done" vs.
 "remaining"). This section must always reflect the actual current state of the work.
 
-- [ ] M1: `compactTail` honors `enabled`; ReAct reactive handlers honor `enabled`;
-      tests.
-- [ ] M2: `Summarized` action constructor; `summaryStep`, `renderAction`, jitsurei
-      apps, CompactionSpec updated; trajectory doc updated.
-- [ ] M3: `Proposal` type; native protocol executes all tool calls in order;
+- [x] M1: `compactTail` honors `enabled`; ReAct reactive handlers honor `enabled`;
+      tests. Completed 2026-07-04.
+- [x] M2: `Summarized` action constructor; `summaryStep`, `renderAction`, jitsurei
+      apps, CompactionSpec updated; trajectory doc updated. Completed 2026-07-04.
+- [x] M3: `Proposal` type; native protocol executes all tool calls in order;
       `mkToolCallsResponse` mock builder; multi-call and corrective-step tests.
-- [ ] M4: CodeAct error tagging; CodeAct compaction wiring (`compaction` in
-      `CodeActConfig`, proactive + reactive paths); tests.
-- [ ] M5: DSL unary minus and string escapes; module doc, `dslGuide`,
-      `codeActGuide` updated; RestrictedSpec cases.
-- [ ] M6: `CodeExecFailed` constructor in core `shikumi`; `shikumiErrorText` arm;
+      Completed 2026-07-04.
+- [x] M4: CodeAct error tagging; CodeAct compaction wiring (`compaction` in
+      `CodeActConfig`, proactive + reactive paths); tests. Completed 2026-07-04.
+- [x] M5: DSL unary minus and string escapes; module doc, `dslGuide`,
+      `codeActGuide` updated; RestrictedSpec cases. Completed 2026-07-04.
+- [x] M6: `CodeExecFailed` constructor in core `shikumi`; `shikumiErrorText` arm;
       `programOfThought` uses it; ErrorSpec + ProgramOfThoughtSpec updated.
-- [ ] Final: `just test-one shikumi-tools` and `just test-one shikumi` green;
-      `cabal build all` green; commits with required trailers.
+      Completed 2026-07-04.
+- [x] Final: `just test-one shikumi-tools` and `just test-one shikumi` green;
+      `cabal build all` green; commit prepared with required trailers. Completed
+      2026-07-04.
 
 
 ## Surprises & Discoveries
@@ -70,7 +73,15 @@ here, even if it requires splitting a partially completed task into two ("done" 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- `CompactionConfig` deliberately does not derive `Generic`, so ReAct and CodeAct
+  reactive handlers use the ordinary `enabled` record accessor instead of
+  generic-lens `#enabled`. Evidence: the first `cabal build shikumi shikumi-tools`
+  failed on the generic-lens lookup, and the fix rebuilt successfully.
+  Date: 2026-07-04
+- Adding `CodeExecFailed` did not require any downstream package edits beyond the
+  planned `shikumiErrorText` arm and `ErrorSpec` classification. Evidence:
+  `cabal build all` completed after recompiling the dependent packages.
+  Date: 2026-07-04
 
 
 ## Decision Log
@@ -125,7 +136,14 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- EP-46 complete: ReAct and CodeAct now honor disabled compaction on reactive
+  context-overflow paths; compaction summaries are first-class `Summarized`
+  trajectory actions; native ReAct executes every tool call in a multi-call
+  response; CodeAct tags interpreter failures and compacts both proactively and
+  reactively; the restricted DSL accepts unary minus and common string escapes; and
+  `programOfThought` reports exhausted code attempts as `CodeExecFailed`.
+  Validation: `just test-one shikumi-tools` passed 70 tests, `just test-one
+  shikumi` passed 141 tests, and `cabal build all` succeeded. Date: 2026-07-04.
 
 
 ## Context and Orientation
@@ -516,7 +534,7 @@ fix(agent): honor compaction enabled flag on reactive paths
 
 MasterPlan: docs/masterplans/8-tools-agents-and-cli-hardening.md
 ExecPlan: docs/plans/46-react-and-codeact-behavior-fixes.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaw5e2f84jyjm4j6mdj0
 ```
 
 ```text
@@ -538,7 +556,7 @@ feat(error)!: add CodeExecFailed; programOfThought reports code failure honestly
 (The `!` marks the PVP-breaking core change. Every commit carries `MasterPlan:
 docs/masterplans/8-tools-agents-and-cli-hardening.md`, `ExecPlan:
 docs/plans/46-react-and-codeact-behavior-fixes.md`, and `Intention:
-intention_01kwgdyxm7ehh8yys1pp4wf1zr` trailers.)
+intention_01kwjfeaw5e2f84jyjm4j6mdj0` trailers.)
 
 
 ## Validation and Acceptance
@@ -601,3 +619,6 @@ Cross-plan coordination (master plan Integration Points): EP-44 must land first
 (shared `ReAct.hs`/`Tool.hs` surfaces; this plan adds the `shikumiErrorText` arm
 EP-44's rewrite surrounds). EP-45 owns Interpreter.hs's security paragraph; this
 plan edits only the grammar section and code of that file.
+
+Revision note 2026-07-04: Implemented all EP-46 milestones and updated living
+sections with validation evidence from the current worktree.

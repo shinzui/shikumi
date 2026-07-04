@@ -36,6 +36,8 @@ data ShikumiError
     Timeout !Text
   | -- | the running cost ceiling was reached; the call was refused
     BudgetExceeded !Text
+  | -- | generated code failed after exhausting correction attempts
+    CodeExecFailed !Text
   deriving stock (Eq, Show)
 
 -- | Total mapping from baikai's transport-level errors into shikumi's
@@ -56,9 +58,10 @@ fromBaikaiError e = case category e of
   _ -> ProviderFailure (message e)
 
 -- | Which errors are worth retrying. Provider/transport failures and timeouts are
--- transient; decode, schema, validation, and budget errors are deterministic and
--- retrying cannot fix them. Centralizing the policy here keeps it auditable
--- (the resilience interpreter in "Shikumi.LLM" consults exactly this predicate).
+-- transient; decode, schema, validation, budget, and code-execution failures are
+-- deterministic and retrying cannot fix them. Centralizing the policy here keeps
+-- it auditable (the resilience interpreter in "Shikumi.LLM" consults exactly this
+-- predicate).
 isTransient :: ShikumiError -> Bool
 isTransient = \case
   ProviderFailure {} -> True

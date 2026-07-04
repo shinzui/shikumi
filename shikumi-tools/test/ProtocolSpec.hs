@@ -8,7 +8,9 @@ module ProtocolSpec (tests) where
 
 import Baikai (Api (..), _Model)
 import Control.Lens ((&), (.~))
+import Data.Aeson (object, (.=))
 import Data.Generics.Labels ()
+import Data.Text (Text)
 import Data.Vector qualified as V
 import Fixtures
   ( WeatherResp,
@@ -19,9 +21,11 @@ import Fixtures
     weatherRegistry,
     weatherSignature,
   )
-import MockLLM (runAgent)
+import MockLLM (mkTextResponse, mkToolCallsResponse, runAgent)
 import Shikumi.Agent.ReAct
-  ( Termination (..),
+  ( Action (..),
+    Step (..),
+    Termination (..),
     ToolProtocol (..),
     Trajectory (..),
     defaultReActConfig,
@@ -58,5 +62,29 @@ tests =
       testCase "ProtocolAuto picks prompt for a CLI model" $
         resolveProtocolKind ProtocolAuto (_Model & #api .~ AnthropicMessagesCli) @?= ProtocolPrompt,
       testCase "ProtocolAuto picks native for a native-capable model" $
-        resolveProtocolKind ProtocolAuto (_Model & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= ProtocolNative
+        resolveProtocolKind ProtocolAuto (_Model & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= ProtocolNative,
+      testCase "native turn with two tool calls executes both in order" $ do
+        let parisArgs = object ["city" .= ("Paris" :: Text), "units" .= ("c" :: Text)]
+            londonArgs = object ["city" .= ("London" :: Text), "units" .= ("c" :: Text)]
+            script =
+              [ mkToolCallsResponse [("c1", "get_weather", parisArgs), ("c2", "get_weather", londonArgs)],
+                mkTextResponse "done",
+                mkTextResponse "{\"tempC\": 12.0, \"summary\": \"mild\"}"
+              ]
+        out <-
+          runAgent
+            script
+            (reactWithTrajectory weatherSignature weatherRegistry (defaultReActConfig & #protocol .~ ProtocolNative))
+            weatherQuestion
+        case out of
+          Right (answer :: WeatherResp, traj) -> do
+            answer @?= expectedWeather
+            termination traj @?= TerminatedFinish
+            case V.toList (steps traj) of
+              [s1, s2, s3] -> do
+                action s1 @?= CallTool "get_weather" parisArgs
+                action s2 @?= CallTool "get_weather" londonArgs
+                action s3 @?= Finish
+              other -> assertFailure ("expected two tool-call steps followed by finish, got " <> show other)
+          Left err -> assertFailure ("native multi-call run failed: " <> show err)
     ]
