@@ -11,14 +11,26 @@ import Data.Aeson (Value, object, (.=))
 import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as T
-import Fixtures (weatherArgs, weatherRegistry)
+import Effectful.Error.Static (throwError)
+import Fixtures (WeatherReq, WeatherResp, weatherArgs, weatherRegistry)
 import MockLLM (runEffMock)
-import Shikumi.Tool (ToolError (..), runToolCall)
+import Shikumi.Error (ShikumiError (..))
+import Shikumi.Tool (SomeTool (..), Tool, ToolError (..), mkRegistry, mkTool, runToolCall)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tc :: Text -> Value -> ToolCall
 tc nm args = _ToolCall & #name .~ nm & #arguments .~ args
+
+budgetTool :: Tool WeatherReq WeatherResp
+budgetTool =
+  mkTool "burn_budget" "Always exceeds the budget." $ \_req ->
+    throwError (BudgetExceeded "ceiling reached")
+
+flakyTool :: Tool WeatherReq WeatherResp
+flakyTool =
+  mkTool "flaky" "Always fails validation." $ \_req ->
+    throwError (ValidationFailure "nothing to see")
 
 tests :: TestTree
 tests =
@@ -38,5 +50,17 @@ tests =
         res <- runEffMock [] (runToolCall weatherRegistry (tc "nope" (object [])))
         case res of
           Right (Left (ToolNotFound nm)) -> nm @?= "nope"
-          other -> assertFailure ("expected ToolNotFound, got " <> show other)
+          other -> assertFailure ("expected ToolNotFound, got " <> show other),
+      testCase "a tool body throwing BudgetExceeded escapes as ShikumiError" $ do
+        res <- runEffMock [] (runToolCall (mkRegistry [SomeTool budgetTool]) (tc "burn_budget" weatherArgs))
+        case res of
+          Left (BudgetExceeded msg) -> msg @?= "ceiling reached"
+          other -> assertFailure ("expected escaped BudgetExceeded, got " <> show other),
+      testCase "a tool body throwing ValidationFailure becomes ToolRunFailed" $ do
+        res <- runEffMock [] (runToolCall (mkRegistry [SomeTool flakyTool]) (tc "flaky" weatherArgs))
+        case res of
+          Right (Left (ToolRunFailed nm msg)) -> do
+            nm @?= "flaky"
+            assertBool "message includes validation reason" ("nothing to see" `T.isInfixOf` msg)
+          other -> assertFailure ("expected ToolRunFailed, got " <> show other)
     ]

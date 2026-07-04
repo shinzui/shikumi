@@ -4,7 +4,7 @@ slug: tools-agents-and-cli-hardening
 title: "Tools, Agents, and CLI Hardening"
 kind: master-plan
 created_at: 2026-07-02T03:29:36Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaw5e2f84jyjm4j6mdj0"
 ---
 
 # Tools, Agents, and CLI Hardening
@@ -101,7 +101,7 @@ integration point instead.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 44 | Tool Error Posture: Infra Errors Escape the Loop | docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md | None | None | Not Started |
+| 44 | Tool Error Posture: Infra Errors Escape the Loop | docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md | None | None | Complete |
 | 45 | Builtin Tool Hardening: Fs, Web, and Timeouts | docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md | None | None | Not Started |
 | 46 | ReAct and CodeAct Behavior Fixes | docs/plans/46-react-and-codeact-behavior-fixes.md | None | EP-44 | Not Started |
 | 47 | CLI Hardening and CLI-Layer Tests | docs/plans/47-cli-hardening-and-cli-layer-tests.md | None | None | Not Started |
@@ -185,8 +185,8 @@ Whichever plan lands second rebases trivially; the regions do not overlap.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone.
 
-- [ ] EP-44: M1 — partition `ShikumiError` in `runErased`; infra errors rethrow, docstrings corrected
-- [ ] EP-44: M2 — loop-level tests: budget abort and recoverable-observation continue
+- [x] EP-44: M1 — partition `ShikumiError` in `runErased`; infra errors rethrow, docstrings corrected
+- [x] EP-44: M2 — loop-level tests: budget abort and recoverable-observation continue
 - [ ] EP-45: M1 — glob semantics unified between fast and fallback paths, with parity tests
 - [ ] EP-45: M2 — web fetch: streamed byte cap and configurable SSRF policy
 - [ ] EP-45: M3 — exec timeout clamped; truthful truncation flags; symlink-safe walk
@@ -206,7 +206,11 @@ and the milestone.
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- EP-44 confirmed that the ReAct loop has no catch around tool dispatch, so the
+  `runErased` partition is sufficient for both direct `runToolCall` users and ReAct.
+  The old catch-all behavior failed only the two intended `BudgetExceeded` tests,
+  while recoverable `ValidationFailure` still flowed as a model-visible observation.
+  Date: 2026-07-04
 
 
 ## Decision Log
@@ -240,3 +244,8 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original vision.
 
 (To be filled during and after implementation.)
+
+- EP-44 complete: infrastructure errors thrown by tool bodies now escape the tool
+  boundary and abort the agent loop; recoverable tool-body errors remain
+  observations. Validated with `just test-one shikumi-tools` and `cabal build all`.
+  Date: 2026-07-04

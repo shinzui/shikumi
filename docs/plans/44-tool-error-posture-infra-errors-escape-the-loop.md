@@ -4,7 +4,7 @@ slug: tool-error-posture-infra-errors-escape-the-loop
 title: "Tool Error Posture Infra Errors Escape the Loop"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaw5e2f84jyjm4j6mdj0"
 master_plan: "docs/masterplans/8-tools-agents-and-cli-hardening.md"
 ---
 
@@ -44,15 +44,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 here, even if it requires splitting a partially completed task into two ("done" vs.
 "remaining"). This section must always reflect the actual current state of the work.
 
-- [ ] M1: add `isInfraToolError` partition to `shikumi-tools/src/Shikumi/Tool.hs` and
+- [x] M1: add `isInfraToolError` partition to `shikumi-tools/src/Shikumi/Tool.hs` and
       make `runErased` rethrow infra errors.
-- [ ] M1: correct the `runErased` and `ToolError` docstrings to describe the real
+- [x] M1: correct the `runErased` and `ToolError` docstrings to describe the real
       posture.
-- [ ] M2: add ToolSpec cases — tool body throwing `BudgetExceeded` escapes; tool body
+- [x] M2: add ToolSpec cases — tool body throwing `BudgetExceeded` escapes; tool body
       throwing `ValidationFailure` becomes `ToolRunFailed`.
-- [ ] M2: add ReActSpec cases — budget abort mid-loop; recoverable error continues
+- [x] M2: add ReActSpec cases — budget abort mid-loop; recoverable error continues
       the loop.
-- [ ] Final: `just test-one shikumi-tools` green; commit with the required trailers.
+- [x] Final: `just test-one shikumi-tools` green; `cabal build all` green; commit with
+      the required trailers. (2026-07-04)
 
 
 ## Surprises & Discoveries
@@ -60,7 +61,23 @@ here, even if it requires splitting a partially completed task into two ("done" 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: The failing-before check is load-bearing and isolates the old bug. With
+  only `runErased` temporarily restored to the old catch-all handler, the new suite
+  failed exactly the two infra-path cases while the recoverable-path cases stayed
+  green:
+
+```text
+Tool
+  a tool body throwing BudgetExceeded escapes as ShikumiError: FAIL
+    expected escaped BudgetExceeded, got Right (Left (ToolRunFailed "burn_budget" "ceiling reached"))
+ReAct
+  a tool throwing BudgetExceeded aborts the loop: FAIL
+    expected escaped BudgetExceeded, got Right (... TerminatedFinish)
+
+2 out of 50 tests failed
+```
+
+  Date: 2026-07-04
 
 
 ## Decision Log
@@ -93,7 +110,21 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Outcome: EP-44 is complete. `runErased` now rethrows `BudgetExceeded` and
+  `ContextWindowExceeded` via `isInfraToolError`, while all other `ShikumiError`
+  constructors still become `ToolRunFailed` observations. The `ToolError` and
+  `runErased` haddocks now document that split. Four new tests pin the behavior at
+  the direct tool boundary and through the ReAct loop.
+
+```text
+just test-one shikumi-tools
+All 50 tests passed
+
+cabal build all
+EXIT 0
+```
+
+  Date: 2026-07-04
 
 
 ## Context and Orientation
@@ -377,7 +408,7 @@ agent loop; recoverable errors still become ToolRunFailed observations.
 
 MasterPlan: docs/masterplans/8-tools-agents-and-cli-hardening.md
 ExecPlan: docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaw5e2f84jyjm4j6mdj0
 ```
 
 

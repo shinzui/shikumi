@@ -42,6 +42,7 @@ module Shikumi.Tool
 
     -- * The typed error and the wire round-trip
     ToolError (..),
+    isInfraToolError,
     renderToolError,
     runToolCall,
   )
@@ -61,7 +62,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Effectful (Eff, (:>))
-import Effectful.Error.Static (Error, catchError)
+import Effectful.Error.Static (Error, catchError, throwError)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, toSchema)
@@ -134,9 +135,10 @@ lowerSomeTool :: SomeTool -> B.Tool
 lowerSomeTool (SomeTool t) = lowerTool t
 
 -- | Run an erased tool against a raw JSON arguments object: decode to the hidden
--- @i@, run the body, encode the @o@ to text. Total: a decode failure becomes
--- 'ToolArgsInvalid' and a body that throws a 'ShikumiError' becomes 'ToolRunFailed'
--- — it never throws to the caller.
+-- @i@, run the body, encode the @o@ to text. A decode failure becomes
+-- 'ToolArgsInvalid', a body that throws a recoverable 'ShikumiError' becomes
+-- 'ToolRunFailed', and a body that throws an infrastructure error
+-- ('isInfraToolError') rethrows to abort the caller's loop.
 runErased ::
   (LLM :> es, Error ShikumiError :> es) =>
   SomeTool ->
@@ -147,7 +149,10 @@ runErased (SomeTool t) args =
     Left err -> pure (Left (ToolArgsInvalid (name t) (shikumiErrorText err)))
     Right i ->
       (Right . encodeText <$> run t i)
-        `catchError` \_cs e -> pure (Left (ToolRunFailed (name t) (shikumiErrorText e)))
+        `catchError` \_cs e ->
+          if isInfraToolError e
+            then throwError e
+            else pure (Left (ToolRunFailed (name t) (shikumiErrorText e)))
 
 -- | A heterogeneous tool set, keyed by tool name for O(log n) dispatch.
 newtype ToolRegistry = ToolRegistry (Map Text SomeTool)
@@ -176,10 +181,10 @@ registryTools (ToolRegistry m) = Map.elems m
 -- The typed error and the wire round-trip
 -- ---------------------------------------------------------------------------
 
--- | A tool-call failure carried as a /value/, never an exception. The agent feeds
--- the rendered text back to the model as an observation so it can recover, and
--- records it in the trajectory; only infrastructure faults bubble up as a
--- 'ShikumiError'.
+-- | A tool-call failure carried as a /value/. The agent feeds the rendered text
+-- back to the model as an observation so it can recover, and records it in the
+-- trajectory; infrastructure faults ('isInfraToolError': budget and
+-- context-window exhaustion) bubble up as a 'ShikumiError' and abort the loop.
 data ToolError
   = -- | the model named a tool the registry does not have
     ToolNotFound !Text
@@ -226,3 +231,15 @@ shikumiErrorText = \case
   ContextWindowExceeded t -> t
   Timeout t -> t
   BudgetExceeded t -> t
+
+-- | Which 'ShikumiError's must escape the agent loop rather than become
+-- observations. Budget and context-window exhaustion are infrastructure faults:
+-- the model cannot recover from them by reading an observation, and continuing
+-- the loop would either overspend (budget) or deterministically re-fail
+-- (context window). Everything else is a tool-level failure the model may route
+-- around, so it is fed back as a 'ToolRunFailed' observation.
+isInfraToolError :: ShikumiError -> Bool
+isInfraToolError = \case
+  BudgetExceeded {} -> True
+  ContextWindowExceeded {} -> True
+  _ -> False
