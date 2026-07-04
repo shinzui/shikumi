@@ -44,10 +44,10 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-04T17:35:18Z — Milestone 1: edit `shikumi-cache-postgres/test/Main.hs` — fail-loud skip helper.
 - [x] 2026-07-04T17:35:18Z — Milestone 1: validate both suites in all three modes (backend present; absent+var unset → skip 0; absent+var set → fail 1).
 - [x] 2026-07-04T17:35:18Z — Milestone 1: commit with the required trailers.
-- [ ] Milestone 2: create `.github/workflows/ci.yml` with lint, test, and examples jobs.
-- [ ] Milestone 2: run actionlint over the workflow; fix any findings.
-- [ ] Milestone 2: run the local mirror of every CI step and record transcripts here.
-- [ ] Milestone 2: commit with the required trailers.
+- [x] 2026-07-04T17:41:57Z — Milestone 2: create `.github/workflows/ci.yml` with lint, test, and examples jobs.
+- [x] 2026-07-04T17:41:57Z — Milestone 2: run actionlint over the workflow; fix any findings.
+- [x] 2026-07-04T17:41:57Z — Milestone 2: run the local mirror of every CI step and record transcripts here.
+- [x] 2026-07-04T17:41:57Z — Milestone 2: commit with the required trailers.
 - [ ] Milestone 3: push to GitHub, observe the first run, fix runner-only issues, observe a green run and an effective cache on a second run.
 
 
@@ -56,7 +56,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-04: `cabal run shikumi-jitsurei` is ambiguous because `shikumi-jitsurei` is both
+  the package name and one of the executable names. The workflow and plan now run example
+  targets as `cabal run -v0 "exe:$exe"` so Cabal selects the executable unambiguously.
+  Evidence from the failed first loop:
+
+```text
+=== running shikumi-jitsurei
+Error: [Cabal-7070]
+The run command is for running a single executable at once. The target 'shikumi-jitsurei'
+refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
+```
 
 
 ## Decision Log
@@ -114,6 +124,13 @@ implementation. Provide concise evidence.
   for CI.
   Date: 2026-07-04
 
+- Decision: Run the example smoke job with explicit Cabal executable targets
+  (`cabal run -v0 "exe:$exe"`) instead of bare target names.
+  Rationale: The bare target `shikumi-jitsurei` resolves ambiguously because it names both
+  the package and an executable. The `exe:` qualifier works for all twelve example
+  executables and keeps the local mirror command byte-for-byte aligned with the workflow.
+  Date: 2026-07-04
+
 
 ## Outcomes & Retrospective
 
@@ -139,6 +156,37 @@ SHIKUMI_REQUIRE_BACKENDS=1 cabal test shikumi-cache-redis shikumi-cache-postgres
 shikumi-cache-redis: All 3 tests passed
 shikumi-cache-postgres: All 2 tests passed
 just services-down
+```
+
+- 2026-07-04: Milestone 2 completed. `.github/workflows/ci.yml` now defines `lint`,
+  `test`, and `examples` jobs; `actionlint` passes after rewriting nested `bash -c`
+  scripts so shellcheck can see the intended variable expansion; the local mirror commands
+  passed on `aarch64-darwin`. Validation evidence:
+
+```text
+nix run nixpkgs#actionlint -- .github/workflows/ci.yml
+# no output
+
+nix build -L .#checks.aarch64-darwin.treefmt .#checks.aarch64-darwin.pre-commit
+pre-commit-run> treefmt..................................................................Passed
+treefmt-check> formatted 210 files (0 changed)
+
+nix develop .#ghc9124 --command cabal update
+Package list of hackage.haskell.org is up to date.
+
+nix develop .#ghc9124 --command cabal build all
+# exit 0
+
+SHIKUMI_REQUIRE_BACKENDS=1 nix develop .#ghc9124 --command cabal test all
+shikumi-cache-redis: All 3 tests passed
+shikumi-cache-postgres: All 2 tests passed
+shikumi-cli: All 10 tests passed
+
+for exe in shikumi-jitsurei ... jitsurei-codeexec; do cabal run -v0 "exe:$exe"; done
+=== running shikumi-jitsurei
+=== running jitsurei-predict
+...
+=== running jitsurei-codeexec
 ```
 
 
@@ -415,7 +463,7 @@ jobs:
                        jitsurei-react jitsurei-trace-replay jitsurei-multimodal \
                        jitsurei-streaming jitsurei-adapters jitsurei-codeexec; do
               echo "=== running $exe"
-              cabal run -v0 "$exe"
+              cabal run -v0 "exe:$exe"
             done'
 ```
 
@@ -526,7 +574,7 @@ nix develop .#ghc9124 --command bash -c '
   for exe in shikumi-jitsurei jitsurei-predict jitsurei-compose jitsurei-combinators \
              jitsurei-evaluate jitsurei-optimize jitsurei-react jitsurei-trace-replay \
              jitsurei-multimodal jitsurei-streaming jitsurei-adapters jitsurei-codeexec; do
-    echo "=== running $exe"; cabal run -v0 "$exe"; done'
+    echo "=== running $exe"; cabal run -v0 "exe:$exe"; done'
 ```
 
 Expected: the checks build (first time may compile fourmolu for GHC 9.12.4 — slow once,

@@ -144,7 +144,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 and the milestone.
 
 - [x] EP-48: Milestone 1 — fail-loud skip contract (`SHIKUMI_REQUIRE_BACKENDS`) in the two backend test mains, validated locally in both modes.
-- [ ] EP-48: Milestone 2 — `.github/workflows/ci.yml` with lint, test, and examples jobs; actionlint-clean; local mirror commands pass.
+- [x] EP-48: Milestone 2 — `.github/workflows/ci.yml` with lint, test, and examples jobs; actionlint-clean; local mirror commands pass.
 - [ ] EP-48: Milestone 3 — workflow pushed and observed green on GitHub; caching effective on the second run.
 - [ ] EP-49: Milestone 1 — `shikumi-testing` package builds; its own test suite passes.
 - [ ] EP-49: Milestone 2 — `shikumi-jitsurei` migrated to the shared harness; all 12 examples still run.
