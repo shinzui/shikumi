@@ -38,8 +38,8 @@ This section must always reflect the actual current state of the work.
 - [x] M2: status derived from the recorded response (`Error` for in-band failures, `Ok` otherwise) (completed 2026-07-04)
 - [x] M2: `gen_ai.response.model` read from the recorded response's echoed model; omitted when absent (completed 2026-07-04)
 - [x] M2: open spans ended at their start time with `shikumi.incomplete = true` (completed 2026-07-04)
-- [ ] M3: four new tests (exception-releases-provider, status propagation, open-span handling, cyclic-tree termination) green
-- [ ] Full suite green: `just test-one shikumi-trace-otel`
+- [x] M3: four new tests (exception-releases-provider, status propagation, open-span handling, cyclic-tree termination) green (completed 2026-07-04)
+- [x] Full suite green: `just test-one shikumi-trace-otel` (completed 2026-07-04)
 
 
 ## Surprises & Discoveries
@@ -79,6 +79,8 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
+
+2026-07-04: EP-43 is complete. `exportTreeWith` now brackets tracer-provider lifetime so shutdown runs after export exceptions; `exportTree` terminates on cyclic parent links, marks in-band response failures as `Error`, reads `gen_ai.response.model` from recorded response JSON, and exports never-closed spans with zero duration plus `shikumi.incomplete = true`. The test suite now has six hermetic tests covering the two existing nesting/live-export behaviors and the four new correctness regressions. Validation passed with `cabal build shikumi-trace-otel`, `cabal build shikumi-trace-otel:shikumi-trace-otel-test`, and `just test-one shikumi-trace-otel`.
 
 
 ## Context and Orientation

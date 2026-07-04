@@ -44,7 +44,7 @@ An alternative decomposition — one plan per severity tier — was rejected bec
 | 40 | Cache Key v2 Endpoint Completeness | docs/plans/40-cache-key-v2-endpoint-completeness.md | None | None | Complete |
 | 41 | Unify Cache Backend Semantics | docs/plans/41-unify-cache-backend-semantics.md | None | EP-40 | Complete |
 | 42 | Replay Divergence Detection and Trace Concurrency Safety | docs/plans/42-replay-divergence-detection-and-trace-concurrency-safety.md | EP-40 | None | Complete |
-| 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | In Progress |
+| 43 | OTel Export Correctness Tail | docs/plans/43-otel-export-correctness-tail.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-40, EP-42).
@@ -84,9 +84,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-42: M1 — replay index fails closed on conflicting duplicate keys (tests included)
 - [x] EP-42: M2 — trace state atomic + loud stack-corruption check; concurrency contract documented
 - [x] EP-42: M3 — tail: multi-root rendering, live `bumpRetry`, numeric sibling ordering, v1 trace files accepted
-- [ ] EP-43: M1 — provider released on export exception (bracket)
-- [ ] EP-43: M2 — status propagation, honest response model, open-span handling, cycle guard
-- [ ] EP-43: M3 — four new otel tests green
+- [x] EP-43: M1 — provider released on export exception (bracket)
+- [x] EP-43: M2 — status propagation, honest response model, open-span handling, cycle guard
+- [x] EP-43: M3 — four new otel tests green
 
 
 ## Surprises & Discoveries
@@ -96,6 +96,7 @@ interactions between child plans. Provide concise evidence.
 
 - 2026-07-03: EP-40 completed with v2 digest `b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564` pinned in both `shikumi-cache/test/Main.hs` and `shikumi-trace/test/Main.hs`. `just test-one shikumi-cache`, `just test-one shikumi-trace`, and `just test` all pass; the Redis cache suite skipped loudly because no local Redis socket was reachable.
 - 2026-07-03: EP-41 completed. A released hasql connection can segfault before Haskell exception handling runs, so the Postgres backend now records a closed state and degrades post-close lookup/store without touching a released pointer. Live Redis tests also required distinct operational keys because tasty may run sibling tests concurrently.
+- 2026-07-04: EP-43 completed. The hs-opentelemetry SDK catches span-processor `onEnd` exceptions inside `endSpan`, so the provider-release regression test uses a trace-construction exception to exercise `exportTreeWith`'s bracket finalizer directly. This affects only the otel test design, not the public export contract.
 
 
 ## Decision Log
@@ -123,3 +124,7 @@ Compare the result against the original vision.
 2026-07-03: EP-41 is complete. Cache policy now has uniform TTL semantics through `cachedLLMWith`, error-shaped responses are not memoized, SQLite/Redis/Postgres storage failures degrade instead of escaping, Redis defaults to no server-side expiry, and the server-backed suites advertise skips loudly without changing CI policy ownership.
 
 2026-07-03: EP-42 is complete. Replay now rejects conflicting duplicate-key traces at index-build time, deterministic duplicate calls still replay, trace-state updates are atomic with a loud stack-corruption check, multi-root rendering works, retry counts are recorded, sibling ordering is numeric for `span-N` ids, and additive v1 trace files are readable. `just test-one shikumi-trace` passed 27 tests; `cabal build shikumi-jitsurei shikumi-cli` also passed.
+
+2026-07-04: EP-43 is complete. OTel export now brackets tracer-provider shutdown, exports honest span status and response-model attributes from recorded response JSON, marks open spans as incomplete with zero duration, and terminates on corrupt cyclic trees. `just test-one shikumi-trace-otel` passed all 6 tests.
+
+2026-07-04: The Cache, Trace, and Replay Hardening initiative is complete. All four child ExecPlans are complete: cache keys now include endpoint identity while excluding construction timestamps; cache backends share a best-effort, no-default-eviction contract; replay and trace capture fail closed under duplicate/conflicting data and are safer under concurrency; and OTel export handles provider lifetime, span status, response model attribution, open spans, and malformed trees correctly. The remaining out-of-scope item is unchanged: CI policy for enforcing Redis/Postgres suites belongs to `docs/masterplans/9-ci-and-shared-test-infrastructure.md`.
