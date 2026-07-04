@@ -34,10 +34,10 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] M1: `exportTreeWith` runs export inside `bracket`; provider shut down on all exit paths (completed 2026-07-04)
-- [ ] M2: cycle guard (visited set) in `exportTree`'s walk
-- [ ] M2: status derived from the recorded response (`Error` for in-band failures, `Ok` otherwise)
-- [ ] M2: `gen_ai.response.model` read from the recorded response's echoed model; omitted when absent
-- [ ] M2: open spans ended at their start time with `shikumi.incomplete = true`
+- [x] M2: cycle guard (visited set) in `exportTree`'s walk (completed 2026-07-04)
+- [x] M2: status derived from the recorded response (`Error` for in-band failures, `Ok` otherwise) (completed 2026-07-04)
+- [x] M2: `gen_ai.response.model` read from the recorded response's echoed model; omitted when absent (completed 2026-07-04)
+- [x] M2: open spans ended at their start time with `shikumi.incomplete = true` (completed 2026-07-04)
 - [ ] M3: four new tests (exception-releases-provider, status propagation, open-span handling, cyclic-tree termination) green
 - [ ] Full suite green: `just test-one shikumi-trace-otel`
 

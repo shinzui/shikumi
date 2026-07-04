@@ -43,6 +43,7 @@ library
     Shikumi.Trace.OpenTelemetry
 
   build-depends:
+    , aeson
     , base                                   >=4.20     && <5
     , containers
     , generic-lens
@@ -64,6 +65,7 @@ test-suite shikumi-trace-otel-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
+    , aeson
     , base
     , containers
     , hs-opentelemetry-api                 >=1.0      && <1.1
