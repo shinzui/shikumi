@@ -86,6 +86,7 @@ test-suite shikumi-cli-test
     , containers
     , directory
     , filepath
+    , optparse-applicative
     , shikumi
     , shikumi-cli
     , shikumi-compile

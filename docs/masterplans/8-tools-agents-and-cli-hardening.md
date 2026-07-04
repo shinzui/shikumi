@@ -104,7 +104,7 @@ integration point instead.
 | 44 | Tool Error Posture: Infra Errors Escape the Loop | docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md | None | None | Complete |
 | 45 | Builtin Tool Hardening: Fs, Web, and Timeouts | docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md | None | None | Complete |
 | 46 | ReAct and CodeAct Behavior Fixes | docs/plans/46-react-and-codeact-behavior-fixes.md | None | EP-44 | Complete |
-| 47 | CLI Hardening and CLI-Layer Tests | docs/plans/47-cli-hardening-and-cli-layer-tests.md | None | None | Not Started |
+| 47 | CLI Hardening and CLI-Layer Tests | docs/plans/47-cli-hardening-and-cli-layer-tests.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-44).
@@ -197,8 +197,8 @@ and the milestone.
 - [x] EP-46: M4 — CodeAct error tagging and compaction wiring
 - [x] EP-46: M5 — DSL unary minus + string escapes; guides updated
 - [x] EP-46: M6 — `CodeExecFailed` constructor; programOfThought honest failure
-- [ ] EP-47: M1 — trace-id sanitization and distinct replay failure messages
-- [ ] EP-47: M2 — CLI-layer test suite through `parseCommand`/`dispatch`
+- [x] EP-47: M1 — trace-id sanitization and distinct replay failure messages
+- [x] EP-47: M2 — CLI-layer test suite through `parseCommand`/`dispatch`
 
 
 ## Surprises & Discoveries
@@ -218,6 +218,11 @@ interactions between child plans. Provide concise evidence.
 - EP-46 confirmed that adding the `CodeExecFailed` constructor to core `shikumi`
   required no downstream package edits beyond the planned `shikumiErrorText` and
   `ErrorSpec` updates. `cabal build all` rebuilt dependents successfully.
+  Date: 2026-07-04
+- EP-47 found that handle-duplication stdout/stderr capture was unstable under
+  the Tasty runner on macOS. The CLI now exposes small pure helpers for the
+  validation and replay-message strings, the tests pin those helpers, and manual
+  `exe:shikumi` smokes verify the actual stderr/exit behavior.
   Date: 2026-07-04
 
 
@@ -251,8 +256,6 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
-
 - EP-44 complete: infrastructure errors thrown by tool bodies now escape the tool
   boundary and abort the agent loop; recoverable tool-body errors remain
   observations. Validated with `just test-one shikumi-tools` and `cabal build all`.
@@ -267,4 +270,10 @@ Compare the result against the original vision.
   compacted, the restricted DSL accepts unary minus/string escapes, and
   `programOfThought` now throws `CodeExecFailed`. Validated with `just test-one
   shikumi-tools`, `just test-one shikumi`, and `cabal build all`.
+  Date: 2026-07-04
+- EP-47 complete: trace/replay/record reject path-escaping trace ids before path
+  construction, replay failure messages distinguish replayed-run and reference-run
+  errors, and the CLI layer now has parser/helper plus dispatch store-dir tests.
+  Validated with `just test-one shikumi-cli`, manual invalid-trace CLI smokes, and
+  `cabal build all`.
   Date: 2026-07-04

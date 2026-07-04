@@ -8,6 +8,8 @@ module Shikumi.Cli.Run
     runOptimizeCmd,
     runReplayCmd,
     runRecordCmd,
+    validTraceId,
+    replayFailureMessage,
   )
 where
 
@@ -54,21 +56,22 @@ runEval reg _g (EvalOpts name) =
 
 -- | @trace@: load a recorded trace by id (the program name) and render its tree.
 runTraceCmd :: GlobalOpts -> TraceOpts -> IO ()
-runTraceCmd g (TraceOpts tid) = do
-  let path = traceFilePath g tid
-  exists <- doesFileExist path
-  if not exists
-    then die ("No trace found with id: " <> tid <> " (looked for " <> T.pack path <> "; run `shikumi record --program " <> tid <> "` first)")
-    else do
-      e <- readTraceFile path
-      case e of
-        Left err -> die err
-        Right tree -> do
-          TIO.putStr ("Trace " <> tid <> "\n\n" <> renderTree tree)
-          when (otel g) $ do
-            exportTreeLive "shikumi" tree
-            ep <- otlpEndpointForMessage
-            TIO.putStrLn ("\nExported " <> tshow (Map.size (spans tree)) <> " spans via OTLP to " <> ep)
+runTraceCmd g (TraceOpts tid) =
+  withValidTraceId tid $ \ok -> do
+    let path = traceFilePath g ok
+    exists <- doesFileExist path
+    if not exists
+      then die ("No trace found with id: " <> ok <> " (looked for " <> T.pack path <> "; run `shikumi record --program " <> ok <> "` first)")
+      else do
+        e <- readTraceFile path
+        case e of
+          Left err -> die err
+          Right tree -> do
+            TIO.putStr ("Trace " <> ok <> "\n\n" <> renderTree tree)
+            when (otel g) $ do
+              exportTreeLive "shikumi" tree
+              ep <- otlpEndpointForMessage
+              TIO.putStrLn ("\nExported " <> tshow (Map.size (spans tree)) <> " spans via OTLP to " <> ep)
 
 -- | @optimize@: run the named optimizer over the task and save the compiled program.
 runOptimizeCmd :: Registry -> GlobalOpts -> OptimizeOpts -> IO ()
@@ -103,39 +106,41 @@ runOptimizeCmd reg _g (OptimizeOpts name optName out) =
 -- provider calls.
 runReplayCmd :: Registry -> GlobalOpts -> ReplayOpts -> IO ()
 runReplayCmd reg g (ReplayOpts tid) =
-  withTask reg tid $ \(Task prog _ds _metric input responder _opts) -> do
-    let path = traceFilePath g tid
-    exists <- doesFileExist path
-    if not exists
-      then die ("No trace found with id: " <> tid <> " (run `shikumi record --program " <> tid <> "` first)")
-      else do
-        loaded <- readTraceFile path
-        case loaded of
-          Left err -> die err
-          Right tree -> do
-            replayed <- runReplayProgram tree prog input
-            reference <- runStubProgram responder prog input
-            case (replayed, reference) of
-              (Right ro, Right refo) -> do
-                TIO.putStrLn ("Replaying " <> tid <> " (program \"" <> tid <> "\")\n")
-                TIO.putStrLn ("Output:\n" <> encodeText ro)
-                if encode ro == encode refo
-                  then TIO.putStrLn "\nreplay: output identical to recorded run, provider calls: 0"
-                  else die "replay: output DIFFERS from recorded run"
-              _ -> die "replay failed (program error during replay or reference run)"
+  withValidTraceId tid $ \ok ->
+    withTask reg ok $ \(Task prog _ds _metric input responder _opts) -> do
+      let path = traceFilePath g ok
+      exists <- doesFileExist path
+      if not exists
+        then die ("No trace found with id: " <> ok <> " (run `shikumi record --program " <> ok <> "` first)")
+        else do
+          loaded <- readTraceFile path
+          case loaded of
+            Left err -> die err
+            Right tree -> do
+              replayed <- runReplayProgram tree prog input
+              reference <- runStubProgram responder prog input
+              case (replayed, reference) of
+                (Right ro, Right refo) -> do
+                  TIO.putStrLn ("Replaying " <> ok <> " (program \"" <> ok <> "\")\n")
+                  TIO.putStrLn ("Output:\n" <> encodeText ro)
+                  if encode ro == encode refo
+                    then TIO.putStrLn "\nreplay: output identical to recorded run, provider calls: 0"
+                    else die "replay: output DIFFERS from recorded run"
+                _ -> maybe (die "replay failed") die (replayFailureMessage replayed reference)
 
 -- | @record@: capture a trace fixture offline (run the program under the stub LM)
 -- and persist it under the store directory.
 runRecordCmd :: Registry -> GlobalOpts -> RecordOpts -> IO ()
 runRecordCmd reg g (RecordOpts name) =
-  withTask reg name $ \(Task prog _ds _metric input responder _opts) -> do
-    (res, tree) <- recordTrace responder name prog input
-    createDirectoryIfMissing True (storeDir g)
-    let path = traceFilePath g name
-    writeTraceFile path tree
-    case res of
-      Left e -> die ("recorded trace, but the run errored: " <> tshow e)
-      Right () -> TIO.putStrLn ("Recorded trace to " <> T.pack path)
+  withValidTraceId name $ \ok ->
+    withTask reg ok $ \(Task prog _ds _metric input responder _opts) -> do
+      (res, tree) <- recordTrace responder ok prog input
+      createDirectoryIfMissing True (storeDir g)
+      let path = traceFilePath g ok
+      writeTraceFile path tree
+      case res of
+        Left e -> die ("recorded trace, but the run errored: " <> tshow e)
+        Right () -> TIO.putStrLn ("Recorded trace to " <> T.pack path)
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -156,6 +161,28 @@ withTask reg name k = case lookupTask name reg of
 -- | The on-disk path for a trace id under the store directory.
 traceFilePath :: GlobalOpts -> Text -> FilePath
 traceFilePath g tid = storeDir g </> T.unpack tid <.> "json"
+
+-- | Reject trace ids that could escape the store directory when spliced into a
+-- path. Trace ids double as program names, so this is a reject-list, not an
+-- allow-list.
+validTraceId :: Text -> Either Text Text
+validTraceId tid
+  | T.null tid = Left "trace id must not be empty"
+  | tid == "." = Left "trace id must not be \".\""
+  | "/" `T.isInfixOf` tid = Left "trace id must not contain path separators"
+  | "\\" `T.isInfixOf` tid = Left "trace id must not contain path separators"
+  | ".." `T.isInfixOf` tid = Left "trace id must not contain \"..\""
+  | otherwise = Right tid
+
+withValidTraceId :: Text -> (Text -> IO ()) -> IO ()
+withValidTraceId tid k = case validTraceId tid of
+  Left reason -> die ("Invalid trace id: " <> tid <> " (" <> reason <> ")")
+  Right ok -> k ok
+
+replayFailureMessage :: (Show a) => Either a o -> Either a o -> Maybe Text
+replayFailureMessage (Left err) _ = Just ("replay failed: the replayed run errored: " <> tshow err)
+replayFailureMessage _ (Left err) = Just ("replay failed: the reference (stub) run errored: " <> tshow err)
+replayFailureMessage _ _ = Nothing
 
 encodeText :: (ToJSON a) => a -> Text
 encodeText = decodeUtf8 . BL.toStrict . encode
