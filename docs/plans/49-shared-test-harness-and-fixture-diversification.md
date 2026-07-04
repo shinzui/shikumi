@@ -4,7 +4,7 @@ slug: shared-test-harness-and-fixture-diversification
 title: "Shared Test Harness and Fixture Diversification"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 master_plan: "docs/masterplans/9-ci-and-shared-test-infrastructure.md"
 ---
 
@@ -207,7 +207,7 @@ Every commit must use a Conventional Commits subject line and carry these traile
 ```text
 MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md
 ExecPlan: docs/plans/49-shared-test-harness-and-fixture-diversification.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0
 ```
 
 ### Milestone 1 — the `shikumi-testing` package
@@ -688,7 +688,7 @@ git add shikumi-testing cabal.project agents/skills/release/SKILL.md
 git commit -m "feat(testing): add shikumi-testing shared stub-LM harness and non-trivial fixtures" \
   -m "MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md" \
   -m "ExecPlan: docs/plans/49-shared-test-harness-and-fixture-diversification.md" \
-  -m "Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+  -m "Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 ```
 
 Milestone 2 (capture a before-transcript first):
