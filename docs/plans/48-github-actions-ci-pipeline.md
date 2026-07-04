@@ -50,7 +50,8 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: commit with the required trailers.
 - [x] 2026-07-04T18:56:48Z — Milestone 3: pushed initial workflow; lint passed; canceled the test job after 73 minutes in silent first-run dev-shell realization.
 - [x] 2026-07-04T19:22:39Z — Milestone 3: pushed lean `ghc9124-ci` shell; canceled replacement run after 19 minutes because CI still was not using `shinzui.cachix.org`.
-- [ ] Milestone 3: push Cachix-based workflow (`shinzui.cachix.org` + optional push token); observe green run and cache behavior on a second run.
+- [x] 2026-07-04T19:54:02Z — Milestone 3: pushed Cachix-based workflow; canceled run `28717147420` after 18m32s in the redundant standalone `cabal build all` step, after Cachix/Nix setup and `cabal update` had completed.
+- [ ] Milestone 3: push test-only Cachix workflow (`cabal test all` + example smoke); observe green run and cache behavior on a second run.
 
 
 ## Surprises & Discoveries
@@ -86,6 +87,13 @@ refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
   `flake.nix` `nixConfig` block matching other shinzui projects. Local validation:
   `actionlint` passes and `nix fmt` reports zero changes.
 
+- 2026-07-04: After Cachix was wired in, run `28717147420` got through
+  `cachix/install-nix-action@v31`, `cachix/cachix-action@v17`, cabal cache restore, and
+  `cabal update`, then spent 18m32s in the explicit `cabal build all` step before I
+  canceled it. That step duplicates the compile path for the following `cabal test all`
+  and delays the cache save. The workflow now lets the test command own the build needed
+  for tests, while the examples job still exercises all twelve executables.
+
 
 ## Decision Log
 
@@ -100,6 +108,14 @@ refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
   The action uses `secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN` when present to
   push new paths, but cache reads work from the public `shinzui` cache without a secret.
   Date: 2026-07-01
+
+- Decision: Do not run a standalone `cabal build all` step before `cabal test all` in CI.
+  Rationale: `cabal test all` already builds the libraries and test suites it runs, and
+  the separate examples job builds/runs every example executable. The standalone build
+  step made the first cached run spend 18m32s compiling before backend tests could even
+  start, so it delayed both feedback and the Cabal cache save without adding a distinct
+  acceptance signal.
+  Date: 2026-07-04
 
 - Decision: The skip-fail contract is the environment variable `SHIKUMI_REQUIRE_BACKENDS`.
   Unset, empty, or `"0"` preserves today's clean-skip behavior; any other value makes the
@@ -403,8 +419,10 @@ prefix restore key so an old cache still warms a changed build. The test job exp
 `SHIKUMI_REQUIRE_BACKENDS=1` (the Milestone 1 contract), starts Redis as a daemon on the
 dev shell's `$REDIS_SOCKET` (flags copied from `process-compose.yaml`: `--port 0`
 disables TCP, `--save ""` disables persistence), waits for `PING`/`PONG`, then runs
-`cabal test all`. The `examples` job `needs: test` so it restores the cabal cache the
-test job saved, then runs all twelve `shikumi-jitsurei` executables under
+`cabal test all`; there is intentionally no standalone `cabal build all` step because the
+test command builds the libraries and test suites it needs. The `examples` job `needs:
+test` so it restores the cabal cache the test job saved, then runs all twelve
+`shikumi-jitsurei` executables under
 `set -euo pipefail`, so any non-zero exit fails the job. The lint job builds the two
 flake checks (`treefmt`, `pre-commit`) for `x86_64-linux`, which is exactly what the local
 pre-commit hook enforces.
@@ -446,7 +464,7 @@ jobs:
             .#checks.x86_64-linux.pre-commit
 
   test:
-    name: build and test (GHC 9.12.4, CI shell)
+    name: test (GHC 9.12.4, CI shell)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
@@ -475,8 +493,6 @@ jobs:
             cabal-${{ runner.os }}-
       - name: Refresh the Hackage index
         run: nix develop -L .#ghc9124-ci --command cabal update
-      - name: Build all packages
-        run: nix develop -L .#ghc9124-ci --command cabal build all
       - name: Start Redis on the dev-shell UNIX socket
         run: |
           nix develop -L .#ghc9124-ci --command bash -c "
@@ -630,7 +646,6 @@ order (this is the documented local validation of the workflow's substance):
 ```bash
 nix build -L .#checks.aarch64-darwin.treefmt .#checks.aarch64-darwin.pre-commit  # use your local system attr
 nix develop -L .#ghc9124-ci --command cabal update
-nix develop -L .#ghc9124-ci --command cabal build all
 just services-up      # local stand-in for the workflow's redis-server step
 SHIKUMI_REQUIRE_BACKENDS=1 nix develop -L .#ghc9124-ci --command cabal test all
 just services-down
@@ -649,7 +664,7 @@ each program's deterministic output and exits 0. Commit the workflow:
 
 ```bash
 git add .github/workflows/ci.yml
-git commit -m "ci: add github actions pipeline (lint, build+test, examples smoke)" \
+git commit -m "ci: add github actions pipeline (lint, tests, examples smoke)" \
   -m "MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md" \
   -m "ExecPlan: docs/plans/48-github-actions-ci-pipeline.md" \
   -m "Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0"

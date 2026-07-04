@@ -89,8 +89,9 @@ Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-48).
 EP-48 and EP-49 are independent: neither compiles against artifacts of the other, and either
 can be implemented first from a clean checkout. There is one soft dependency, from EP-49 on
 EP-48: the new `shikumi-testing` package is added to `cabal.project`, so once EP-48's
-workflow exists, `cabal build all` / `cabal test all` in CI automatically builds and tests
-it — meaning EP-49's work is CI-verified only if EP-48 has landed. For that reason land
+workflow exists, `cabal test all` in CI automatically builds and tests it, and the
+separate example smoke job exercises the example executables — meaning EP-49's work is
+CI-verified only if EP-48 has landed. For that reason land
 EP-48 first when scheduling permits; if EP-49 lands first, nothing breaks, but its
 verification is local-only until the workflow arrives. There are no hard dependencies and
 the two plans deliberately touch disjoint files (see Integration Points), so they can also
@@ -170,6 +171,12 @@ interactions between child plans. Provide concise evidence.
   existing `shinzui.cachix.org` binary cache used by other shinzui projects. EP-48 now
   configures `shinzui.cachix.org` in both `flake.nix` and the workflow via
   `cachix/install-nix-action@v31` plus `cachix/cachix-action@v17`.
+
+- 2026-07-04: The first Cachix-backed run (`28717147420`) got through Nix/Cachix setup
+  and `cabal update`, then was canceled after 18m32s in the standalone `cabal build all`
+  step. EP-48 removed that redundant pre-test build: CI now runs `cabal test all` with
+  backend coverage required, then the example smoke job builds/runs all twelve example
+  executables.
 
 
 ## Decision Log
