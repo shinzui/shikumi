@@ -77,7 +77,7 @@ blind spot this initiative exists to close.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 48 | GitHub Actions CI Pipeline | docs/plans/48-github-actions-ci-pipeline.md | None | None | In Progress |
+| 48 | GitHub Actions CI Pipeline | docs/plans/48-github-actions-ci-pipeline.md | None | None | Complete |
 | 49 | Shared Test Harness and Fixture Diversification | docs/plans/49-shared-test-harness-and-fixture-diversification.md | None | EP-48 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -146,7 +146,7 @@ and the milestone.
 
 - [x] EP-48: Milestone 1 — fail-loud skip contract (`SHIKUMI_REQUIRE_BACKENDS`) in the two backend test mains, validated locally in both modes.
 - [x] EP-48: Milestone 2 — `.github/workflows/ci.yml` with lint, test, and examples jobs; actionlint-clean; local mirror commands pass.
-- [ ] EP-48: Milestone 3 — workflow pushed and observed green on GitHub; caching effective on the second run.
+- [x] EP-48: Milestone 3 — workflow pushed and observed green on GitHub; caching effective on the second run.
 - [ ] EP-49: Milestone 1 — `shikumi-testing` package builds; its own test suite passes.
 - [ ] EP-49: Milestone 2 — `shikumi-jitsurei` migrated to the shared harness; all 12 examples still run.
 - [ ] EP-49: Milestone 3 — `shikumi-cli` migrated; its tests pass.
@@ -177,6 +177,12 @@ interactions between child plans. Provide concise evidence.
   step. EP-48 removed that redundant pre-test build: CI now runs `cabal test all` with
   backend coverage required, then the example smoke job builds/runs all twelve example
   executables.
+
+- 2026-07-04: EP-48's final workflow run (`28717666675`) completed green and proved the
+  cache behavior. The first successful attempt ran `lint` in 1m28s, `test` in 19m56s, and
+  `examples` in 3m1s. The test job used `shinzui.cachix.org`, ran both backend suites
+  under `SHIKUMI_REQUIRE_BACKENDS=1`, and saved a 436 MB Cabal/dist cache. A rerun restored
+  the primary cache key and completed `test` in 1m46s and `examples` in 2m32s.
 
 
 ## Decision Log
@@ -231,4 +237,9 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+- 2026-07-04: EP-48 is complete. The repository now has a GitHub Actions workflow with
+  lint, full test, and example-smoke jobs on pushes to `master` and pull requests. CI uses
+  the lean `ghc9124-ci` Nix shell, `shinzui.cachix.org` through Cachix, and a GitHub
+  Actions Cabal/dist cache. Redis and Postgres backend suites now fail loudly in CI if
+  their backend would skip, and the green run `28717666675` verified that both suites ran
+  real assertions rather than producing `[SKIP]` output. EP-49 remains not started.

@@ -51,7 +51,7 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-04T18:56:48Z — Milestone 3: pushed initial workflow; lint passed; canceled the test job after 73 minutes in silent first-run dev-shell realization.
 - [x] 2026-07-04T19:22:39Z — Milestone 3: pushed lean `ghc9124-ci` shell; canceled replacement run after 19 minutes because CI still was not using `shinzui.cachix.org`.
 - [x] 2026-07-04T19:54:02Z — Milestone 3: pushed Cachix-based workflow; canceled run `28717147420` after 18m32s in the redundant standalone `cabal build all` step, after Cachix/Nix setup and `cabal update` had completed.
-- [ ] Milestone 3: push test-only Cachix workflow (`cabal test all` + example smoke); observe green run and cache behavior on a second run.
+- [x] 2026-07-04T20:18:08Z — Milestone 3: pushed test-only Cachix workflow (`cabal test all` + example smoke); first run green and rerun confirmed warmed cache behavior.
 
 
 ## Surprises & Discoveries
@@ -93,6 +93,24 @@ refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
   canceled it. That step duplicates the compile path for the following `cabal test all`
   and delays the cache save. The workflow now lets the test command own the build needed
   for tests, while the examples job still exercises all twelve executables.
+
+- 2026-07-04: The final pushed workflow proved both cache layers. Run `28717666675`
+  completed green on its first attempt: the test job finished in 19m56s, ran the Redis and
+  Postgres backend suites with `SHIKUMI_REQUIRE_BACKENDS=1`, and saved a 436 MB Cabal
+  cache. The examples job restored that cache and finished in 3m1s. A rerun of the same
+  workflow restored the primary cache key in both jobs; the test job finished in 1m46s and
+  the examples job in 2m32s. Evidence from the rerun includes:
+
+```text
+Cache hit for: cabal-Linux-ccdf9d51b876046259814e00c348b7af9b4f359c779d80c459ac5d66b8dba352
+Cache Size: ~436 MB (456905560 B)
+Cache restored successfully
+memoize: first request MISS (provider once), repeat is a Redis HIT: OK
+Test suite shikumi-cache-redis-test: PASS
+memoize: first request MISS (provider once), repeat is a Postgres HIT: OK
+Test suite shikumi-cache-postgres-test: PASS
+Cache hit occurred on the primary key cabal-Linux-ccdf9d51b876046259814e00c348b7af9b4f359c779d80c459ac5d66b8dba352, not saving cache.
+```
 
 
 ## Decision Log
@@ -255,6 +273,14 @@ nix develop -L .#ghc9124-ci --command bash -c 'for exe in ...; do cabal run -v0 
 ...
 === running jitsurei-codeexec
 ```
+
+- 2026-07-04: Milestone 3 completed. The GitHub Actions pipeline is live and green on
+  GitHub with the intended cache setup. Run `28717666675` first completed green with
+  `lint` in 1m28s, `test` in 19m56s, and `examples` in 3m1s. The test job used
+  `shinzui.cachix.org` during Nix realization, ran Redis and Postgres backend tests for
+  real under `SHIKUMI_REQUIRE_BACKENDS=1`, and saved the Cabal/dist cache. A rerun of the
+  same workflow restored the primary Cabal cache key and completed `test` in 1m46s and
+  `examples` in 2m32s. No `[SKIP]` or `[FAIL]` lines appeared in the backend test logs.
 
 
 ## Context and Orientation
