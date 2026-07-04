@@ -157,7 +157,13 @@ and the milestone.
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- 2026-07-04: EP-48's first GitHub run proved the lint job, but the test job spent 73
+  minutes in the first `nix develop .#ghc9124 --command cabal update` step before being
+  canceled. The interactive `ghc9124` shell includes HLS; CI needs only the compiler,
+  cabal, service binaries, and shell hook. EP-48 now adds `devShells.<system>.ghc9124-ci`
+  with `withHls = false` and uses `nix develop -L` so cache misses show Nix progress.
+  Evidence: run `28714435132` had `lint` success, then test job step `Refresh the Hackage
+  index` ran from `2026-07-04T17:43:31Z` until cancellation at `2026-07-04T18:56:41Z`.
 
 
 ## Decision Log

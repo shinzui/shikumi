@@ -21,9 +21,9 @@
     let
       hsdev = inputs.haskell-nix-dev.lib.${system};
 
-      mkProjectShell = ghc: hsdev.mkDevShell {
+      mkProjectShell = { ghc, withHls ? true }: hsdev.mkDevShell {
         inherit ghc;
-        withHls = true;
+        inherit withHls;
         extraNativeBuildInputs =
           [
             # project dev tools beyond the mkDevShell defaults:
@@ -78,7 +78,9 @@
       };
     in
     {
-      devShells.default = mkProjectShell "ghc9124";
-      devShells.ghc9124 = mkProjectShell "ghc9124";
+      devShells.default = mkProjectShell { ghc = "ghc9124"; };
+      devShells.ghc9124 = mkProjectShell { ghc = "ghc9124"; };
+      # CI needs the compiler, cabal, and service binaries, but not editor tooling.
+      devShells.ghc9124-ci = mkProjectShell { ghc = "ghc9124"; withHls = false; };
     };
 }

@@ -28,7 +28,7 @@ jobs:
             .#checks.x86_64-linux.pre-commit
 
   test:
-    name: build and test (GHC 9.12.4, dev shell)
+    name: build and test (GHC 9.12.4, CI shell)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
@@ -52,12 +52,12 @@ jobs:
           restore-keys: |
             cabal-${{ runner.os }}-
       - name: Refresh the Hackage index
-        run: nix develop .#ghc9124 --command cabal update
+        run: nix develop -L .#ghc9124-ci --command cabal update
       - name: Build all packages
-        run: nix develop .#ghc9124 --command cabal build all
+        run: nix develop -L .#ghc9124-ci --command cabal build all
       - name: Start Redis on the dev-shell UNIX socket
         run: |
-          nix develop .#ghc9124 --command bash -c "
+          nix develop -L .#ghc9124-ci --command bash -c "
             set -euo pipefail
             redis-server --port 0 --unixsocket \"\$REDIS_SOCKET\" \
               --unixsocketperm 700 --daemonize yes --save \"\"
@@ -68,7 +68,7 @@ jobs:
             echo \"redis did not become ready on \$REDIS_SOCKET\" >&2
             exit 1"
       - name: Test all packages (backend suites must run, not skip)
-        run: nix develop .#ghc9124 --command cabal test all
+        run: nix develop -L .#ghc9124-ci --command cabal test all
 
   examples:
     name: smoke (shikumi-jitsurei examples)
@@ -95,7 +95,7 @@ jobs:
             cabal-${{ runner.os }}-
       - name: Run all 12 example executables
         run: |
-          nix develop .#ghc9124 --command bash -c "
+          nix develop -L .#ghc9124-ci --command bash -c "
             set -euo pipefail
             for exe in shikumi-jitsurei jitsurei-predict jitsurei-compose \
                        jitsurei-combinators jitsurei-evaluate jitsurei-optimize \

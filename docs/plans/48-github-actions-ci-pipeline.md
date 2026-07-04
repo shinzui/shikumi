@@ -48,7 +48,8 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: run actionlint over the workflow; fix any findings.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: run the local mirror of every CI step and record transcripts here.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: commit with the required trailers.
-- [ ] Milestone 3: push to GitHub, observe the first run, fix runner-only issues, observe a green run and an effective cache on a second run.
+- [x] 2026-07-04T18:56:48Z — Milestone 3: pushed initial workflow; lint passed; canceled the test job after 73 minutes in silent first-run dev-shell realization.
+- [ ] Milestone 3: push the lean `ghc9124-ci` shell; observe the replacement run green and cache behavior on a second run.
 
 
 ## Surprises & Discoveries
@@ -67,6 +68,15 @@ Error: [Cabal-7070]
 The run command is for running a single executable at once. The target 'shikumi-jitsurei'
 refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
 ```
+
+- 2026-07-04: The first GitHub Actions push proved the lint job, but the test job spent
+  73 minutes in the first `nix develop .#ghc9124 --command cabal update` step before I
+  canceled it. That shell includes HLS for editor use; CI needs only the compiler, cabal,
+  and service binaries. The workflow now uses a new `ghc9124-ci` shell (`withHls = false`)
+  and passes `-L` to `nix develop` so cache misses show build progress instead of a silent
+  Hackage-refresh step. Evidence: run `28714435132` had lint success, then the test job's
+  `Refresh the Hackage index` step ran from `2026-07-04T17:43:31Z` to cancellation at
+  `2026-07-04T18:56:41Z`.
 
 
 ## Decision Log
@@ -107,11 +117,13 @@ refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
   Date: 2026-07-01
 
 - Decision: Keep the matrix minimal — `ubuntu-latest` only, one toolchain (the dev shell's
-  GHC 9.12.4). Use `nix develop .#ghc9124 --command ...` for every build/test/run step so
-  CI uses byte-for-byte the toolchain developers use.
+  GHC 9.12.4). Use `nix develop .#ghc9124-ci --command ...` for every build/test/run step
+  so CI uses the same compiler, cabal, service binaries, and shell hook as developers, but
+  omits HLS.
   Rationale: the flake pins exactly one compiler; a matrix would multiply cost without
   adding signal. macOS runners are slow and expensive and the team develops on darwin
-  locally anyway.
+  locally anyway. HLS is editor tooling, not part of the build/test contract, and it made
+  the first Linux runner spend 73 minutes in shell realization before any Cabal work.
   Date: 2026-07-01
 
 - Decision: Preserve the expanded local skip banners that already existed in the Redis and
@@ -189,6 +201,36 @@ for exe in shikumi-jitsurei ... jitsurei-codeexec; do cabal run -v0 "exe:$exe"; 
 === running jitsurei-codeexec
 ```
 
+- 2026-07-04: Runner-only fix validated locally. The flake now exposes
+  `devShells.aarch64-darwin.ghc9124-ci`; actionlint still passes; and the build, full
+  test suite, and all example smokes pass through `nix develop -L .#ghc9124-ci`. Key
+  evidence:
+
+```text
+nix flake show --json
+devShells.aarch64-darwin.ghc9124-ci
+
+nix run nixpkgs#actionlint -- .github/workflows/ci.yml
+# no output
+
+nix develop -L .#ghc9124-ci --command cabal update
+Package list of hackage.haskell.org is up to date.
+
+nix develop -L .#ghc9124-ci --command cabal build all
+# exit 0
+
+SHIKUMI_REQUIRE_BACKENDS=1 nix develop -L .#ghc9124-ci --command cabal test all
+shikumi-cache-redis: All 3 tests passed
+shikumi-cache-postgres: All 2 tests passed
+shikumi-tools: All 70 tests passed
+shikumi: All 141 tests passed
+
+nix develop -L .#ghc9124-ci --command bash -c 'for exe in ...; do cabal run -v0 "exe:$exe"; done'
+=== running shikumi-jitsurei
+...
+=== running jitsurei-codeexec
+```
+
 
 ## Context and Orientation
 
@@ -203,11 +245,13 @@ Hackage; nothing needs a sibling repository checkout.
 
 The toolchain does not come from the runner's system packages. `flake.nix` (with modules
 under `nix/`) defines a Nix development shell — a reproducible environment entered with
-`nix develop .#ghc9124` — that provides GHC 9.12.4, cabal, and the service binaries
+`nix develop .#ghc9124` — that provides GHC 9.12.4, cabal, HLS, and the service binaries
 (`nix/haskell.nix` adds `postgresql`, `redis`, `process-compose`, `just`, and friends).
-The system `ghc` is explicitly the wrong compiler (see the comment at the top of
-`cabal.project`). Every CI step that builds, tests, or runs Haskell therefore wraps its
-command as `nix develop .#ghc9124 --command <cmd>`.
+The same module also exposes `nix develop .#ghc9124-ci`, a CI shell with the same compiler,
+cabal, service binaries, and shell hook, but with HLS disabled. The system `ghc` is
+explicitly the wrong compiler (see the comment at the top of `cabal.project`). Every CI
+step that builds, tests, or runs Haskell therefore wraps its command as
+`nix develop -L .#ghc9124-ci --command <cmd>`.
 
 The dev shell's `shellHook` (in `nix/haskell.nix`) exports service environment variables
 whenever the shell is entered: `SHIKUMI_DEV_DIR=$PWD/.dev`, `PGHOST=$SHIKUMI_DEV_DIR/pg`
@@ -389,7 +433,7 @@ jobs:
             .#checks.x86_64-linux.pre-commit
 
   test:
-    name: build and test (GHC 9.12.4, dev shell)
+    name: build and test (GHC 9.12.4, CI shell)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
@@ -413,23 +457,23 @@ jobs:
           restore-keys: |
             cabal-${{ runner.os }}-
       - name: Refresh the Hackage index
-        run: nix develop .#ghc9124 --command cabal update
+        run: nix develop -L .#ghc9124-ci --command cabal update
       - name: Build all packages
-        run: nix develop .#ghc9124 --command cabal build all
+        run: nix develop -L .#ghc9124-ci --command cabal build all
       - name: Start Redis on the dev-shell UNIX socket
         run: |
-          nix develop .#ghc9124 --command bash -c '
+          nix develop -L .#ghc9124-ci --command bash -c "
             set -euo pipefail
-            redis-server --port 0 --unixsocket "$REDIS_SOCKET" \
+            redis-server --port 0 --unixsocket \"\$REDIS_SOCKET\" \
               --unixsocketperm 700 --daemonize yes --save ""
-            for _ in $(seq 1 20); do
-              if redis-cli -s "$REDIS_SOCKET" ping >/dev/null 2>&1; then exit 0; fi
+            for _ in \$(seq 1 20); do
+              if redis-cli -s \"\$REDIS_SOCKET\" ping >/dev/null 2>&1; then exit 0; fi
               sleep 0.5
             done
-            echo "redis did not become ready on $REDIS_SOCKET" >&2
-            exit 1'
+            echo \"redis did not become ready on \$REDIS_SOCKET\" >&2
+            exit 1"
       - name: Test all packages (backend suites must run, not skip)
-        run: nix develop .#ghc9124 --command cabal test all
+        run: nix develop -L .#ghc9124-ci --command cabal test all
 
   examples:
     name: smoke (shikumi-jitsurei examples)
@@ -456,15 +500,15 @@ jobs:
             cabal-${{ runner.os }}-
       - name: Run all 12 example executables
         run: |
-          nix develop .#ghc9124 --command bash -c '
+          nix develop -L .#ghc9124-ci --command bash -c "
             set -euo pipefail
             for exe in shikumi-jitsurei jitsurei-predict jitsurei-compose \
                        jitsurei-combinators jitsurei-evaluate jitsurei-optimize \
                        jitsurei-react jitsurei-trace-replay jitsurei-multimodal \
                        jitsurei-streaming jitsurei-adapters jitsurei-codeexec; do
-              echo "=== running $exe"
-              cabal run -v0 "exe:$exe"
-            done'
+              echo \"=== running \$exe\"
+              cabal run -v0 \"exe:\$exe\"
+            done"
 ```
 
 Two notes the implementer should be ready for. First, verify the flake check names before
@@ -498,7 +542,9 @@ the store before saving) — and record whatever you did in Surprises & Discover
 
 All commands run at the repository root, `/…/shikumi` (the directory containing
 `cabal.project`). Enter the dev shell once per terminal with `nix develop .#ghc9124`, or
-prefix individual commands with `nix develop .#ghc9124 --command`.
+prefix individual development commands with `nix develop .#ghc9124 --command`. The CI
+mirror commands below intentionally use `nix develop -L .#ghc9124-ci --command` so they
+exercise the same lean shell used by GitHub Actions.
 
 Milestone 1, edit then verify the three modes. Make sure no dev Redis is up first:
 
@@ -564,12 +610,12 @@ order (this is the documented local validation of the workflow's substance):
 
 ```bash
 nix build -L .#checks.aarch64-darwin.treefmt .#checks.aarch64-darwin.pre-commit  # use your local system attr
-nix develop .#ghc9124 --command cabal update
-nix develop .#ghc9124 --command cabal build all
+nix develop -L .#ghc9124-ci --command cabal update
+nix develop -L .#ghc9124-ci --command cabal build all
 just services-up      # local stand-in for the workflow's redis-server step
-SHIKUMI_REQUIRE_BACKENDS=1 nix develop .#ghc9124 --command cabal test all
+SHIKUMI_REQUIRE_BACKENDS=1 nix develop -L .#ghc9124-ci --command cabal test all
 just services-down
-nix develop .#ghc9124 --command bash -c '
+nix develop -L .#ghc9124-ci --command bash -c '
   set -euo pipefail
   for exe in shikumi-jitsurei jitsurei-predict jitsurei-compose jitsurei-combinators \
              jitsurei-evaluate jitsurei-optimize jitsurei-react jitsurei-trace-replay \
@@ -643,7 +689,7 @@ the key (e.g. temporarily prefixing `v2-`) or deleting the cache entry in the re
 Actions → Caches UI. If the first GitHub run times out building the toolchain, re-run the
 job: the store cache saved by the partial run (cache-nix-action saves even on failure
 only if configured — otherwise the run must complete; if this bites, split a warm-up
-commit that only runs `nix develop .#ghc9124 --command true`). If GitHub Actions is
+commit that only runs `nix develop -L .#ghc9124-ci --command true`). If GitHub Actions is
 unavailable, nothing in the repo is degraded — the workflow file is inert locally.
 
 
@@ -654,12 +700,13 @@ GitHub-side: `actions/checkout@v4`, `DeterminateSystems/nix-installer-action@v16
 `restore-prefixes-first-match`, optional `gc-max-store-size-linux`), `actions/cache@v4`
 (inputs `path`, `key`, `restore-keys`). No secrets are required; nothing publishes.
 
-Repo-side: the flake outputs consumed are `devShells.<system>.ghc9124` (from
-`nix/haskell.nix`; `default` is an alias) and `checks.<system>.{treefmt,pre-commit}`
-(from `nix/treefmt.nix` and `nix/pre-commit.nix`). The service contract consumed is the
-dev-shell environment: `REDIS_SOCKET` (path the redis suite dials), `PGHOST`/`PGDATA`/
-`PGDATABASE` (used by `ephemeral-pg`'s host tooling and the optional manual server), all
-exported by the `shellHook` in `nix/haskell.nix`.
+Repo-side: the flake outputs consumed are `devShells.<system>.ghc9124-ci` (from
+`nix/haskell.nix`, same GHC/cabal/service tooling and shell hook as `ghc9124` but with
+HLS disabled) and `checks.<system>.{treefmt,pre-commit}` (from `nix/treefmt.nix` and
+`nix/pre-commit.nix`). The service contract consumed is the dev-shell environment:
+`REDIS_SOCKET` (path the redis suite dials), `PGHOST`/`PGDATA`/`PGDATABASE` (used by
+`ephemeral-pg`'s host tooling and the optional manual server), all exported by the
+`shellHook` in `nix/haskell.nix`.
 
 Contract defined by this plan (consumed by the workflow, implemented in the two test
 mains): environment variable `SHIKUMI_REQUIRE_BACKENDS` — unset/empty/`"0"` permits a
