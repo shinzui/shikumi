@@ -4,7 +4,7 @@ slug: ci-and-shared-test-infrastructure
 title: "CI and Shared Test Infrastructure"
 kind: master-plan
 created_at: 2026-07-02T03:29:36Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 ---
 
 # CI and Shared Test Infrastructure
@@ -77,7 +77,7 @@ blind spot this initiative exists to close.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 48 | GitHub Actions CI Pipeline | docs/plans/48-github-actions-ci-pipeline.md | None | None | Not Started |
+| 48 | GitHub Actions CI Pipeline | docs/plans/48-github-actions-ci-pipeline.md | None | None | In Progress |
 | 49 | Shared Test Harness and Fixture Diversification | docs/plans/49-shared-test-harness-and-fixture-diversification.md | None | EP-48 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -143,7 +143,7 @@ with no sibling-repo checkout.
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone.
 
-- [ ] EP-48: Milestone 1 — fail-loud skip contract (`SHIKUMI_REQUIRE_BACKENDS`) in the two backend test mains, validated locally in both modes.
+- [x] EP-48: Milestone 1 — fail-loud skip contract (`SHIKUMI_REQUIRE_BACKENDS`) in the two backend test mains, validated locally in both modes.
 - [ ] EP-48: Milestone 2 — `.github/workflows/ci.yml` with lint, test, and examples jobs; actionlint-clean; local mirror commands pass.
 - [ ] EP-48: Milestone 3 — workflow pushed and observed green on GitHub; caching effective on the second run.
 - [ ] EP-49: Milestone 1 — `shikumi-testing` package builds; its own test suite passes.

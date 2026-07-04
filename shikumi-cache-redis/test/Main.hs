@@ -6,7 +6,8 @@
 -- The test connects to the UNIX socket named by @REDIS_SOCKET@ (set by the dev
 -- shell; started by @just services@). When the variable is unset or no server is
 -- reachable, the suite __skips cleanly__ (prints a notice and exits 0) so CI
--- without a Redis stays green — exactly the graceful-skip the plan requires.
+-- without a Redis stays green, unless @SHIKUMI_REQUIRE_BACKENDS@ is set (CI sets
+-- it), in which case the skip becomes a failure.
 module Main (main) where
 
 import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options, _Response)
@@ -42,7 +43,8 @@ import Shikumi.Cache.Backend.Redis
 import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (lookupEnv)
-import System.Exit (exitSuccess)
+import System.Exit (exitFailure, exitSuccess)
+import System.IO (hPutStrLn, stderr)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -87,17 +89,23 @@ main = do
           closeRedisCache cache
   where
     skip reason = do
-      let banner = replicate 72 '='
-      mapM_
-        putStrLn
-        [ banner,
-          "== SKIPPED: shikumi-cache-redis test suite ran ZERO tests",
-          "== reason: " <> reason,
-          "== to run for real: `just services-up` inside `nix develop .#ghc9124`",
-          "== CI enforcement of this skip is owned by docs/masterplans/9-ci-and-shared-test-infrastructure.md",
-          banner
-        ]
-      exitSuccess
+      required <- lookupEnv "SHIKUMI_REQUIRE_BACKENDS"
+      if maybe False (`notElem` ["", "0"]) required
+        then do
+          hPutStrLn stderr ("[FAIL] shikumi-cache-redis: SHIKUMI_REQUIRE_BACKENDS is set but " <> reason)
+          exitFailure
+        else do
+          let banner = replicate 72 '='
+          mapM_
+            putStrLn
+            [ banner,
+              "== SKIPPED: shikumi-cache-redis test suite ran ZERO tests",
+              "== reason: " <> reason,
+              "== to run for real: `just services-up` inside `nix develop .#ghc9124`",
+              "== CI enforcement of this skip is owned by docs/masterplans/9-ci-and-shared-test-infrastructure.md",
+              banner
+            ]
+          exitSuccess
 
 -- | Delete any entry a previous run left for the fixed request, via a throwaway
 -- connection, so the MISS→HIT counter starts honest.

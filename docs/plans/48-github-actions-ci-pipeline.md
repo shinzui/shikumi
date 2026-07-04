@@ -4,7 +4,7 @@ slug: github-actions-ci-pipeline
 title: "GitHub Actions CI Pipeline"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 master_plan: "docs/masterplans/9-ci-and-shared-test-infrastructure.md"
 ---
 
@@ -40,10 +40,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: edit `shikumi-cache-redis/test/Main.hs` — fail-loud skip helper.
-- [ ] Milestone 1: edit `shikumi-cache-postgres/test/Main.hs` — fail-loud skip helper.
-- [ ] Milestone 1: validate both suites in all three modes (backend present; absent+var unset → skip 0; absent+var set → fail 1).
-- [ ] Milestone 1: commit with the required trailers.
+- [x] 2026-07-04T17:35:18Z — Milestone 1: edit `shikumi-cache-redis/test/Main.hs` — fail-loud skip helper.
+- [x] 2026-07-04T17:35:18Z — Milestone 1: edit `shikumi-cache-postgres/test/Main.hs` — fail-loud skip helper.
+- [x] 2026-07-04T17:35:18Z — Milestone 1: validate both suites in all three modes (backend present; absent+var unset → skip 0; absent+var set → fail 1).
+- [x] 2026-07-04T17:35:18Z — Milestone 1: commit with the required trailers.
 - [ ] Milestone 2: create `.github/workflows/ci.yml` with lint, test, and examples jobs.
 - [ ] Milestone 2: run actionlint over the workflow; fix any findings.
 - [ ] Milestone 2: run the local mirror of every CI step and record transcripts here.
@@ -104,13 +104,42 @@ implementation. Provide concise evidence.
   locally anyway.
   Date: 2026-07-01
 
+- Decision: Preserve the expanded local skip banners that already existed in the Redis and
+  Postgres backend suites, and add the CI-required failure path only when
+  `SHIKUMI_REQUIRE_BACKENDS` is set.
+  Rationale: The checked-in tests had more explicit skip output than the original plan
+  snippet: they state that zero tests ran and point developers at the command needed to run
+  the suite for real. Keeping that output preserves local ergonomics, while the new
+  required-backend branch still prints the concise `[FAIL] ...` stderr line and exits 1
+  for CI.
+  Date: 2026-07-04
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-07-04: Milestone 1 completed. `SHIKUMI_REQUIRE_BACKENDS` now converts Redis and
+  Postgres backend-suite skips into failures while preserving clean local skips when the
+  variable is unset, empty, or `"0"`. Validation evidence:
+
+```text
+cabal test shikumi-cache-redis
+== SKIPPED: shikumi-cache-redis test suite ran ZERO tests
+Test suite shikumi-cache-redis-test: PASS
+
+SHIKUMI_REQUIRE_BACKENDS=1 cabal test shikumi-cache-redis
+[FAIL] shikumi-cache-redis: SHIKUMI_REQUIRE_BACKENDS is set but no Redis reachable at socket .../.dev/redis/redis.sock
+Test suite shikumi-cache-redis-test: FAIL
+exit: 1
+
+just services-up
+SHIKUMI_REQUIRE_BACKENDS=1 cabal test shikumi-cache-redis shikumi-cache-postgres
+shikumi-cache-redis: All 3 tests passed
+shikumi-cache-postgres: All 2 tests passed
+just services-down
+```
 
 
 ## Context and Orientation
@@ -189,7 +218,7 @@ own line at the end of the commit message:
 ```text
 MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md
 ExecPlan: docs/plans/48-github-actions-ci-pipeline.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0
 ```
 
 ### Milestone 1 — fail-loud skip contract in the backend test mains
@@ -471,7 +500,7 @@ git add shikumi-cache-redis/test/Main.hs shikumi-cache-postgres/test/Main.hs
 git commit -m "test(cache): fail loudly on backend-suite skips when SHIKUMI_REQUIRE_BACKENDS is set" \
   -m "MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md" \
   -m "ExecPlan: docs/plans/48-github-actions-ci-pipeline.md" \
-  -m "Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+  -m "Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 ```
 
 Milestone 2, create the workflow and lint it:
@@ -510,7 +539,7 @@ git add .github/workflows/ci.yml
 git commit -m "ci: add github actions pipeline (lint, build+test, examples smoke)" \
   -m "MasterPlan: docs/masterplans/9-ci-and-shared-test-infrastructure.md" \
   -m "ExecPlan: docs/plans/48-github-actions-ci-pipeline.md" \
-  -m "Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+  -m "Intention: intention_01kwjfeb1pe8qbvb8vx7v1xdx0"
 ```
 
 Milestone 3, push and watch (requires the repo to exist on GitHub with Actions enabled):
