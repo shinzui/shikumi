@@ -6,6 +6,13 @@
 -- Filesystem and process-backed tools should depend on this record instead of
 -- calling the host operating system directly. A future sandbox can provide a
 -- different 'ToolEnv' value while the tool definitions stay unchanged.
+--
+-- Security posture: 'localToolEnv' is deliberately non-hermetic. It has full
+-- access to the host filesystem paths and inherited environment visible to the
+-- current process, and it can execute arbitrary shell commands with the current
+-- user's privileges. Its filesystem and process IO is performed inside the
+-- @(LLM, Error ShikumiError)@ row via 'unsafeEff_'. Supply a different 'ToolEnv'
+-- to confine tools; this module is the sandboxing seam, not the sandbox.
 module Shikumi.Tool.Env
   ( Path,
     EnvRow,
@@ -68,7 +75,8 @@ data FileStat = FileStat
 
 data DirEntry = DirEntry
   { name :: !Text,
-    isDir :: !Bool
+    isDir :: !Bool,
+    isSymlink :: !Bool
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToJSON)
@@ -101,7 +109,7 @@ localToolEnv =
 
 localExec :: (EnvRow es) => ExecRequest -> Eff es ExecResult
 localExec req = do
-  let effectiveTimeoutMs = timeoutMsOrDefault (req ^. #timeoutMs)
+  let effectiveTimeoutMs = effectiveTimeout (req ^. #timeoutMs)
   result <-
     toolIO "exec" $
       Timeout.timeout (effectiveTimeoutMs * 1000) $
@@ -145,8 +153,10 @@ localReaddir path = toolIO "readdir" $ do
   names <- Dir.listDirectory dir
   traverse
     ( \entry -> do
-        isDir <- Dir.doesDirectoryExist (dir <> "/" <> entry)
-        pure DirEntry {name = T.pack entry, isDir}
+        let child = dir <> "/" <> entry
+        isSymlink <- Dir.pathIsSymbolicLink child
+        isDir <- Dir.doesDirectoryExist child
+        pure DirEntry {name = T.pack entry, isDir, isSymlink}
     )
     names
 
@@ -170,8 +180,17 @@ toolIO label action = do
     Left (err :: IOException) ->
       throwError (ProviderFailure ("tool env: " <> label <> ": " <> T.pack (show err)))
 
-timeoutMsOrDefault :: Maybe Int -> Int
-timeoutMsOrDefault = maybe 60000 id
+-- | Clamp a model-supplied timeout into [1 ms, 'maxExecTimeoutMs']. Unclamped,
+-- a non-positive value disables the timeout entirely and a huge value can
+-- overflow the microsecond multiplication in 'localExec'.
+effectiveTimeout :: Maybe Int -> Int
+effectiveTimeout = max 1 . min maxExecTimeoutMs . maybe defaultExecTimeoutMs id
+
+defaultExecTimeoutMs :: Int
+defaultExecTimeoutMs = 60000
+
+maxExecTimeoutMs :: Int
+maxExecTimeoutMs = 600000
 
 exitCodeInt :: ExitCode -> Int
 exitCodeInt ExitSuccess = 0

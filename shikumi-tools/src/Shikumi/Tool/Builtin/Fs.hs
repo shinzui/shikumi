@@ -121,6 +121,7 @@ data GrepReq = GrepReq
 instance ToSchema GrepReq where
   toSchema _ =
     toolInputSchema
+      ["pattern"]
       [ ("pattern", toSchema (Proxy :: Proxy Text)),
         ("path", toSchema (Proxy :: Proxy (Maybe Text))),
         ("glob", toSchema (Proxy :: Proxy (Maybe Text))),
@@ -162,6 +163,7 @@ data GlobReq = GlobReq
 instance ToSchema GlobReq where
   toSchema _ =
     toolInputSchema
+      ["pattern"]
       [ ("pattern", toSchema (Proxy :: Proxy Text)),
         ("path", toSchema (Proxy :: Proxy (Maybe Text)))
       ]
@@ -189,7 +191,7 @@ readTool env =
         start = max 0 (maybe 0 id (req ^. #offset))
         afterOffset = drop start allLines
         selected = maybe afterOffset (`take` afterOffset) (req ^. #limit)
-        wasTruncated = start > 0 || length selected < length afterOffset
+        wasTruncated = length selected < length afterOffset
     pure ReadResp {content = T.unlines selected, lineCount = length selected, truncated = wasTruncated}
 
 writeTool :: ToolEnv -> Tool WriteReq WriteResp
@@ -286,15 +288,15 @@ globFast env root pat = do
         }
   if result ^. #exitCode == 0
     then do
-      let found = take maxResults (filter (not . T.null) (T.lines (result ^. #stdout)))
-      pure (Just GlobResp {paths = sort found, truncated = length found >= maxResults})
+      let (found, wasTruncated) = capResults maxResults (filter (not . T.null) (T.lines (result ^. #stdout)))
+      pure (Just GlobResp {paths = sort found, truncated = wasTruncated})
     else pure Nothing
 
 grepFallback :: (EnvRow es) => ToolEnv -> Text -> GrepReq -> Eff es GrepResp
 grepFallback env root req = do
   regex <- compileRegex (req ^. #patternText) (maybe False id (req ^. #ignoreCase))
   paths <- walkFiles env root
-  let globOk p = maybe True (`globMatches` p) (req ^. #glob)
+  let globOk p = maybe True (\g -> globMatches root g p) (req ^. #glob)
   matches <-
     fmap concat $
       traverse
@@ -304,14 +306,14 @@ grepFallback env root req = do
               else pure []
         )
         paths
-  let limited = take maxResults matches
-  pure GrepResp {matches = limited, truncated = length matches > maxResults}
+  let (limited, wasTruncated) = capResults maxResults matches
+  pure GrepResp {matches = limited, truncated = wasTruncated}
 
 globFallback :: (EnvRow es) => ToolEnv -> Text -> Text -> Eff es GlobResp
 globFallback env root pat = do
   paths <- walkFiles env root
-  let found = sort (take maxResults (filter (globMatches pat) paths))
-  pure GlobResp {paths = found, truncated = length found >= maxResults}
+  let (found, wasTruncated) = capResults maxResults (filter (globMatches root pat) paths)
+  pure GlobResp {paths = sort found, truncated = wasTruncated}
 
 grepFile :: (EnvRow es) => ToolEnv -> Regex -> Text -> Eff es [GrepMatch]
 grepFile env regex filePath = do
@@ -330,6 +332,8 @@ grepFile env regex filePath = do
             ]
     _ -> pure []
 
+-- | Walk regular files under a root without following directory symlinks. This
+-- mirrors fd's default posture and prevents symlink cycles from multiplying work.
 walkFiles :: (EnvRow es) => ToolEnv -> Text -> Eff es [Text]
 walkFiles env root = go 0 root
   where
@@ -341,7 +345,7 @@ walkFiles env root = go 0 root
             traverse
               ( \entry -> do
                   let child = joinPathText dir (entry ^. #name)
-                  if entry ^. #isDir
+                  if entry ^. #isDir && not (entry ^. #isSymlink)
                     then
                       if skipDirName (entry ^. #name)
                         then pure []
@@ -352,8 +356,8 @@ walkFiles env root = go 0 root
 
 parseRgJson :: Text -> GrepResp
 parseRgJson output =
-  let matches = take maxResults (mapMaybe parseLine (T.lines output))
-   in GrepResp {matches, truncated = length matches >= maxResults}
+  let (matches, wasTruncated) = capResults maxResults (mapMaybe parseLine (T.lines output))
+   in GrepResp {matches, truncated = wasTruncated}
   where
     parseLine line = do
       Object obj <- either (const Nothing) Just (eitherDecodeStrict (TE.encodeUtf8 line))
@@ -376,18 +380,32 @@ compileRegex pat ignoreCase =
 regexMatches :: Regex -> Text -> Bool
 regexMatches regex haystack = matchTest regex (T.unpack haystack)
 
-globMatches :: Text -> Text -> Bool
-globMatches pat candidate =
-  T.unpack candidate =~ ("^" <> T.unpack (globToRegex pat) <> "$" :: String)
+globMatches :: Text -> Text -> Text -> Bool
+globMatches root pat candidate
+  | "/" `T.isInfixOf` pat = matchGlob pat (relativeTo root candidate)
+  | otherwise = matchGlob pat (basenameOf candidate)
+
+matchGlob :: Text -> Text -> Bool
+matchGlob pat s =
+  T.unpack s =~ ("^" <> T.unpack (globToRegex pat) <> "$" :: String)
 
 globToRegex :: Text -> Text
 globToRegex = go . T.unpack
   where
     go [] = ""
+    go ('*' : '*' : '/' : rest) = "(.*/)?" <> go rest
     go ('*' : '*' : rest) = ".*" <> go rest
     go ('*' : rest) = "[^/]*" <> go rest
     go ('?' : rest) = "[^/]" <> go rest
     go (c : rest) = T.pack (escapeRegex c) <> go rest
+
+relativeTo :: Text -> Text -> Text
+relativeTo root path =
+  let rootSlash = T.dropWhileEnd (== '/') root <> "/"
+   in maybe path id (T.stripPrefix rootSlash path)
+
+basenameOf :: Text -> Text
+basenameOf = snd . T.breakOnEnd "/"
 
 replaceFirstCount :: Text -> Text -> Text -> (Text, Int)
 replaceFirstCount old new src =
@@ -442,12 +460,17 @@ escapeRegex c
 throwValidation :: (EnvRow es) => Text -> Eff es a
 throwValidation = throwError . ValidationFailure
 
-toolInputSchema :: [(Text, Value)] -> Value
-toolInputSchema fields =
+capResults :: Int -> [a] -> ([a], Bool)
+capResults n xs =
+  let (kept, rest) = splitAt n xs
+   in (kept, not (null rest))
+
+toolInputSchema :: [Text] -> [(Text, Value)] -> Value
+toolInputSchema requiredFields fields =
   object
     [ "type" .= ("object" :: Text),
       "properties" .= object (map (\(key, value) -> Key.fromText key .= value) fields),
-      "required" .= (["pattern"] :: [Text]),
+      "required" .= requiredFields,
       "additionalProperties" .= False
     ]
 

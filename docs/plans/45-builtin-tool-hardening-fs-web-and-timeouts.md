@@ -4,7 +4,7 @@ slug: builtin-tool-hardening-fs-web-and-timeouts
 title: "Builtin Tool Hardening Fs Web and Timeouts"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeaw5e2f84jyjm4j6mdj0"
 master_plan: "docs/masterplans/8-tools-agents-and-cli-hardening.md"
 ---
 
@@ -52,21 +52,22 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 here, even if it requires splitting a partially completed task into two ("done" vs.
 "remaining"). This section must always reflect the actual current state of the work.
 
-- [ ] M1: rewrite `globMatches`/`globToRegex` in Fs.hs to basename-or-path semantics;
+- [x] M1: rewrite `globMatches`/`globToRegex` in Fs.hs to basename-or-path semantics;
       update the two fallback call sites.
-- [ ] M1: FsSpec parity tests with a non-`**` pattern across fast and fallback paths.
-- [ ] M2: add `FetchPolicy`, `defaultFetchPolicy`, `checkFetchUrl`, `readCapped`,
+- [x] M1: FsSpec parity tests with a non-`**` pattern across fast and fallback paths.
+- [x] M2: add `FetchPolicy`, `defaultFetchPolicy`, `checkFetchUrl`, `readCapped`,
       `localWebClientWith` to Web.hs; stream the body with a cap.
-- [ ] M2: WebSpec tests for the policy and the capped reader.
-- [ ] M3: clamp exec timeout in Env.hs; EnvSpec test for a negative timeout.
-- [ ] M3: truthful `truncated` flags in Fs.hs (`capResults` helper, readTool fix);
+- [x] M2: WebSpec tests for the policy and the capped reader.
+- [x] M3: clamp exec timeout in Env.hs; EnvSpec test for a negative timeout.
+- [x] M3: truthful `truncated` flags in Fs.hs (`capResults` helper, readTool fix);
       FsSpec tests.
-- [ ] M3: symlink guard — `isSymlink` on `DirEntry`, walkFiles skips symlinked dirs;
+- [x] M3: symlink guard — `isSymlink` on `DirEntry`, walkFiles skips symlinked dirs;
       FsSpec cycle test.
-- [ ] M4: parametrize `toolInputSchema`'s required list; pin request schemas in a test.
-- [ ] M4: security-posture module docs in Shell.hs and Env.hs; correct the
+- [x] M4: parametrize `toolInputSchema`'s required list; pin request schemas in a test.
+- [x] M4: security-posture module docs in Shell.hs and Env.hs; correct the
       Interpreter.hs IOE-row claim.
-- [ ] Final: `just test-one shikumi-tools` green; commits with required trailers.
+- [x] Final: `just test-one shikumi-tools` green; `cabal build all` green; commit with
+      required trailers. (2026-07-04)
 
 
 ## Surprises & Discoveries
@@ -74,7 +75,12 @@ here, even if it requires splitting a partially completed task into two ("done" 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: `http-client`'s `parseRequest` defaults to `Either SomeException`,
+  not `Either HttpException`; the fetch-policy URL parse uses `SomeException`,
+  while the real network path still catches `HttpException` in `httpIO`. Evidence:
+  `cabal build shikumi-tools` rejected an `Either HttpException Request` type
+  annotation before the correction.
+  Date: 2026-07-04
 
 
 ## Decision Log
@@ -113,7 +119,22 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Outcome: EP-45 is complete. The fallback fs matcher now mirrors rg/fd basename
+  and root-relative path semantics; result caps and read offsets report
+  `truncated` truthfully; directory symlinks are not followed; exec timeouts are
+  clamped; `web_fetch` applies a default SSRF policy and streams through
+  `readCapped`; request schemas are pinned; and the shell/env/interpreter docs
+  describe the real non-hermetic posture.
+
+```text
+just test-one shikumi-tools
+All 60 tests passed
+
+cabal build all
+EXIT 0
+```
+
+  Date: 2026-07-04
 
 
 ## Context and Orientation
@@ -520,7 +541,7 @@ fix(tools): unify fallback glob semantics with rg/fd (basename + ** aware)
 
 MasterPlan: docs/masterplans/8-tools-agents-and-cli-hardening.md
 ExecPlan: docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeaw5e2f84jyjm4j6mdj0
 ```
 
 ```text
@@ -538,7 +559,7 @@ docs(tools): security posture for bash/local env; correct interpreter row claim
 (Every commit gets the same three trailers: `MasterPlan:
 docs/masterplans/8-tools-agents-and-cli-hardening.md`, `ExecPlan:
 docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md`, `Intention:
-intention_01kwgdyxm7ehh8yys1pp4wf1zr`.)
+intention_01kwjfeaw5e2f84jyjm4j6mdj0`.)
 
 Expected suite tail when done (names indicative):
 

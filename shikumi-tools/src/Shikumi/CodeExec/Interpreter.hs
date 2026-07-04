@@ -22,10 +22,13 @@
 -- to enforce, at minimum: no network; no host filesystem access beyond a single fresh
 -- scratch dir; no environment inheritance; CPU/memory/wall-clock limits (killing the
 -- child and surfacing a 'Shikumi.Error.Timeout'); and loud failure (any limit breach
--- becomes a 'Shikumi.Error.ShikumiError', never a silent empty result). Because such
--- a subprocess needs @IOE@, which the @Embed@ row lacks, it could only be offered
--- through a separate @IOE@-bearing entry point, never inside the composable
--- @programOfThought@/@codeAct@ programs.
+-- becomes a 'Shikumi.Error.ShikumiError', never a silent empty result). The effect
+-- row does not type-enforce purity: the built-in tool environments already perform
+-- real IO inside the same row via 'Shikumi.Tool.Env.toolIO' and
+-- 'Shikumi.Tool.Web.httpIO'. The hermeticity of the shipped interpreters is a
+-- property of their construction, so any future subprocess interpreter must be
+-- gated by explicit configuration and documentation, not assumed impossible by the
+-- types.
 --
 -- == The restricted DSL
 --

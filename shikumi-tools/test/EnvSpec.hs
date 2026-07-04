@@ -8,6 +8,7 @@ import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as T
 import MockLLM (runEffMock)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Tool.Env
   ( DirEntry,
     ExecRequest (..),
@@ -74,7 +75,21 @@ tests =
             nestedGone @?= True
             execResult ^. #exitCode @?= 0
             assertBool "exec stdout includes hello" ("hello" `T.isInfixOf` (execResult ^. #stdout))
-            assertBool "cwd returns an absolute path" ("/" `T.isPrefixOf` cwd)
+            assertBool "cwd returns an absolute path" ("/" `T.isPrefixOf` cwd),
+      testCase "a negative exec timeout is clamped, not disabled" $ do
+        result <-
+          runEffMock [] $
+            envExec
+              localToolEnv
+              ExecRequest
+                { command = "sleep 2",
+                  cwd = Nothing,
+                  stdin = Nothing,
+                  timeoutMs = Just (-1)
+                }
+        case result of
+          Left (Timeout msg) -> assertBool "timeout message names timeout" ("timed out" `T.isInfixOf` msg)
+          other -> assertFailure ("expected Timeout for clamped negative timeout, got " <> show other)
     ]
 
 freshTempDir :: IO FilePath

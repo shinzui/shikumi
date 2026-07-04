@@ -2,9 +2,10 @@
 
 module FsSpec (tests) where
 
-import Control.Exception (bracket)
+import Control.Exception (IOException, bracket, try)
 import Control.Lens ((^.))
 import Data.ByteString qualified as BS
+import Data.Foldable (traverse_)
 import Data.List (sort)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -119,7 +120,85 @@ tests =
                 GrepReq {patternText = "[", path = Just (T.pack root), glob = Nothing, ignoreCase = Nothing}
           case result of
             Left (ValidationFailure msg) -> assertBool "mentions invalid regex" ("invalid regex" `T.isInfixOf` msg)
-            other -> assertFailure ("expected ValidationFailure, got " <> show other)
+            other -> assertFailure ("expected ValidationFailure, got " <> show other),
+      testCase "fast and fallback agree on non-** glob patterns" $
+        withTempDir "glob-parity" $ \root -> do
+          let top = T.pack (root </> "top.txt")
+              nestedDir = T.pack (root </> "sub")
+              nested = T.pack (root </> "sub" </> "nested.txt")
+          result <-
+            runEffMock [] $ do
+              envWriteFile localToolEnv top "marker top\n"
+              envMkdir localToolEnv nestedDir
+              envWriteFile localToolEnv nested "marker nested\n"
+              fastGlob <- run (globTool localToolEnv) GlobReq {patternText = "*.txt", path = Just (T.pack root)}
+              fallbackGlob <- run (globTool noFastToolEnv) GlobReq {patternText = "*.txt", path = Just (T.pack root)}
+              fastGrep <-
+                run
+                  (grepTool localToolEnv)
+                  GrepReq {patternText = "marker", path = Just (T.pack root), glob = Just "*.txt", ignoreCase = Nothing}
+              fallbackGrep <-
+                run
+                  (grepTool noFastToolEnv)
+                  GrepReq {patternText = "marker", path = Just (T.pack root), glob = Just "*.txt", ignoreCase = Nothing}
+              relativeGlob <- run (globTool noFastToolEnv) GlobReq {patternText = "sub/*.txt", path = Just (T.pack root)}
+              pure (fastGlob, fallbackGlob, fastGrep, fallbackGrep, relativeGlob)
+          case result of
+            Left err -> assertFailure ("glob parity failed: " <> show err)
+            Right (fastGlob, fallbackGlob, fastGrep, fallbackGrep, relativeGlob) -> do
+              sort (fastGlob ^. #paths) @?= sort [top, nested]
+              sort (fallbackGlob ^. #paths) @?= sort [top, nested]
+              normalizeMatches (fastGrep ^. #matches) @?= normalizeMatches (fallbackGrep ^. #matches)
+              assertBool "grep sees nested txt file" (any (\m -> m ^. #file == nested) (fallbackGrep ^. #matches))
+              relativeGlob ^. #paths @?= [nested],
+      testCase "read truncated flag reflects omitted trailing lines only" $
+        withTempDir "read-truncated" $ \root -> do
+          let file = T.pack (root </> "three.txt")
+          result <-
+            runEffMock [] $ do
+              envWriteFile localToolEnv file "one\ntwo\nthree\n"
+              offsetToEnd <- run (readTool localToolEnv) ReadReq {path = file, offset = Just 1, limit = Nothing}
+              firstLine <- run (readTool localToolEnv) ReadReq {path = file, offset = Just 0, limit = Just 1}
+              pure (offsetToEnd, firstLine)
+          case result of
+            Left err -> assertFailure ("read failed: " <> show err)
+            Right (offsetToEnd, firstLine) -> do
+              offsetToEnd ^. #content @?= "two\nthree\n"
+              offsetToEnd ^. #truncated @?= False
+              firstLine ^. #content @?= "one\n"
+              firstLine ^. #truncated @?= True,
+      testCase "glob at exactly maxResults is not marked truncated" $
+        withTempDir "glob-cap" $ \root -> do
+          result <-
+            runEffMock [] $ do
+              traverse_
+                ( \n ->
+                    envWriteFile
+                      localToolEnv
+                      (T.pack (root </> ("f" <> show (n :: Int) <> ".txt")))
+                      "x"
+                )
+                [0 .. 999]
+              run (globTool noFastToolEnv) GlobReq {patternText = "*.txt", path = Just (T.pack root)}
+          case result of
+            Left err -> assertFailure ("glob failed: " <> show err)
+            Right resp -> do
+              length (resp ^. #paths) @?= 1000
+              resp ^. #truncated @?= False,
+      testCase "walk does not follow directory symlinks" $
+        withTempDir "symlink-loop" $ \root -> do
+          let file = T.pack (root </> "real.txt")
+          created <- try (Dir.createDirectoryLink root (root </> "loop")) :: IO (Either IOException ())
+          case created of
+            Left _ -> assertBool "directory symlink creation unsupported; skipping" True
+            Right () -> do
+              result <-
+                runEffMock [] $ do
+                  envWriteFile localToolEnv file "real\n"
+                  run (globTool noFastToolEnv) GlobReq {patternText = "*.txt", path = Just (T.pack root)}
+              case result of
+                Left err -> assertFailure ("glob failed: " <> show err)
+                Right resp -> resp ^. #paths @?= [file]
     ]
 
 withTempDir :: FilePath -> (FilePath -> IO a) -> IO a

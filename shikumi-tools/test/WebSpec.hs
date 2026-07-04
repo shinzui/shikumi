@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module WebSpec (tests) where
@@ -5,10 +6,13 @@ module WebSpec (tests) where
 import Baikai (ToolCall, _ToolCall)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
+import Data.ByteString qualified as BS
 import Data.Generics.Labels ()
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import MockLLM (runEffMock)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Tool (SomeTool (..), ToolRegistry, mkRegistry, runToolCall)
 import Shikumi.Tool.Builtin.Web (webFetchTool, webSearchTool)
 import Shikumi.Tool.Web
@@ -16,12 +20,15 @@ import Shikumi.Tool.Web
     SearchHit (..),
     SearchResult (..),
     WebClient (..),
+    checkFetchUrl,
+    defaultFetchPolicy,
     localWebClient,
     newTlsManager,
+    readCapped,
   )
 import System.Environment (lookupEnv)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertFailure, testCase)
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tc :: Text -> Value -> ToolCall
 tc nm args = _ToolCall & #name .~ nm & #arguments .~ args
@@ -63,6 +70,38 @@ tests =
             assertBool "observation includes title" ("Stub Result" `T.isInfixOf` obs)
             assertBool "observation includes url" ("https://example.test/result" `T.isInfixOf` obs)
           other -> assertFailure ("expected web_search observation, got " <> show other),
+      testCase "default fetch policy refuses metadata, loopback, and private hosts" $ do
+        checkFetchUrl defaultFetchPolicy "https://example.com/x" @?= Right ()
+        assertDenied "ftp://example.com"
+        assertDenied "http://localhost:8080/"
+        assertDenied "http://127.0.0.1/"
+        assertDenied "http://169.254.169.254/latest/meta-data/"
+        assertDenied "http://192.168.1.5/"
+        assertDenied "http://172.20.0.1/",
+      testCase "readCapped stops at the cap without draining the stream" $ do
+        countRef <- newIORef (0 :: Int)
+        (bytes, wasTruncated) <- readCapped 2048 (countedInfiniteChunk countRef)
+        count <- readIORef countRef
+        BS.length bytes @?= 2048
+        wasTruncated @?= True
+        assertBool "consumed at most one chunk past cap" (count <= 3),
+      testCase "readCapped reports exact cap as not truncated when stream ends" $ do
+        ref <- newIORef [BS.replicate 1024 97, BS.replicate 1024 98, BS.empty]
+        (bytes, wasTruncated) <- readCapped 2048 (popChunk ref)
+        BS.length bytes @?= 2048
+        wasTruncated @?= False,
+      testCase "fetch of a denied URL fails fast with ValidationFailure" $ do
+        manager <- newTlsManager
+        result <-
+          runEffMock [] $
+            webFetch
+              (localWebClient manager Nothing)
+              "http://169.254.169.254/latest/meta-data/"
+              Nothing
+        case result of
+          Left (ValidationFailure msg) ->
+            assertBool "mentions policy refusal" ("refused by fetch policy" `T.isInfixOf` msg)
+          other -> assertFailure ("expected ValidationFailure from fetch policy, got " <> show other),
       testCase "live web_fetch is gated by SHIKUMI_NET_TESTS" $ do
         enabled <- lookupEnv "SHIKUMI_NET_TESTS"
         case enabled of
@@ -81,6 +120,23 @@ tests =
               Right (Left err) -> assertFailure ("live web_fetch returned tool error: " <> show err)
               Left err -> assertFailure ("live web_fetch failed: " <> show err)
     ]
+
+assertDenied :: Text -> IO ()
+assertDenied url =
+  case checkFetchUrl defaultFetchPolicy url of
+    Left _ -> pure ()
+    Right () -> assertFailure ("expected fetch policy to deny " <> T.unpack url)
+
+countedInfiniteChunk :: IORef Int -> IO BS.ByteString
+countedInfiniteChunk ref = do
+  atomicModifyIORef' ref (\n -> (n + 1, ()))
+  pure (BS.replicate 1024 120)
+
+popChunk :: IORef [BS.ByteString] -> IO BS.ByteString
+popChunk ref =
+  atomicModifyIORef' ref $ \case
+    [] -> ([], BS.empty)
+    x : xs -> (xs, x)
 
 stubRegistry :: ToolRegistry
 stubRegistry = mkRegistry [SomeTool (webFetchTool stubWebClient), SomeTool (webSearchTool stubWebClient)]

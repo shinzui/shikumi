@@ -1,4 +1,11 @@
 -- | Built-in shell tool over 'ToolEnv.exec'.
+--
+-- Security posture: 'bashTool' executes arbitrary model-chosen shell commands
+-- through the supplied 'ToolEnv', with whatever filesystem access, environment,
+-- and process privileges that environment grants. With 'localToolEnv' this is
+-- deliberately non-hermetic host execution for trusted, local, single-operator
+-- workflows. Sandboxing is achieved by supplying a confining 'ToolEnv', not by
+-- this module.
 module Shikumi.Tool.Builtin.Shell
   ( BashReq (..),
     BashResp (..),

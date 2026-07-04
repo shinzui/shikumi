@@ -102,7 +102,7 @@ integration point instead.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 44 | Tool Error Posture: Infra Errors Escape the Loop | docs/plans/44-tool-error-posture-infra-errors-escape-the-loop.md | None | None | Complete |
-| 45 | Builtin Tool Hardening: Fs, Web, and Timeouts | docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md | None | None | Not Started |
+| 45 | Builtin Tool Hardening: Fs, Web, and Timeouts | docs/plans/45-builtin-tool-hardening-fs-web-and-timeouts.md | None | None | Complete |
 | 46 | ReAct and CodeAct Behavior Fixes | docs/plans/46-react-and-codeact-behavior-fixes.md | None | EP-44 | Not Started |
 | 47 | CLI Hardening and CLI-Layer Tests | docs/plans/47-cli-hardening-and-cli-layer-tests.md | None | None | Not Started |
 
@@ -187,10 +187,10 @@ and the milestone.
 
 - [x] EP-44: M1 — partition `ShikumiError` in `runErased`; infra errors rethrow, docstrings corrected
 - [x] EP-44: M2 — loop-level tests: budget abort and recoverable-observation continue
-- [ ] EP-45: M1 — glob semantics unified between fast and fallback paths, with parity tests
-- [ ] EP-45: M2 — web fetch: streamed byte cap and configurable SSRF policy
-- [ ] EP-45: M3 — exec timeout clamped; truthful truncation flags; symlink-safe walk
-- [ ] EP-45: M4 — schema helper tidied; security-posture docs for Shell/Env/Interpreter
+- [x] EP-45: M1 — glob semantics unified between fast and fallback paths, with parity tests
+- [x] EP-45: M2 — web fetch: streamed byte cap and configurable SSRF policy
+- [x] EP-45: M3 — exec timeout clamped; truthful truncation flags; symlink-safe walk
+- [x] EP-45: M4 — schema helper tidied; security-posture docs for Shell/Env/Interpreter
 - [ ] EP-46: M1 — compaction honors `enabled` (core + ReAct reactive path)
 - [ ] EP-46: M2 — explicit `Summarized` action; consumers updated
 - [ ] EP-46: M3 — native multi-tool-call execution; corrective-step test
@@ -210,6 +210,10 @@ interactions between child plans. Provide concise evidence.
   `runErased` partition is sufficient for both direct `runToolCall` users and ReAct.
   The old catch-all behavior failed only the two intended `BudgetExceeded` tests,
   while recoverable `ValidationFailure` still flowed as a model-visible observation.
+  Date: 2026-07-04
+- EP-45 confirmed that the built-in tool hardening is local to `shikumi-tools`:
+  extending `DirEntry` and exporting the web fetch policy did not require changes
+  outside that package. `cabal build all` stayed green.
   Date: 2026-07-04
 
 
@@ -248,4 +252,8 @@ Compare the result against the original vision.
 - EP-44 complete: infrastructure errors thrown by tool bodies now escape the tool
   boundary and abort the agent loop; recoverable tool-body errors remain
   observations. Validated with `just test-one shikumi-tools` and `cabal build all`.
+  Date: 2026-07-04
+- EP-45 complete: filesystem glob/cap/symlink behavior, web fetch streaming/policy,
+  shell timeout clamping, schema pins, and security-posture docs all landed.
+  Validated with `just test-one shikumi-tools` and `cabal build all`.
   Date: 2026-07-04
