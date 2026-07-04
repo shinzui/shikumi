@@ -165,6 +165,12 @@ interactions between child plans. Provide concise evidence.
   Evidence: run `28714435132` had `lint` success, then test job step `Refresh the Hackage
   index` ran from `2026-07-04T17:43:31Z` until cancellation at `2026-07-04T18:56:41Z`.
 
+- 2026-07-04: The lean-shell replacement run (`28716549088`) still spent 19 minutes in
+  Nix realization because EP-48's workflow was using GitHub's `/nix/store` cache, not the
+  existing `shinzui.cachix.org` binary cache used by other shinzui projects. EP-48 now
+  configures `shinzui.cachix.org` in both `flake.nix` and the workflow via
+  `cachix/install-nix-action@v31` plus `cachix/cachix-action@v17`.
+
 
 ## Decision Log
 

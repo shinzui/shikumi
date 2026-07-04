@@ -49,7 +49,8 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: run the local mirror of every CI step and record transcripts here.
 - [x] 2026-07-04T17:41:57Z — Milestone 2: commit with the required trailers.
 - [x] 2026-07-04T18:56:48Z — Milestone 3: pushed initial workflow; lint passed; canceled the test job after 73 minutes in silent first-run dev-shell realization.
-- [ ] Milestone 3: push the lean `ghc9124-ci` shell; observe the replacement run green and cache behavior on a second run.
+- [x] 2026-07-04T19:22:39Z — Milestone 3: pushed lean `ghc9124-ci` shell; canceled replacement run after 19 minutes because CI still was not using `shinzui.cachix.org`.
+- [ ] Milestone 3: push Cachix-based workflow (`shinzui.cachix.org` + optional push token); observe green run and cache behavior on a second run.
 
 
 ## Surprises & Discoveries
@@ -78,18 +79,26 @@ refers to the package shikumi-jitsurei-0.1.0.0 which includes executables...
   `Refresh the Hackage index` step ran from `2026-07-04T17:43:31Z` to cancellation at
   `2026-07-04T18:56:41Z`.
 
+- 2026-07-04: The lean-shell replacement run (`28716549088`) still spent 19 minutes in
+  the first Nix step before cancellation because the workflow used GitHub's store-cache
+  action but not the existing `shinzui.cachix.org` binary cache. The workflow now uses
+  `cachix/install-nix-action@v31`, `cachix/cachix-action@v17` with `name: shinzui`, and a
+  `flake.nix` `nixConfig` block matching other shinzui projects. Local validation:
+  `actionlint` passes and `nix fmt` reports zero changes.
+
 
 ## Decision Log
 
-- Decision: Install Nix with `DeterminateSystems/nix-installer-action` and cache the Nix
-  store with `nix-community/cache-nix-action` (backed by the ordinary GitHub Actions
-  cache), rather than the often-suggested `DeterminateSystems/magic-nix-cache-action`.
-  Rationale: Building the GHC 9.12.4 toolchain from scratch on every run is unacceptable,
-  so a store cache is mandatory. Magic Nix Cache was shut down in early 2025 when GitHub
-  retired the internal cache API it depended on, and its hosted successor (FlakeHub Cache)
-  requires an external account. `cache-nix-action` needs no account or secret. If the
-  implementer finds these action versions have moved on, prefer the newest stable major
-  version and verify input names against the action's README.
+- Decision: Install Nix with `cachix/install-nix-action@v31`, configure
+  `shinzui.cachix.org` through `cachix/cachix-action@v17`, and advertise the same cache in
+  `flake.nix` `nixConfig`.
+  Rationale: Building the GHC 9.12.4 toolchain from scratch on every run is unacceptable.
+  The earlier GitHub Actions `/nix/store` cache plan was the wrong cache layer here: it
+  provided no useful hits on a cold runner and still left the flake without the
+  `shinzui.cachix.org` substituter that already serves `haskell-nix-dev` toolchains for
+  other shinzui projects. Cachix is the authoritative binary cache for these Nix artifacts.
+  The action uses `secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN` when present to
+  push new paths, but cache reads work from the public `shinzui` cache without a secret.
   Date: 2026-07-01
 
 - Decision: The skip-fail contract is the environment variable `SHIKUMI_REQUIRE_BACKENDS`.
@@ -381,24 +390,24 @@ jobs — `lint`, `test`, `examples` — exactly as below. At the end the file ex
 `actionlint`, and every command it runs has been executed successfully by hand locally.
 
 The design, so the YAML below reads as intended: all jobs run on `ubuntu-latest`.
-`DeterminateSystems/nix-installer-action` installs Nix with flakes enabled.
-`nix-community/cache-nix-action` saves and restores `/nix/store` through the GitHub
-Actions cache, keyed on `flake.lock` plus the `nix/` modules — this is what makes the GHC
-9.12.4 toolchain arrive in minutes instead of being rebuilt (the very first run on a
-fresh cache still pays full price; see Validation). A second, ordinary `actions/cache`
-covers cabal state: `dist-newstyle` (build products) and the cabal package/store
-directories. Cabal ≥ 3.10 uses XDG paths (`~/.cache/cabal` for the Hackage index and
-downloaded tarballs, `~/.local/state/cabal` for the store) but falls back to legacy
-`~/.cabal` if it exists, so the cache lists all three; the key hashes `flake.lock`,
-`cabal.project`, and every `*.cabal` file, with a prefix restore key so an old cache
-still warms a changed build. The test job exports `SHIKUMI_REQUIRE_BACKENDS=1` (the
-Milestone 1 contract), starts Redis as a daemon on the dev shell's `$REDIS_SOCKET`
-(flags copied from `process-compose.yaml`: `--port 0` disables TCP, `--save ""` disables
-persistence), waits for `PING`/`PONG`, then runs `cabal test all`. The `examples` job
-`needs: test` so it restores the cabal cache the test job saved, then runs all twelve
-`shikumi-jitsurei` executables under `set -euo pipefail`, so any non-zero exit fails the
-job. The lint job builds the two flake checks (`treefmt`, `pre-commit`) for
-`x86_64-linux`, which is exactly what the local pre-commit hook enforces.
+`cachix/install-nix-action@v31` installs Nix with flakes enabled and
+`accept-flake-config = true`, so `flake.nix`'s `shinzui.cachix.org` substituter is honored.
+`cachix/cachix-action@v17` explicitly configures the `shinzui` cache; if a Cachix push
+token is present as `CACHIX_AUTH_TOKEN` or `CI_CACHIX_TOKEN`, the run also uploads new
+store paths. A separate ordinary `actions/cache` covers cabal state: `dist-newstyle`
+(build products) and the cabal package/store directories. Cabal ≥ 3.10 uses XDG paths
+(`~/.cache/cabal` for the Hackage index and downloaded tarballs, `~/.local/state/cabal`
+for the store) but falls back to legacy `~/.cabal` if it exists, so the cache lists all
+three; the key hashes `flake.lock`, `cabal.project`, and every `*.cabal` file, with a
+prefix restore key so an old cache still warms a changed build. The test job exports
+`SHIKUMI_REQUIRE_BACKENDS=1` (the Milestone 1 contract), starts Redis as a daemon on the
+dev shell's `$REDIS_SOCKET` (flags copied from `process-compose.yaml`: `--port 0`
+disables TCP, `--save ""` disables persistence), waits for `PING`/`PONG`, then runs
+`cabal test all`. The `examples` job `needs: test` so it restores the cabal cache the
+test job saved, then runs all twelve `shikumi-jitsurei` executables under
+`set -euo pipefail`, so any non-zero exit fails the job. The lint job builds the two
+flake checks (`treefmt`, `pre-commit`) for `x86_64-linux`, which is exactly what the local
+pre-commit hook enforces.
 
 Create `.github/workflows/ci.yml` with this content:
 
@@ -421,11 +430,15 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-lint-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-lint-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Check formatting (fourmolu, cabal-fmt, nixpkgs-fmt) and hooks
         run: |
           nix build -L \
@@ -440,11 +453,15 @@ jobs:
       SHIKUMI_REQUIRE_BACKENDS: "1"
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Cache cabal state and dist-newstyle
         uses: actions/cache@v4
         with:
@@ -482,11 +499,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Restore cabal state and dist-newstyle
         uses: actions/cache@v4
         with:
@@ -517,10 +538,8 @@ relying on them: run `nix flake show 2>/dev/null | grep -A4 checks` locally; exp
 `checks.x86_64-linux` (locally you will see the darwin equivalents). If git-hooks.nix
 named its check differently (some versions use `pre-commit-check`), adjust the lint step
 to the actual name. Second, verify the pinned action versions still exist
-(`nix-installer-action@v16`, `cache-nix-action@v6`, `checkout@v4`, `cache@v4`); if a
-major has moved, take the newest stable and re-check the `with:` input names —
-`cache-nix-action` in particular renamed its inputs across majors (`primary-key` /
-`restore-prefixes-first-match` are the v6 names).
+(`cachix/install-nix-action@v31`, `cachix/cachix-action@v17`, `checkout@v4`, `cache@v4`);
+if a major has moved, take the newest stable and re-check the `with:` input names.
 
 ### Milestone 3 — validation on GitHub
 
@@ -532,10 +551,10 @@ tab, and watch the `ci` workflow. The first `test` job run is slow (it may build
 the toolchain and every Hackage dependency; expect one to a few hours worst case). Verify
 in the logs of the `Test all packages` step that `shikumi-cache-redis-test` shows its real
 tasty output (`memoize: first request MISS ... OK`) and not a `[SKIP]` line. Then re-run
-or push a trivial commit and confirm the second run restores the nix and cabal caches and
-completes in minutes. If the first run trips the repository's 10 GB Actions cache limit,
-add `gc-max-store-size-linux: 8G` to the `cache-nix-action` steps (it garbage-collects
-the store before saving) — and record whatever you did in Surprises & Discoveries.
+or push a trivial commit and confirm the second run restores the cabal cache and fetches
+Nix artifacts from `shinzui.cachix.org`. If the first run still builds large Nix paths,
+verify the `cachix/cachix-action` log names `shinzui` and that Nix is using
+`https://shinzui.cachix.org`; then record whatever you did in Surprises & Discoveries.
 
 
 ## Concrete Steps
@@ -684,21 +703,22 @@ Every step is safe to repeat. The test-main edits are plain source changes guard
 `services-down` are idempotent (process-compose refuses a second detached instance; down
 on nothing is a no-op); if the local Redis socket is left stale, `just services-down`
 then deleting `.dev/redis/redis.sock` recovers. The workflow itself is stateless per run;
-caches are additive and keyed by content hashes, so a bad cache is recovered by bumping
-the key (e.g. temporarily prefixing `v2-`) or deleting the cache entry in the repo's
-Actions → Caches UI. If the first GitHub run times out building the toolchain, re-run the
-job: the store cache saved by the partial run (cache-nix-action saves even on failure
-only if configured — otherwise the run must complete; if this bites, split a warm-up
-commit that only runs `nix develop -L .#ghc9124-ci --command true`). If GitHub Actions is
-unavailable, nothing in the repo is degraded — the workflow file is inert locally.
+caches are additive and keyed by content hashes, so a bad cabal cache is recovered by
+bumping the key (e.g. temporarily prefixing `v2-`) or deleting the cache entry in the
+repo's Actions → Caches UI. If the first GitHub run times out building Nix paths, inspect
+the `cachix/cachix-action` step first; the expected recovery is to fix the `shinzui`
+substituter/auth configuration, not to wait for a GitHub `/nix/store` cache. If GitHub
+Actions is unavailable, nothing in the repo is degraded — the workflow file is inert
+locally.
 
 
 ## Interfaces and Dependencies
 
-GitHub-side: `actions/checkout@v4`, `DeterminateSystems/nix-installer-action@v16`,
-`nix-community/cache-nix-action@v6` (inputs `primary-key`,
-`restore-prefixes-first-match`, optional `gc-max-store-size-linux`), `actions/cache@v4`
-(inputs `path`, `key`, `restore-keys`). No secrets are required; nothing publishes.
+GitHub-side: `actions/checkout@v4`, `cachix/install-nix-action@v31`,
+`cachix/cachix-action@v17` (cache `name: shinzui`, optional auth token from
+`secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN`), `actions/cache@v4` (inputs
+`path`, `key`, `restore-keys`). Cache reads do not require secrets; pushing new paths to
+Cachix requires one of those token secrets.
 
 Repo-side: the flake outputs consumed are `devShells.<system>.ghc9124-ci` (from
 `nix/haskell.nix`, same GHC/cabal/service tooling and shell hook as `ghc9124` but with

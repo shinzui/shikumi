@@ -16,11 +16,15 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-lint-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-lint-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Check formatting (fourmolu, cabal-fmt, nixpkgs-fmt) and hooks
         run: |
           nix build -L \
@@ -35,11 +39,15 @@ jobs:
       SHIKUMI_REQUIRE_BACKENDS: "1"
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Cache cabal state and dist-newstyle
         uses: actions/cache@v4
         with:
@@ -77,11 +85,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
-      - uses: nix-community/cache-nix-action@v6
+      - uses: cachix/install-nix-action@v31
         with:
-          primary-key: nix-shell-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/**') }}
-          restore-prefixes-first-match: nix-shell-${{ runner.os }}-
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      - uses: cachix/cachix-action@v17
+        with:
+          name: shinzui
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN || secrets.CI_CACHIX_TOKEN }}
       - name: Restore cabal state and dist-newstyle
         uses: actions/cache@v4
         with:

@@ -16,9 +16,13 @@
     pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
   };
 
+  # The haskell-nix-dev base flake's binary cache, so the first `nix develop`
+  # downloads prebuilt GHC/HLS/cabal instead of compiling the toolchain from source.
+  # nixConfig is honored by CI via `accept-flake-config = true`; locally, run
+  # `cachix use shinzui` once if your Nix config does not already trust this cache.
   nixConfig = {
-    extra-substituters = [ ];
-    extra-trusted-public-keys = [ ];
+    extra-substituters = [ "https://shinzui.cachix.org" ];
+    extra-trusted-public-keys = [ "shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=" ];
   };
 
   # Thin flake-parts shell. The dev toolchain comes from the haskell-nix-dev base
