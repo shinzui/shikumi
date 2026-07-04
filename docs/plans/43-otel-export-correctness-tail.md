@@ -4,7 +4,7 @@ slug: otel-export-correctness-tail
 title: "OTel Export Correctness Tail"
 kind: exec-plan
 created_at: 2026-07-02T03:30:16Z
-intention: "intention_01kwgdyxm7ehh8yys1pp4wf1zr"
+intention: "intention_01kwjfeamsehst07eh4n7kp8a7"
 master_plan: "docs/masterplans/7-cache-trace-and-replay-hardening.md"
 ---
 
@@ -33,7 +33,7 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `exportTreeWith` runs export inside `bracket`; provider shut down on all exit paths
+- [x] M1: `exportTreeWith` runs export inside `bracket`; provider shut down on all exit paths (completed 2026-07-04)
 - [ ] M2: cycle guard (visited set) in `exportTree`'s walk
 - [ ] M2: status derived from the recorded response (`Error` for in-band failures, `Ok` otherwise)
 - [ ] M2: `gen_ai.response.model` read from the recorded response's echoed model; omitted when absent
@@ -47,7 +47,7 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-07-04: `OpenTelemetry.Trace.Core.endSpan` catches exceptions thrown by `tracerProviderOnEnd` and logs them instead of rethrowing. The M1 regression test cannot use an `onEnd`-throwing processor to prove propagation; it should make `exportTree` itself throw while constructing a span, then assert `exportTreeWith` still shuts the provider down and rethrows.
 
 
 ## Decision Log
@@ -66,6 +66,11 @@ Record every decision made while working on the plan.
 - Decision: On a cycle, export each reachable span once and terminate (visited-set guard) rather than throwing on detection.
   Rationale: The exporter is a best-effort sink at the end of a run; salvaging the acyclic portion of a corrupt file is more useful than refusing it wholesale, and strict validation of trace files is the reader's job (`Shikumi.Trace.Store.readTraceFile`). Termination is the non-negotiable part.
   Date: 2026-07-01
+
+- Decision: Test provider-release-on-exception by making the traced span itself throw during export, not by making `spanProcessorOnEnd` throw.
+  Rationale: The hs-opentelemetry API catches `onEnd` processor exceptions inside `endSpan`, so such exceptions do not propagate out of `exportTree`; a bottom span label throws during `createSpan`, which exercises the `bracket` finalizer in `exportTreeWith` directly.
+  Source: `OpenTelemetry.Trace.Core.endSpan` catches `tracerProviderOnEnd`; `createSpan` forces `SpanHot.hotName`.
+  Date: 2026-07-04
 
 
 ## Outcomes & Retrospective
@@ -329,7 +334,7 @@ Commit per milestone with conventional-commit subjects (e.g. `fix(trace-otel): b
 ```text
 MasterPlan: docs/masterplans/7-cache-trace-and-replay-hardening.md
 ExecPlan: docs/plans/43-otel-export-correctness-tail.md
-Intention: intention_01kwgdyxm7ehh8yys1pp4wf1zr
+Intention: intention_01kwjfeamsehst07eh4n7kp8a7
 ```
 
 

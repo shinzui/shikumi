@@ -23,7 +23,8 @@ module Shikumi.Trace.LiveExport
   )
 where
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Exception (bracket)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.String (fromString)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -34,17 +35,21 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shikumi.Trace (TraceTree)
 import Shikumi.Trace.OpenTelemetry (exportTree)
 
--- | Build a 'TracerProvider' around the given processor, export the tree through
--- the shared 'exportTree' walker, then flush and shut the provider down. The
--- shutdown flushes the batch processor, so spans have left by the time this
--- returns.
+-- | Build a 'TracerProvider' around the given processor, export the tree
+-- through the shared 'exportTree' walker, then flush and shut the provider
+-- down. The shutdown runs under 'bracket', so an exception thrown while
+-- exporting still flushes buffered spans and releases the provider before
+-- propagating to the caller.
 exportTreeWith :: (MonadIO m) => SpanProcessor -> Text -> TraceTree -> m ()
-exportTreeWith processor name tree = do
-  tp <- Otel.createTracerProvider [processor] Otel.emptyTracerProviderOptions
-  let tracer = Otel.makeTracer tp (fromString (T.unpack name)) Otel.tracerOptions
-  exportTree tracer tree
-  _ <- Otel.shutdownTracerProvider tp Nothing
-  pure ()
+exportTreeWith processor name tree =
+  liftIO $
+    bracket
+      (Otel.createTracerProvider [processor] Otel.emptyTracerProviderOptions)
+      (\tp -> Otel.shutdownTracerProvider tp Nothing)
+      ( \tp -> do
+          let tracer = Otel.makeTracer tp (fromString (T.unpack name)) Otel.tracerOptions
+          exportTree tracer tree
+      )
 
 -- | The live path: load OTLP config from the standard @OTEL_EXPORTER_OTLP_*@
 -- environment variables (default endpoint @http:\/\/localhost:4318@), build the
