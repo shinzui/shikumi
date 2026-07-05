@@ -35,14 +35,23 @@ data Cache :: Effect where
   LookupCache :: CacheKey -> Cache m (Maybe CachedResponse)
   StoreCache  :: CacheKey -> CachedResponse -> Cache m ()
 
-cachedLLM :: (Cache :> es, LLM :> es, Time :> es) => Eff es a -> Eff es a
+newtype CacheConfig = CacheConfig
+  { entryTTL :: Maybe NominalDiffTime
+  }
+
+defaultCacheConfig :: CacheConfig       -- entryTTL = Nothing
+cachedLLM          :: (Cache :> es, LLM :> es, Time :> es) => Eff es a -> Eff es a
+cachedLLMWith      :: (Cache :> es, LLM :> es, Time :> es) => CacheConfig -> Eff es a -> Eff es a
 ```
 
 `Cache` is the *storage mechanism*; `cachedLLM` is the *memoizing policy* that uses it. On a
 `Complete` call, `cachedLLM` computes the key, looks it up; a version-matching hit returns the
-cached response, a miss delegates to the provider, stores the result, and returns it. `Stream`
-calls pass through unchanged (not cached). Note the constraint: `cachedLLM` needs `Time :> es`
-(to stamp entries), **not** `IOE` — see [Effects & the runtime](./effects-and-runtime.md#the-time-effect).
+cached response, a miss delegates to the provider, stores a successful result, and returns it.
+`Stream` calls pass through unchanged (not cached), and in-band provider error responses are
+not cached. Note the constraint: `cachedLLM` needs `Time :> es` (to stamp entries and check
+TTL), **not** `IOE` — see [Effects & the runtime](./effects-and-runtime.md#the-time-effect).
+`cachedLLM` is `cachedLLMWith defaultCacheConfig`; use `cachedLLMWith` when you want a
+uniform policy-layer TTL across every backend. The default is no expiry.
 
 ```haskell
 data CachedResponse = CachedResponse
@@ -60,20 +69,25 @@ cacheKey :: Model -> Context -> Options -> CacheKey
 ```
 
 The key is a **BLAKE3 256-bit digest over a canonical JSON serialization** of everything that
-defines the request: a version string, model, provider, api, system prompt, messages, tools,
-tool choice, temperature, max tokens, thinking, response format. Canonical means object keys
-sorted by Unicode code point, no insignificant whitespace, UTF-8. So **identical calls produce
-identical keys** and are served from the cache; any meaningful change to the request changes
-the key.
+defines the request: a version string, model id, provider, API kind, base URL, model default
+headers, compatibility shim, system prompt, messages, tools, tool choice, temperature, max
+tokens, per-call headers, thinking, and response format. Message construction timestamps are
+stripped before hashing because they are local bookkeeping, not provider-visible prompt
+content. API keys, timeouts, response ids, latency, and per-call metadata are excluded.
+Canonical means object keys sorted by Unicode code point, no insignificant whitespace, UTF-8.
+So **identical calls produce identical keys** and are served from the cache; any meaningful
+change to the request changes the key.
 
 ### Versioning
 
 ```haskell
-currentKeyVersion :: Text     -- "shikumi-cache/v1"
+currentKeyVersion :: Text     -- "shikumi-cache/v2"
 ```
 
 The version is baked into every hashed request. Bumping it invalidates all prior entries
-*without deleting rows* — stale entries simply never match and are treated as misses.
+*without deleting rows* — stale entries simply never match and are treated as misses. Because
+trace files also store cache keys and replay recomputes them, a key-version bump makes old
+trace files unable to satisfy replay; replay fails closed rather than serving stale responses.
 
 ### Backends: same effect, different interpreter
 
@@ -84,7 +98,7 @@ is backend-agnostic.
 |---|---|---|---|
 | In-memory (STM map) | `shikumi-cache` | `newMemoryCache :: IO MemoryCache` | `runCacheMemory` *(needs `Concurrent`)* |
 | SQLite | `shikumi-cache` | `openSQLiteCache` / `withSQLiteCache` | `runCacheSQLite` |
-| Redis (TTL eviction) | `shikumi-cache-redis` | `openRedisCache` / `openRedisCacheWithTTL` | `runCacheRedis` |
+| Redis (optional server TTL) | `shikumi-cache-redis` | `openRedisCache` / `openRedisCacheWithTTL` | `runCacheRedis` |
 | Postgres (jsonb, upsert) | `shikumi-cache-postgres` | `openPostgresCache` | `runCachePostgres` |
 
 ```haskell
@@ -104,8 +118,10 @@ limiter) require `Concurrent`; the persistent backends' interpreters require `IO
 
 The persistent backends are **fail-soft on reads**: a missing key, a backend error, or a
 JSON decode failure is treated as a *miss* (it falls through to the provider), never an
-exception. Store errors on the best-effort backends are swallowed. The DB interpreters are
-where `IOE` legitimately lives.
+exception. Store errors on the best-effort backends are swallowed, while asynchronous
+exceptions such as thread cancellation are rethrown. Redis no longer applies a server-side TTL
+by default; pass `openRedisCacheWithTTL` if you want Redis to evict entries independently of
+the policy-layer `CacheConfig`. The DB interpreters are where `IOE` legitimately lives.
 
 ---
 
@@ -212,19 +228,23 @@ attribute bumped the trace `formatVersion` to 2.)
 A stored trace is enough to **re-run a whole program with zero provider calls**.
 
 ```haskell
-replayIndex  :: TraceTree -> Map CacheKey Value        -- every LM-call span's key → response JSON
+replayIndex  :: TraceTree -> Either Text (Map CacheKey Value)
+              -- every LM-call span's key -> response JSON, unless duplicate keys conflict
 runLLMReplay :: Map CacheKey Value -> Eff (LLM : es) a -> Eff es a
 ```
 
-`runLLMReplay` is a drop-in alternative interpreter of the `LLM` effect: it computes the cache
-key for each `Complete` call and looks it up in the index. A hit returns the recorded response;
-a **miss raises `ReplayDivergence`** — it is *fail-closed and loud*. An unrecorded request is an
-error, never a silent network call or a fabricated answer. (Streaming completions are not
-replayable.) Note it requires no `IOE` — the lookup is pure and divergence is a pure exception.
+`replayIndex` first checks the trace for determinism: duplicate cache keys are accepted only
+when every occurrence recorded the same response. Conflicting duplicate responses return
+`Left`. `runLLMReplay` is then a drop-in alternative interpreter of the `LLM` effect: it
+computes the cache key for each `Complete` call and looks it up in the index. A hit returns the
+recorded response; a **miss raises `ReplayDivergence`** with the missing key, model id, and a
+redacted prompt summary — it is *fail-closed and loud*. An unrecorded request is an error,
+never a silent network call or a fabricated answer. (Streaming completions are not replayable.)
+Note it requires no `IOE` — the lookup is pure and divergence is a pure exception.
 
 ```haskell
 Right tree <- readTraceFile "run.json"
-let idx = replayIndex tree
+Right idx <- pure (replayIndex tree)
 result <- runEff . runErrorNoCallStack @ShikumiError . runLLMReplay idx
             $ runProgram summarize article    -- identical output, 0 provider calls
 ```

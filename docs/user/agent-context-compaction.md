@@ -1,13 +1,13 @@
 # Agent working-context compaction
 
-Long-running ReAct agents can build a large in-flight history: every tool call, observation,
-parse correction, and finish step is rendered back into the next model prompt. Without
-compaction, that working context can grow until the provider rejects the next request for
-exceeding the model's context window.
+Long-running ReAct and CodeAct agents can build a large in-flight history: every tool call,
+code execution, observation, parse correction, and finish step is rendered back into the next
+model prompt. Without compaction, that working context can grow until the provider rejects the
+next request for exceeding the model's context window.
 
-Shikumi's ReAct loop has built-in working-context compaction. It is an in-run safety
-mechanism: it shrinks the live history inside one agent run, without writing memory to a
-database and without changing cross-session recall.
+Shikumi's ReAct and CodeAct loops have built-in working-context compaction. It is an in-run
+safety mechanism: it shrinks the live history inside one agent run, without writing memory to
+a database and without changing cross-session recall.
 
 This feature is part of `shikumi-tools`, but the reusable primitive lives in core
 `shikumi` as `Shikumi.Compaction`.
@@ -16,9 +16,11 @@ This feature is part of `shikumi-tools`, but the reusable primitive lives in cor
 
 ## What gets compacted
 
-Only the ReAct loop's in-flight step history is compacted.
+Only the agent loop's in-flight step history is compacted.
 
 ```haskell
+data Action = CallTool Text Value | Finish | Summarized
+
 data Step = Step
   { thought     :: Text
   , action      :: Action
@@ -32,19 +34,21 @@ summary is visible as an ordinary step:
 
 ```text
 thought: (compacted summary of earlier steps)
-action: call  null
+action: summary of earlier steps
 observation: <summary text>
 ```
 
-The summary step stands in for the folded-away history. The recent tail is preserved so the
-model still sees the immediate tool results and decisions that matter most for the next
-turn.
+Internally that action is `Summarized`. It is never produced by the model and never dispatched
+as a tool. The empty tool-name sentinel remains reserved for prompt-protocol parse correction,
+so a compaction summary cannot be confused with a failed tool call. The recent tail is
+preserved so the model still sees the immediate tool results and decisions that matter most
+for the next turn.
 
 ---
 
 ## When it triggers
 
-After each successful tool turn, the loop reads two values from the provider `Response`:
+After each successful action turn, the loop reads two values from the provider `Response`:
 
 - `resp ^. #message . #usage . #inputTokens`
 - `resp ^. #model . #contextWindow`
@@ -86,6 +90,9 @@ defaultReActConfig =
 
 Under `maxIters = 6`, most ordinary agents never reach the threshold. Compaction matters
 when you intentionally run longer agents by raising `maxIters`.
+
+`CodeActConfig` carries the same `compaction :: CompactionConfig` field. Its default is
+`maxIters = 5`, the hermetic restricted interpreter, and `defaultCompactionConfig`.
 
 ---
 
@@ -147,9 +154,9 @@ There is also a best-effort reactive path. If baikai classifies a provider failu
 ContextWindowExceeded Text
 ```
 
-The ReAct loop catches that error at both model completion sites:
+The ReAct and CodeAct loops catch that error at both model completion sites:
 
-- the propose step, where the model decides whether to call a tool or finish
+- the next-action step, where the model decides whether to call a tool, run code, or finish
 - the final extract step, where the trajectory is converted into the typed answer
 
 On `ContextWindowExceeded`, the loop compacts the current trajectory and retries that
@@ -168,7 +175,7 @@ for long agents.
 Working-context compaction is not persistent memory.
 
 It does not write memories, scenes, or summaries for future sessions. It only keeps the
-current ReAct run inside the model window. Cross-session memory belongs in the memory layer,
+current agent run inside the model window. Cross-session memory belongs in the memory layer,
 not in this loop.
 
 It is also not exact token budgeting per step. `keepRecent` is a step count, not a token
@@ -193,6 +200,8 @@ The tests cover:
 - one-shot recovery after `ContextWindowExceeded`
 - final extract recovery
 - retry failure propagation
+- CodeAct usage-triggered compaction and reactive overflow recovery
 
 For manual inspection, run an agent with `reactWithTrajectory` instead of `react`; the
 returned `Trajectory` will show any synthetic summary step alongside the real recent steps.
+For CodeAct, use `codeActWithTrajectory`.

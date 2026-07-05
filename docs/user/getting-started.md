@@ -28,7 +28,7 @@ The packages, at a glance:
 | `shikumi-compile` | Prompting strategies (zero-shot / few-shot / CoT / RAG) compiled into a program. |
 | `shikumi-optimize` | Nine optimizers that search for better demos and instructions (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN). |
 | `shikumi-tools` | Typed tools, the built-in work-tool catalog, and ReAct/code-execution agent loops. |
-| `shikumi-cli` | The `shikumi` executable: `eval` / `trace` / `optimize` / `replay`. |
+| `shikumi-cli` | The `shikumi` executable: `eval` / `record` / `trace` / `optimize` / `replay`. |
 | `shikumi-jitsurei` | 実例 — runnable, offline worked examples of everything above. |
 
 ---
@@ -172,13 +172,15 @@ you get a precise, typed value:
 
 ```haskell
 data ShikumiError
-  = InvalidJSON       Text  -- provider returned text that isn't valid JSON
-  | MissingField      Text  -- a required output field was absent
-  | SchemaMismatch    Text  -- decoded JSON didn't match the expected schema
-  | ValidationFailure Text  -- a typed value failed a Validatable rule
-  | ProviderFailure   Text  -- the transport failed (mapped from baikai)
-  | Timeout           Text  -- the call exceeded its time budget
-  | BudgetExceeded    Text  -- the running cost ceiling was reached
+  = InvalidJSON          Text  -- provider returned text that isn't valid JSON
+  | MissingField         Text  -- a required output field was absent
+  | SchemaMismatch       Text  -- decoded JSON didn't match the expected schema
+  | ValidationFailure    Text  -- a typed value failed a Validatable rule
+  | ProviderFailure      Text  -- the transport failed (mapped from baikai)
+  | ContextWindowExceeded Text -- the prompt exceeded the model's context window
+  | Timeout              Text  -- the call exceeded its time budget
+  | BudgetExceeded       Text  -- the running cost ceiling was reached
+  | CodeExecFailed       Text  -- generated code failed after exhausting correction attempts
 ```
 
 Decode errors carry a field-path breadcrumb (`"bullets.[2]"`) so a deeply-nested mismatch

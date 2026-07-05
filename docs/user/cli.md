@@ -9,7 +9,7 @@ main :: IO ()
 main = cliMain exampleRegistry   -- register your typed programs, datasets, metrics
 ```
 
-All four subcommands run **offline** by default — a deterministic in-process stub LM, no API
+All five subcommands run **offline** by default — a deterministic in-process stub LM, no API
 key, no network — which is what makes the CLI usable in CI and as a learning tool.
 
 ---
@@ -48,6 +48,7 @@ its `Shikumi.Cli.Example` module to register your own.
 
 ```bash
 shikumi eval     --program sentiment                       # → a Report table
+shikumi record   --program sentiment --store-dir .shikumi  # → writes .shikumi/sentiment.json
 shikumi trace    sentiment --store-dir .shikumi            # → a nested span tree
 shikumi optimize --program sentiment --optimizer bootstrap-fewshot --out p.json
 shikumi replay   sentiment --store-dir .shikumi            # → identical output, 0 provider calls
@@ -58,10 +59,16 @@ shikumi replay   sentiment --store-dir .shikumi            # → identical outpu
 | `eval` | Looks up the task, runs `evaluatePure` over its dataset, prints the `Report` via `renderReportText`. | [evaluation](./evaluation-and-optimization.md) |
 | `trace` | Loads a stored trace JSON from the store dir and renders it via `renderTree`. | [tracing](./caching-tracing-replay.md#tracing) |
 | `optimize` | Runs the named optimizer, serializes the resulting `CompiledProgram` to `--out`. | [optimization](./evaluation-and-optimization.md#optimization-shikumi-optimize) |
-| `replay` | Loads a stored trace and re-runs via `runLLMReplay`, fail-closed with zero provider calls; checks the output matches. | [replay](./caching-tracing-replay.md#deterministic-replay) |
 | `record` | Runs the program under the stub and persists the trace to the store dir. | tracing |
+| `replay` | Loads a stored trace and re-runs via `runLLMReplay`, fail-closed with zero provider calls; checks the output matches. | [replay](./caching-tracing-replay.md#deterministic-replay) |
 
 Global options: `--store-dir` (default `.shikumi`) and `--otel`.
+
+Trace ids double as program names and are spliced into `--store-dir/<id>.json`, so `trace`,
+`record`, and `replay` reject ids that are empty, `"."`, contain `/` or `\`, or contain `..`.
+If a trace is missing, the error names the expected path and tells you to run `record` first.
+If replay or the reference stub run fails, the command now reports which side errored instead
+of collapsing both cases into a generic replay failure.
 
 With `--otel`, `shikumi trace <id> --otel` also exports the loaded tree to a live OpenTelemetry
 collector over OTLP/HTTP (in addition to printing it), then prints an
@@ -89,7 +96,8 @@ runStubEval :: (Context -> Response)
 `runStubEval` discharges the full evaluation/optimization stack — note the row: `LLM`,
 `Concurrent`, `Error ShikumiError`, `Time` (shikumi's clock effect, discharged via `runTime`),
 `Prim` (the usage counters, discharged via `runPrim`), and `IOE` at the very bottom for the
-stub transport. This is the same effect-stack discipline from
+real clock used by `runTime`. The stub LM itself is stateless and needs no `IOE`. This is the
+same effect-stack discipline from
 [Effects & the runtime](./effects-and-runtime.md) — the stub just swaps the bottom `LLM`
 interpreter.
 
@@ -112,5 +120,5 @@ worked examples and for your own offline tests.
 3. Bundle each into a `Task` and `register` it under a name.
 4. `main = cliMain myRegistry`.
 
-You now have `eval` / `trace` / `optimize` / `replay` / `record` over your own typed programs,
+You now have `eval` / `record` / `trace` / `optimize` / `replay` over your own typed programs,
 runnable in CI with no credentials.

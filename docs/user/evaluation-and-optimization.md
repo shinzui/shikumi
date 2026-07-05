@@ -17,7 +17,7 @@ Everything is typed by `i`/`o`, not the untyped bags DSPy uses.
 newtype Score          -- a Double clamped to [0,1]
 data    Example i o    -- a labeled datum: input + expected output
 data    Dataset i o    -- a list of examples
-data    Prediction o   -- a program output: a primary result + a non-empty set of samples
+data    Prediction o   -- primary result + non-empty samples + optional raw detail JSON
 
 example       :: i -> o -> Example i o
 dataset       :: [Example i o] -> Dataset i o
@@ -74,23 +74,36 @@ evaluateWith :: (…same…) => EvalConfig -> Dataset i o -> MetricM es o -> Pro
 ```
 
 The runner executes the program over every example with **bounded concurrency** (preserving
-dataset order), scores each, and aggregates. Notice the effect row names *exactly* what
-evaluation does — and carries **no `IOE`**: `Concurrent` (parallel examples), `Time`
-(per-example latency via the monotonic clock), `Prim` (the usage/cost counters accumulated
-across examples), and `LLM`/`Error` (running the program). This is the effects-as-constraints
-design from [Effects & the runtime](./effects-and-runtime.md) made concrete.
+dataset order), scores each, and aggregates. If `numSamples > 1`, it runs the program that
+many times for each example and builds a `Prediction` whose primary output is the first sample
+and whose `samples` field contains every run. Notice the effect row names *exactly* what
+evaluation does — and carries **no `IOE`**: `Concurrent` (parallel examples and optional
+timeouts), `Time` (per-example latency via the monotonic clock), `Prim` (the usage/cost counters
+accumulated across examples), and `LLM`/`Error` (running the program). This is the
+effects-as-constraints design from [Effects & the runtime](./effects-and-runtime.md) made
+concrete.
 
 ### Failures don't abort the run
 
 ```haskell
 data FailurePolicy = FailScore Score | FailAbort
-defaultEvalConfig  -- 4-way concurrency, score failures as 0, 1 sample per example
+
+data EvalConfig = EvalConfig
+  { concurrency      :: Int
+  , failurePolicy    :: FailurePolicy
+  , exampleTimeoutMs :: Maybe Int
+  , numSamples       :: Int
+  }
+
+defaultEvalConfig  -- 4-way concurrency, no timeout, score failures as 0, 1 sample per example
 ```
 
 A per-example error boundary catches a `ShikumiError` from the program (→ `ProgramError`) or a
 metric error (→ `MetricError`); the `FailurePolicy` decides whether a failing example scores
-zero (the default) or aborts. **A failing example scoring zero rather than aborting is what
-lets an optimizer score many candidates and measure robustness.**
+zero (the default) or aborts. If `exampleTimeoutMs = Just n`, a timed-out example becomes
+`TimedOut` under `FailScore`, or throws `Timeout "evaluate: example timed out"` under
+`FailAbort`. **A failing example scoring zero rather than aborting is what lets an optimizer
+score many candidates and measure robustness.**
 
 ### The report
 
@@ -99,8 +112,13 @@ data Report   -- aggregateScore, passCount, failCount, total, per-example result
 renderReportText :: Report -> Text     -- deterministic, 4-decimal, CLI/golden-stable
 ```
 
-`aggregateScore` is the arithmetic mean (0 if empty). `renderReportText` is stable enough to
-diff in golden tests.
+`aggregateScore` is the arithmetic mean (0 if empty). `passCount` counts only examples whose
+score is exactly `1.0`, so partial-credit metrics should read quality from `aggregateScore`.
+`failCount` counts examples with a `FailureReason`. Usage totals are accumulated by interposing
+on `LLM` calls and summing response usage/cost, including terminal streaming events. The
+reported latency is the **sum of per-example latencies**; under concurrent evaluation it can be
+greater than wall-clock elapsed time. `renderReportText` is stable enough to diff in golden
+tests.
 
 ### Golden helpers
 

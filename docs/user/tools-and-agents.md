@@ -64,6 +64,7 @@ arguments from JSON, and encode the result to text — captured at wrap time.
 
 ```haskell
 data ToolError = ToolNotFound Text | ToolArgsInvalid Text Text | ToolRunFailed Text Text
+isInfraToolError :: ShikumiError -> Bool
 renderToolError :: ToolError -> Text
 
 runErased   :: (LLM :> es, Error ShikumiError :> es) => SomeTool -> Value -> Eff es (Either ToolError Text)
@@ -71,10 +72,11 @@ runToolCall :: (LLM :> es, Error ShikumiError :> es) => ToolRegistry -> ToolCall
 ```
 
 `runToolCall` finds the named tool, decodes the JSON arguments to the hidden `i`, runs the
-body, and encodes `o` to text — **totally**. A decode failure becomes `ToolArgsInvalid`; a body
-throwing `ShikumiError` becomes `ToolRunFailed`. It never throws for a tool-level fault. The
-agent feeds the *rendered* `ToolError` back to the model as an observation, so the model can
-recover; only genuine infrastructure faults bubble up as a `ShikumiError`.
+body, and encodes `o` to text. A decode failure becomes `ToolArgsInvalid`; most body-thrown
+`ShikumiError`s become `ToolRunFailed`. The agent feeds the *rendered* `ToolError` back to the
+model as an observation, so the model can recover. Infrastructure errors escape instead:
+`isInfraToolError` currently treats `BudgetExceeded` and `ContextWindowExceeded` as fatal to
+the loop, because another model turn cannot recover from overspend or an oversized prompt.
 
 ---
 
@@ -139,8 +141,13 @@ package.
 `grep` and `glob` prefer host tools when they are available: `rg` for grep and `fd` for glob.
 If either command is missing or returns an unusable result, the tool falls back to a bounded
 in-process traversal through the same `ToolEnv`. The fallback skips noisy directories
-(`.git`, `node_modules`, `dist-newstyle`, `.stack-work`, `.direnv`), skips binary files, caps
-file size at 5 MiB, caps depth at 25, and caps results at 1000.
+(`.git`, `.hg`, `.svn`, `node_modules`, `dist-newstyle`, `.stack-work`, `.direnv`), skips
+binary files, does not descend through directory symlinks, caps file size at 5 MiB, caps depth
+at 25, and caps results at 1000. Truncation is exact: the `truncated` flag means more results
+existed beyond the returned cap.
+
+Fallback glob semantics match filenames when the pattern has no slash, and paths relative to
+the search root when it does. `**/` is supported for recursive path patterns.
 
 ### Environment seams
 
@@ -167,12 +174,26 @@ data WebClient = WebClient
   }
 
 localWebClient :: Manager -> Maybe SearchConfig -> WebClient
+localWebClientWith :: FetchPolicy -> Manager -> Maybe SearchConfig -> WebClient
+
+data FetchPolicy = FetchPolicy
+  { maxResponseBytes :: Int
+  , checkUrl :: Text -> Either Text ()
+  }
+defaultFetchPolicy :: FetchPolicy
 ```
 
 `localToolEnv` is a real local filesystem and shell environment. It is useful for local agents
-and tests that deliberately exercise real commands, but it is not a sandbox. To restrict an
+and tests that deliberately exercise real commands, but it is not a sandbox: it reads and
+writes host paths and runs shell commands with the current process' privileges. Shell timeouts
+are clamped to 1 ms through 600000 ms (10 minutes), with a 60000 ms default. To restrict an
 agent, provide a different `ToolEnv`: for example, one rooted in a scratch directory, one that
 denies `bash`, or one that records writes for review. The tool definitions stay unchanged.
+
+`localWebClient` uses `defaultFetchPolicy`. That policy permits only `http` and `https`, denies
+obvious local/private host literals (`localhost`, loopback, link-local, RFC-1918 IPv4 ranges),
+and caps response reads at 5 MiB. It does not resolve DNS to detect private addresses behind a
+hostname; use `localWebClientWith` for stricter deployment policies.
 
 ---
 
@@ -230,6 +251,7 @@ For tuning guidance, recovery details, and trajectory inspection, see
 
 ```haskell
 data Action      = CallTool Text Value | Finish
+                 | Summarized
 data Step        = Step { thought :: Text, action :: Action, observation :: Maybe Text }
 data Termination = TerminatedFinish | TerminatedMaxIters Int | TerminatedBudget
 data Trajectory  = Trajectory { steps :: Vector Step, termination :: Termination }
@@ -239,8 +261,10 @@ renderTrajectory :: Trajectory -> Text
 
 The loop alternates **thought → action → observation** until the model finishes or the
 iteration cap is hit, then extracts the typed answer. An `observation` is `Nothing` for
-`Finish`; for a tool call it is the tool result text or the rendered `ToolError`. (Budget
-termination is enforced one layer down by the resilient LLM interpreter.)
+`Finish`; for a tool call it is the tool result text or the rendered `ToolError`; for
+`Summarized` it is the compaction summary of earlier steps. The empty tool name is reserved as
+an internal corrective-feedback sentinel for unparseable prompt-protocol replies and is never
+dispatched. Budget termination is enforced one layer down by the resilient LLM interpreter.
 
 ```haskell
 researcher :: Program Question Answer
@@ -285,7 +309,8 @@ restrictedInterpreter :: CodeInterpreter   -- the hermetic default
 echoInterpreter       :: CodeInterpreter
 
 data PoTConfig      = PoTConfig      { maxIters :: Int, interpreter :: CodeInterpreter }
-data CodeActConfig  = CodeActConfig  { maxIters :: Int, interpreter :: CodeInterpreter }
+data CodeActConfig  = CodeActConfig
+  { maxIters :: Int, interpreter :: CodeInterpreter, compaction :: CompactionConfig }
 ```
 
 The interpreter is a **plain value captured in the `embed` closure** — never an effect-row
@@ -310,6 +335,10 @@ build.
 > recognized by the loop and dispatched through the typed `runToolCall`; any other snippet is
 > evaluated by the sandbox. A real subprocess interpreter would instead inject the tool
 > functions and call them natively.
+
+`codeAct` uses the same working-context compaction machinery and `Summarized` trajectory step
+as `react`. Its default config is five iterations, the hermetic restricted interpreter, and
+`defaultCompactionConfig`.
 
 ---
 
