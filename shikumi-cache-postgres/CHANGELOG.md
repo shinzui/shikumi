@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.2.0 - 2026-07-05
+
+### Changed
+
+- Postgres cache operations are now best-effort: lookup failures degrade to
+  misses and store failures are ignored.
+- Failed schema creation now releases the connection, and accidental use after
+  `closePostgresCache` degrades safely.
+- Refreshed internal `shikumi` and `shikumi-cache` bounds for the current package
+  set.
+
 ## 0.1.1.0 - 2026-06-28
 
 ### Changed

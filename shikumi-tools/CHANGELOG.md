@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.3.0.0 - 2026-07-05
+
+### Added
+
+- ReAct exposes `Proposal`, `renderStepLine`, and `summaryStep`; native ReAct
+  turns can dispatch multiple tool calls in order before the next model turn.
+- `CodeActConfig` now includes trajectory compaction settings, matching the ReAct
+  context-window recovery path.
+- Tooling exposes infrastructure-error classification, fetch-policy controls,
+  capped HTTP response reading, and symlink information in directory listings.
+
+### Changed
+
+- **BREAKING** `ProtocolImpl.parsePropose` now returns `Proposal` instead of
+  `Action`, and trajectories can contain the new `Summarized` action injected by
+  compaction.
+- **BREAKING** `CodeActConfig` record construction requires the new `compaction`
+  field.
+- Tool bodies now rethrow budget and context-window exhaustion instead of feeding
+  them back to the model as recoverable observations.
+- Built-in filesystem, shell, and web tools are hardened: execution timeouts are
+  clamped, default fetch policy rejects common local/private targets, and fetches
+  cap bytes while streaming.
+- Refreshed the internal `shikumi` bound for the `0.3` series.
+
 ## 0.2.0.0 - 2026-06-28
 
 ### Added

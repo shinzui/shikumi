@@ -27,7 +27,7 @@ import Control.Lens ((^.))
 import Data.Aeson (Value (..), eitherDecodeStrict, object, (.=))
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.List (nub, sort)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -92,10 +92,10 @@ runCapturingLLM ::
   Eff es a
 runCapturingLLM ref resp = interpret $ \_ -> \case
   Complete m ctx o -> do
-    liftIO (modifyIORef' ref (++ [(m, ctx, o)]))
+    liftIO (atomicModifyIORef' ref (\xs -> (xs ++ [(m, ctx, o)], ())))
     pure resp
   Stream m ctx o -> do
-    liftIO (modifyIORef' ref (++ [(m, ctx, o)]))
+    liftIO (atomicModifyIORef' ref (\xs -> (xs ++ [(m, ctx, o)], ())))
     -- A minimal successful stream whose terminal reassembles to @resp@, so a
     -- routed 'streamProgram' decodes exactly as the blocking path would.
     pure [EventDone (doneTerminal Nothing Stop (AssistantMessage (resp ^. #message)))]

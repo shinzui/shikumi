@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.2.0 - 2026-07-05
+
+### Changed
+
+- Redis cache operations are now best-effort: lookup failures degrade to misses
+  and store failures are ignored.
+- `openRedisCache` now stores entries without a Redis-side TTL by default. Use
+  `openRedisCacheWithTTL defaultRedisTTL` to restore the previous seven-day
+  expiry behavior.
+- Refreshed internal `shikumi` and `shikumi-cache` bounds for the current package
+  set.
+
 ## 0.1.1.0 - 2026-06-28
 
 ### Changed

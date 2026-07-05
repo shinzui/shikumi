@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0.0 - 2026-07-05
+
 ### Changed
 
 - **BREAKING** Combinator and budget semantics cleanup. `MajorityVote` now carries

@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-trace-otel
-version:         0.1.0.0
+version:         0.1.1.0
 synopsis:
   OpenTelemetry export of shikumi hierarchical trace trees (EP-7)
 
@@ -53,7 +53,7 @@ library
     , hs-opentelemetry-semantic-conventions  >=1.40     && <2
     , lens                                   ^>=5.3
     , scientific
-    , shikumi-trace                          ^>=0.1.0.0
+    , shikumi-trace                          ^>=0.2.0.0
     , text                                   ^>=2.1
     , time
     , unordered-containers
@@ -71,8 +71,8 @@ test-suite shikumi-trace-otel-test
     , hs-opentelemetry-api                 >=1.0      && <1.1
     , hs-opentelemetry-exporter-in-memory  >=1.0      && <1.1
     , hs-opentelemetry-sdk                 >=1.0      && <1.1
-    , shikumi-trace                        ^>=0.1.0.0
-    , shikumi-trace-otel                   ^>=0.1.0.0
+    , shikumi-trace                        ^>=0.2.0.0
+    , shikumi-trace-otel                   ^>=0.1.1.0
     , tasty
     , tasty-hunit
     , text

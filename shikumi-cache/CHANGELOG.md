@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.1.2.0 - 2026-07-05
+
+### Added
+
+- `CacheConfig`, `defaultCacheConfig`, and `cachedLLMWith` for a shared policy
+  layer across cache backends, including optional TTL-based entry expiry.
+- `Shikumi.Cache.Backend.Effort` for best-effort backend error handling and
+  `stripMessageTimestamps` for canonical cache-key inspection.
+
+### Changed
+
+- Cache keys now include endpoint identity, default/per-call headers, provider
+  compatibility settings, and omit message construction timestamps. This bumps
+  `currentKeyVersion` to `shikumi-cache/v2`, invalidating old cache entries and
+  old trace replay keys.
+- `cachedLLM` no longer stores in-band provider error responses, and persistent
+  backend lookup/store failures degrade to cache misses or no-ops.
+- Refreshed the internal `shikumi` bound for the `0.3` series.
+
 ## 0.1.1.0 - 2026-06-28
 
 ### Changed

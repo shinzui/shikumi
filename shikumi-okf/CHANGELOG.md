@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.0.1 - 2026-07-05
+
+### Changed
+
+- Refreshed the internal `shikumi` bound for local builds against the `0.3`
+  series now that `okf-core` is available on Hackage.
+
 ## 0.1.0.0 - 2026-06-28
 
 ### Added

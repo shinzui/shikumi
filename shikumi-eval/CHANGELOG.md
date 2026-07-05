@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.2.0.0 - 2026-07-05
+
+### Added
+
+- Evaluation can enforce an optional per-example timeout via
+  `EvalConfig.exampleTimeoutMs`.
+- Usage accounting now includes streamed calls and exposes helpers for assistant
+  messages and stream terminal events.
+
+### Changed
+
+- **BREAKING** `EvalConfig` record construction requires the new
+  `exampleTimeoutMs` field.
+- **BREAKING** `Score` no longer exports its constructor; use `mkScore`,
+  `scoreZero`, `scoreOne`, and `unScore`.
+- Reports render summed per-example latency as `latency-sum`, making concurrent
+  evaluation accounting explicit.
+- Refreshed the internal `shikumi` bound for the `0.3` series.
+
 ## 0.1.1.0 - 2026-06-28
 
 ### Added

@@ -59,18 +59,16 @@ upload must succeed (and be visible on Hackage) before its dependents go up.
 | 8 | `shikumi-cache-redis` | `shikumi-cache-redis/` | shikumi, shikumi-cache |
 | 9 | `shikumi-cache-postgres` | `shikumi-cache-postgres/` | shikumi, shikumi-cache |
 | 10 | `shikumi-optimize` | `shikumi-optimize/` | shikumi, shikumi-compile, shikumi-eval, shikumi-trace |
-| 11 | `shikumi-okf` | `shikumi-okf/` | shikumi |
+| 11 | `shikumi-okf` | `shikumi-okf/` | shikumi, okf-core |
 
 When only a subset changes, publish that subset **in this same relative order**, skipping the
 untouched packages.
 
-> **`shikumi-okf` is currently blocked from Hackage.** It depends on the **`okf-core`** library
-> (EP-31), which is **not yet published to Hackage** and is resolved from a sibling working copy
-> via a local-path stanza in `cabal.project` (`../okf/okf-core`). Like `shikumi-trace-otel`
-> quarantines OpenTelemetry, only `shikumi-okf` lists `okf-core` under `build-depends`, so no
-> other package's build plan pulls it in. **Do not upload `shikumi-okf` until `okf-core` is live
-> on Hackage and the local-path override has been removed from `cabal.project`** — Hackage rejects
-> a package whose dependency does not exist there. See the *Upstream dependency* section below.
+`shikumi-okf` depends on the published `okf-core` library. Like `shikumi-trace-otel`
+quarantines OpenTelemetry, only `shikumi-okf` lists `okf-core` under `build-depends`, so no
+other package's build plan pulls it in. Before publishing `shikumi-okf`, verify `okf-core` is
+still available from Hackage and that no local-path or `source-repository-package` override for
+`okf-core` is active in `cabal.project` / `cabal.project.local`.
 
 ### NOT released (internal)
 
@@ -91,15 +89,11 @@ confirm shikumi builds against the *Hackage* versions of baikai (no `source-repo
 overrides in `cabal.project` / `cabal.project.local`); Hackage will reject a package that
 depends on an unpublished one.
 
-`shikumi-okf` additionally depends on **`okf-core`** (the sibling `shinzui/okf` repository).
-`okf-core` is **not yet on Hackage** and is currently wired in as a **local-path package** in
-`cabal.project` (`../okf/okf-core`). The same Hackage rule applies, and it is currently
-**unsatisfied**: until `okf-core` is published, `shikumi-okf` **cannot** be uploaded. When
-preparing to publish `shikumi-okf`, first ensure `okf-core` is live on Hackage, then remove the
-`../okf/okf-core` local-path line from `cabal.project` (or replace it with a
-`source-repository-package` only for reproducible CI builds — never a local path for a release)
-and confirm `shikumi-okf` builds against the Hackage `okf-core`. Until then, release the other
-packages and skip `shikumi-okf`.
+`shikumi-okf` additionally depends on the published **`okf-core`** package. Before publishing,
+confirm `okf-core` resolves from Hackage (for example, `nix develop -c cabal info okf-core`) and
+confirm there is no local-path or `source-repository-package` override for `okf-core` in
+`cabal.project` / `cabal.project.local`. Hackage rejects packages whose dependencies are
+unpublished or only locally available.
 
 ## Toolchain & environment
 
@@ -291,6 +285,6 @@ Verify each release page renders, then report the Hackage URLs
 - **Build only inside the dev shell** (GHC 9.12.4). The system `ghc` is the wrong compiler.
 - **Never publish the internal packages** (`shikumi-cli`, `shikumi-jitsurei`) without an explicit
   decision to change the published set.
-- **Do not upload `shikumi-okf`** while its dependency `okf-core` is unpublished / resolved from a
-  local path in `cabal.project`. Hackage will reject it. Release the rest and skip it until
-  `okf-core` is on Hackage and the local-path override is removed.
+- **Before uploading `shikumi-okf`**, verify `okf-core` resolves from Hackage and no local-path or
+  `source-repository-package` override for it is active. Hackage will reject dependencies that are
+  unpublished or only locally available.
