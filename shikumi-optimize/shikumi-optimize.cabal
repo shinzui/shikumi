@@ -64,7 +64,7 @@ library
     , base             >=4.20     && <5
     , containers
     , effectful
-    , generic-lens     ^>=2.2
+    , generic-lens     >=2.2      && <2.4
     , lens             ^>=5.3
     , shikumi          ^>=0.3.0.0
     , shikumi-compile  ^>=0.2.0.0
@@ -98,7 +98,7 @@ test-suite shikumi-optimize-test
 
   build-depends:
     , aeson
-    , baikai            >=0.3      && <0.4
+    , baikai            >=0.4      && <0.5
     , base
     , containers
     , effectful

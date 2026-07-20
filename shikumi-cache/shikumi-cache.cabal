@@ -45,7 +45,7 @@ library
 
   build-depends:
     , aeson
-    , baikai         >=0.3      && <0.4
+    , baikai         >=0.4      && <0.5
     , base           >=4.20     && <5
     , blake3
     , bytestring
@@ -69,7 +69,7 @@ test-suite shikumi-cache-test
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
     , aeson
-    , baikai         >=0.3      && <0.4
+    , baikai         >=0.4      && <0.5
     , base
     , bytestring
     , containers

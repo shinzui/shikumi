@@ -52,7 +52,7 @@ library
     , base          >=4.20     && <5
     , bytestring
     , effectful
-    , generic-lens  ^>=2.2
+    , generic-lens  >=2.2      && <2.4
     , lens          ^>=5.3
     , shikumi       ^>=0.3.0.0
     , text          ^>=2.1
@@ -69,7 +69,7 @@ test-suite shikumi-compile-test
 
   build-depends:
     , aeson
-    , baikai           >=0.3      && <0.4
+    , baikai           >=0.4      && <0.5
     , base
     , bytestring
     , effectful
