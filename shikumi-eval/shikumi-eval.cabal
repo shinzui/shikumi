@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-eval
-version:         0.2.0.0
+version:         0.2.0.1
 synopsis:        Typed evaluation framework for shikumi LM programs (EP-8)
 category:        AI
 description:

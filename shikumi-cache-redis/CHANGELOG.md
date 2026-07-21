@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.2.1 - 2026-07-20
+
+### Changed
+
+- Upgraded the test suite's `baikai` dependency to the `0.4` series
+  (`>=0.4 && <0.5`). Dependency bounds only — no changes to the exported API.
+
 ## 0.1.2.0 - 2026-07-05
 
 ### Changed

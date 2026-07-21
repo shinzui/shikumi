@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0.1 - 2026-07-20
+
+### Changed
+
+- Widened the `generic-lens` bound to `>=2.2 && <2.4` (admits 2.3) and upgraded
+  the test suite's `baikai` dependency to the `0.4` series (`>=0.4 && <0.5`).
+  Dependency bounds only — no changes to the exported API.
+
 ## 0.2.0.0 - 2026-07-05
 
 ### Changed

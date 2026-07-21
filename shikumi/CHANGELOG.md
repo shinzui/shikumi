@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.0.1 - 2026-07-20
+
+### Changed
+
+- Upgraded the baikai provider cohort to the `0.4` series: `baikai`,
+  `baikai-claude`, and `baikai-openai` now require `>=0.4 && <0.5`.
+  `baikai-effectful` stays on the `0.3` series. Dependency bounds only — no
+  changes to the exported API.
+
 ## 0.3.0.0 - 2026-07-05
 
 ### Changed

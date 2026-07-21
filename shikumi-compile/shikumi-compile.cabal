@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-compile
-version:         0.2.0.0
+version:         0.2.0.1
 synopsis:        The compiler layer for shikumi LM programs (EP-9)
 category:        AI
 description:
