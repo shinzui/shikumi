@@ -19,12 +19,16 @@
 -- https://raw.githubusercontent.com/shinzui/okf/<tag>/okf-core/dhall/package.dhall).
 --
 -- Types are closed (`allowUnknownTypes = False`): a shikumi bundle contains only
--- the two concept types `shikumi-okf` generates. Top-level frontmatter stays open
--- (`allowUnknownFields` keeps its default of True) because generated documents also
--- carry `tags` and an optional generation timestamp, and authors may add keys of
--- their own. No `idField` is declared, so document-handle checks stay off: shikumi
--- concepts are addressed by concept id and `shikumi://` resource, not by stable
--- handles.
+-- the two concept types `shikumi-okf` generates. Top-level frontmatter is closed
+-- too (`allowUnknownFields = False`). That is safe because a closed key set still
+-- always admits the six core OKF keys — `type`, `title`, `description`,
+-- `timestamp`, `resource`, `tags` — and those six are exactly what the generator
+-- emits: its frontmatter comes from three helpers (`okfCommon`, `setResource`,
+-- `setTags`) and there is no mechanism for an author to inject other keys. So
+-- closing the set cannot reject a generated document; what it catches is a
+-- hand-added stray key in a bundle that is supposed to be generated. No `idField`
+-- is declared, so document-handle checks stay off: shikumi concepts are addressed
+-- by concept id and `shikumi://` resource, not by stable handles.
 --
 -- Value shapes are checked, not just key presence: every single-valued key is
 -- declared `Cardinality.Scalar`, so `title: [a, b]` is a violation rather than a
@@ -97,5 +101,6 @@ in  okf.defaults.Profile::{
         ]
       }
     , allowUnknownTypes = False
+    , allowUnknownFields = False
     , types = [ appType, programType ]
     }

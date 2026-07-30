@@ -88,10 +88,12 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
         `frontmatter value at timestamp must match format rfc3339-utc`, each exit 1;
         a well-formed `timestamp: 2026-07-30T04:20:12Z` still exits 0.
   - [x] Commit.
-- [ ] Milestone 3: close the top-level key set (`allowUnknownFields = False`).
-  - [ ] Set `allowUnknownFields = False` in the descriptor.
-  - [ ] Verify a stray hand-added key is reported and that the untouched bundle still passes.
-  - [ ] Commit.
+- [x] Milestone 3: close the top-level key set (`allowUnknownFields = False`). (2026-07-30T04:47Z)
+  - [x] Set `allowUnknownFields = False` in the descriptor.
+  - [x] Verify a stray hand-added key is reported and that the untouched bundle still passes.
+        Observed: untouched bundle `OK: 3 concepts`, exit 0; with `owner: someone` inserted
+        into the frontmatter, `frontmatter field not declared by profile: owner`, exit 1.
+  - [x] Commit.
 - [ ] Milestone 4: per-document-kind rules (`TypeRule.frontmatter`).
   - [ ] Move `resource` from profile-wide `recommended` into each type's `required`, with the
         `UriWithScheme "shikumi"` format.
@@ -170,6 +172,24 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
   It is advisory (fatal only under `--log-enforce`) and orthogonal to this plan, but it is
   further support for the Decision Log's choice not to add a timestamp to the committed
   `example/out` bundle: doing so would have added permanent noise to every validation run.
+
+- **The `cd shikumi-okf && … && cd ..` idiom in Concrete Steps is unsafe in a persistent
+  shell and was replaced with a subshell.** If any command in the chain fails, the trailing
+  `cd ..` never runs and the shell is left inside `shikumi-okf/`; the next `cabal test
+  shikumi-okf` then fails with a confusing error that has nothing to do with the tests:
+
+  ```text
+  Error: [Cabal-7043]
+  The test command is for running test suites, but the target 'shikumi-okf' refers to
+  the library shikumi-okf from the package shikumi-okf-0.1.0.1.
+  ```
+
+  (`cabal test <pkg>` resolves the target differently depending on the directory it is run
+  from.) Wrapping the directory change in a subshell cannot leak, whether it succeeds or
+  fails, so the Concrete Steps now use
+  `(cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null)`.
+  This is the same working-directory hazard the plan already identified for the test itself,
+  showing up a second time in the verification commands.
 
 
 ## Decision Log
@@ -713,7 +733,7 @@ explanatory prose either in the file's header comment block or inside a field's
 `description`:
 
 ```bash
-cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null && echo "profile OK" && cd ..
+(cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null && echo "profile OK")
 cabal test shikumi-okf
 ```
 
@@ -736,7 +756,7 @@ Expect `clean exit=0`, then a `profile:` line on stderr mentioning a cardinality
 **Milestone 3.** Add the one line, then:
 
 ```bash
-cd shikumi-okf && dhall format profile/shikumi.dhall && cd ..
+(cd shikumi-okf && dhall format profile/shikumi.dhall)
 cabal test shikumi-okf
 $OKF validate shikumi-okf/example/out --profile shikumi-okf/profile/shikumi.dhall --profile-enforce; echo "clean exit=$?"
 ```
@@ -763,7 +783,7 @@ Expect `clean exit=0` and `stray-key exit=1`. Commit with the two trailers.
 **Milestone 4.** Edit both type rules, then:
 
 ```bash
-cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null && echo "profile OK" && cd ..
+(cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null && echo "profile OK")
 cabal test shikumi-okf
 $OKF validate shikumi-okf/example/out --profile shikumi-okf/profile/shikumi.dhall --profile-enforce; echo "clean exit=$?"
 python3 - <<'PY'
@@ -790,7 +810,7 @@ cabal run -v0 shikumi-okf-example -- shikumi-okf/example/out
 git status --porcelain shikumi-okf/example/out
 $OKF validate shikumi-okf/example/out --profile shikumi-okf/profile/shikumi.dhall --profile-enforce
 cabal-fmt --check shikumi-okf/shikumi-okf.cabal
-cd shikumi-okf && dhall format --check profile/shikumi.dhall && cd ..
+(cd shikumi-okf && dhall format --check profile/shikumi.dhall)
 ```
 
 The `git status --porcelain` line must print nothing, proving regeneration stayed
