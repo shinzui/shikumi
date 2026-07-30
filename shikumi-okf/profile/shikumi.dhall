@@ -24,11 +24,32 @@
 -- carry `tags` and an optional generation timestamp, and authors may add keys of
 -- their own. No `idField` is declared, so document-handle checks stay off: shikumi
 -- concepts are addressed by concept id and `shikumi://` resource, not by stable
--- handles. Every field rule keeps the default `Any` cardinality and no `format`,
--- matching the presence-only checks this profile has always expressed.
+-- handles.
+--
+-- Value shapes are checked, not just key presence: every single-valued key is
+-- declared `Cardinality.Scalar`, so `title: [a, b]` is a violation rather than a
+-- silent pass. `timestamp` carries the `Rfc3339Utc` format so a value like
+-- `yesterday` is rejected; it sits under `recommended` rather than `required`
+-- because `shikumi-okf` takes the timestamp as an explicit argument and omits the
+-- key when the caller supplies none, which is what makes regenerating an unchanged
+-- manifest byte-identical. The consequence is that `okf validate --strict` reports
+-- a missing-recommended advisory for timestamp-free bundles; an ordinary
+-- (non-strict) run does not, since presence of a recommended key is only demanded
+-- under strict authoring.
 let okf = ../../../okf/okf-core/dhall/package.dhall
 
 let field = okf.mk.FieldRule
+
+let scalarOf =
+      \(name : Text) ->
+      \(prose : Text) ->
+      \(fmt : Optional okf.FieldFormat) ->
+        okf.defaults.FieldRule::{
+        , field = name
+        , description = Some prose
+        , cardinality = okf.Cardinality.Scalar
+        , format = fmt
+        }
 
 let appType =
       okf.defaults.TypeRule::{
@@ -55,18 +76,24 @@ in  okf.defaults.Profile::{
     , okfVersion = "0.1"
     , frontmatter = okf.defaults.FrontmatterRules::{
       , required =
-        [ field.documented
+        [ scalarOf
             "type"
             "The OKF concept type: `Shikumi App` or `Shikumi Program`."
-        , field.documented "title" "Human-readable name of the app or program."
+            (None okf.FieldFormat)
+        , scalarOf
+            "title"
+            "Human-readable name of the app or program."
+            (None okf.FieldFormat)
         ]
       , recommended =
-        [ field.documented
+        [ scalarOf
             "description"
             "What the app or program is for, in one or two sentences."
-        , field.documented
-            "resource"
-            "The `shikumi://<namespace>/<app>` URI this concept documents."
+            (None okf.FieldFormat)
+        , scalarOf
+            "timestamp"
+            "Generation time, when the generator was given one. Optional by design: shikumi-okf takes the timestamp as an explicit argument so that regenerating an unchanged manifest is byte-identical, and omits the key when no timestamp is supplied. Declared here so its format is checked when it IS present; because it sits under `recommended`, an ordinary validation run does not demand it, while `okf validate --strict` will advise on its absence."
+            (Some okf.FieldFormat.Rfc3339Utc)
         ]
       }
     , allowUnknownTypes = False

@@ -80,11 +80,14 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
         left to keep: all three of its assertions are profile-expressible — see the new
         Decision Log entry.)
   - [x] Commit.
-- [ ] Milestone 2: value shapes and formats (`Cardinality`, `FieldFormat`).
-  - [ ] Add the `scalarOf` helper and set `Scalar` on `type`, `title`, `description`.
-  - [ ] Add `timestamp` as a recommended `Scalar` + `Rfc3339Utc` field.
-  - [ ] Verify a malformed `title` list and a malformed `timestamp` are both reported.
-  - [ ] Commit.
+- [x] Milestone 2: value shapes and formats (`Cardinality`, `FieldFormat`). (2026-07-30T04:40Z)
+  - [x] Add the `scalarOf` helper and set `Scalar` on `type`, `title`, `description`.
+  - [x] Add `timestamp` as a recommended `Scalar` + `Rfc3339Utc` field.
+  - [x] Verify a malformed `title` list and a malformed `timestamp` are both reported.
+        Observed: `frontmatter cardinality at title must be scalar, found list` and
+        `frontmatter value at timestamp must match format rfc3339-utc`, each exit 1;
+        a well-formed `timestamp: 2026-07-30T04:20:12Z` still exits 0.
+  - [x] Commit.
 - [ ] Milestone 3: close the top-level key set (`allowUnknownFields = False`).
   - [ ] Set `allowUnknownFields = False` in the descriptor.
   - [ ] Verify a stray hand-added key is reported and that the untouched bundle still passes.
@@ -143,6 +146,30 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
   ```
 
   The fallback candidate-search described in Idempotence and Recovery was not needed.
+
+- **Cardinality and format are checked in both validation modes; only *presence* depends on
+  the mode.** Reading `validateProfile` in
+  `/Users/shinzui/Keikaku/bokuno/okf/okf-core/src/Okf/Profile.hs` (line 1877 onward) shows
+  `checkFields` calling `vocabularyViolations`, `formatViolations`, and the
+  `CardinalityMismatch` branch unconditionally, while only `presenceViolations` consults
+  `applicablePresenceClause validationProfile …`. This confirms the Decision Log's premise:
+  declaring `timestamp` as *recommended* really does buy a format check under ordinary
+  `PermissiveConformance` validation without demanding the key be present.
+
+- **`okf validate` has a second, unrelated advisory that fires on well-formed timestamps.**
+  When a valid `timestamp: 2026-07-30T04:20:12Z` was added to a document as a sanity check,
+  validation still exited 0 but printed a line from okf's *log* feature, not its profile
+  feature:
+
+  ```text
+  log: programs/heartbeat: timestamp date 2026-07-30 has no enclosing log.md
+  OK: 3 concepts
+  log: 1 stale concept advisory/advisories (use --log-enforce to fail)
+  ```
+
+  It is advisory (fatal only under `--log-enforce`) and orthogonal to this plan, but it is
+  further support for the Decision Log's choice not to add a timestamp to the committed
+  `example/out` bundle: doing so would have added permanent noise to every validation run.
 
 
 ## Decision Log
