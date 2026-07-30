@@ -94,12 +94,17 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
         Observed: untouched bundle `OK: 3 concepts`, exit 0; with `owner: someone` inserted
         into the frontmatter, `frontmatter field not declared by profile: owner`, exit 1.
   - [x] Commit.
-- [ ] Milestone 4: per-document-kind rules (`TypeRule.frontmatter`).
-  - [ ] Move `resource` from profile-wide `recommended` into each type's `required`, with the
+- [x] Milestone 4: per-document-kind rules (`TypeRule.frontmatter`). (2026-07-30T04:55Z)
+  - [x] Move `resource` from profile-wide `recommended` into each type's `required`, with the
         `UriWithScheme "shikumi"` format.
-  - [ ] Add `tags` as a `List` recommendation on `Shikumi Program` only.
-  - [ ] Verify a malformed `resource` is reported and the untouched bundle still passes.
-  - [ ] Commit.
+  - [x] Add `tags` as a `List` recommendation on `Shikumi Program` only.
+  - [x] Verify a malformed `resource` is reported and the untouched bundle still passes.
+        Observed: untouched `OK: 3 concepts`, exit 0; `resource: not-a-uri` reports
+        `frontmatter value at resource must match format uri-with-scheme(shikumi)`, exit 1;
+        deleting the app's `resource:` line reports `missing profile-required field:
+        resource` quoting the *per-type* description, which proves the per-type rule is what
+        fired now that the profile-wide list no longer mentions the key.
+  - [x] Commit.
 - [ ] Final: update `shikumi-okf/CHANGELOG.md`, re-run the full validation sequence, and fill
       in Outcomes & Retrospective.
 
@@ -190,6 +195,25 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
   `(cd shikumi-okf && dhall format profile/shikumi.dhall && dhall type --file profile/shikumi.dhall >/dev/null)`.
   This is the same working-directory hazard the plan already identified for the test itself,
   showing up a second time in the verification commands.
+
+- **A field rule's `description` is echoed verbatim in violation output, so the long
+  `timestamp` prose this plan prescribed makes `--strict` runs noisy.** Under `--strict`,
+  okf's core validator already emits its own short advisory, and the profile then adds a
+  second line carrying the entire description:
+
+  ```text
+  apps/example-app: missing recommended field: timestamp
+  profile: apps/example-app: missing profile-recommended field: timestamp (Generation
+  time, when the generator was given one. Optional by design: shikumi-okf takes the
+  timestamp as an explicit argument so that regenerating an unchanged manifest is
+  byte-identical, … while `okf validate --strict` will advise on its absence.)
+  ```
+
+  The text was kept as the plan specified it: the output is advisory-only, `--strict` is not
+  the documented everyday command, and a reader who hits the advisory gets the full reason
+  in place. Worth knowing for future field rules: `description` is user-facing diagnostic
+  text, not just a comment, so a one-line summary is usually the better choice with the long
+  rationale left in the file's header block.
 
 
 ## Decision Log

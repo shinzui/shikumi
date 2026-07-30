@@ -40,6 +40,17 @@
 -- a missing-recommended advisory for timestamp-free bundles; an ordinary
 -- (non-strict) run does not, since presence of a recommended key is only demanded
 -- under strict authoring.
+--
+-- Rules that are true of one document kind only live in that kind's own
+-- `frontmatter` record, which okf merges with the profile-wide one. `resource` is
+-- declared there rather than profile-wide: the generator always emits it for both
+-- kinds, so per-type `required` states the truth precisely, and declaring the same
+-- key in both scopes would yield two overlapping presence clauses for no gain. Its
+-- `UriWithScheme "shikumi"` format parses the value, so `resource: not-a-uri` is a
+-- violation; that overlaps harmlessly with the `resourceScheme` check each type
+-- rule already performs. `tags` is recommended on `Shikumi Program` only, as a
+-- `List`, because only program documents carry it and only when the author
+-- declared any.
 let okf = ../../../okf/okf-core/dhall/package.dhall
 
 let field = okf.mk.FieldRule
@@ -60,6 +71,14 @@ let appType =
       , type = "Shikumi App"
       , description = Some
           "One application that ships shikumi programs; links to every program it exposes."
+      , frontmatter = okf.defaults.FrontmatterRules::{
+        , required =
+          [ scalarOf
+              "resource"
+              "The `shikumi://<namespace>/<app>` URI this concept documents."
+              (Some (okf.FieldFormat.UriWithScheme "shikumi"))
+          ]
+        }
       , pathPattern = Some "apps/*"
       , resourceScheme = Some "shikumi"
       }
@@ -69,6 +88,15 @@ let programType =
       , type = "Shikumi Program"
       , description = Some
           "One shikumi program: its signature, adapter, and declared metadata."
+      , frontmatter = okf.defaults.FrontmatterRules::{
+        , required =
+          [ scalarOf
+              "resource"
+              "The `shikumi://<namespace>/<app>/programs/<name>` URI this concept documents."
+              (Some (okf.FieldFormat.UriWithScheme "shikumi"))
+          ]
+        , recommended = [ field.list "tags" ]
+        }
       , pathPattern = Some "programs/*"
       , resourceScheme = Some "shikumi"
       }
