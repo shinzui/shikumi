@@ -51,15 +51,32 @@ cabal test shikumi-okf
 and its output includes a new passing test named
 `generated bundle conforms to profile/shikumi.dhall`. This one proves the profile now
 rejects malformed values that it previously accepted — deliberately breaking a document and
-watching the checker complain:
+watching the checker complain. Two details matter and are easy to get wrong. The break must
+go *inside* the YAML metadata block at the top of the file; appending to the end of the file
+adds text to the Markdown body, which the checker rightly ignores. And the `okf` on `PATH`
+is version 0.1.2.1, too old to read this profile's schema, so the 0.3.0.0 binary from the
+sibling okf checkout must be used instead:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/shikumi
-printf 'resource: nonsense\n' >> shikumi-okf/example/out/programs/heartbeat.md
-okf validate shikumi-okf/example/out \
+OKF=/Users/shinzui/Keikaku/bokuno/okf/dist-newstyle/build/aarch64-osx/ghc-9.12.4/okf-cli-0.3.0.0/x/okf/build/okf/okf
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("shikumi-okf/example/out/programs/heartbeat.md")
+p.write_text(p.read_text().replace(
+    "resource: shikumi://shinzui/example-app/programs/heartbeat",
+    "resource: not-a-uri"))
+PY
+$OKF validate shikumi-okf/example/out \
   --profile shikumi-okf/profile/shikumi.dhall --profile-enforce
-# exits non-zero, reporting a resource format violation
 git checkout shikumi-okf/example/out/programs/heartbeat.md
+```
+
+which exits 1 after printing:
+
+```text
+profile: programs/heartbeat: frontmatter value at resource must match format uri-with-scheme(shikumi), found: "not-a-uri"
+profile: programs/heartbeat: resource must use scheme shikumi://, found: not-a-uri
 ```
 
 
@@ -105,8 +122,19 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
         resource` quoting the *per-type* description, which proves the per-type rule is what
         fired now that the profile-wide list no longer mentions the key.
   - [x] Commit.
-- [ ] Final: update `shikumi-okf/CHANGELOG.md`, re-run the full validation sequence, and fill
-      in Outcomes & Retrospective.
+- [x] Final: update `shikumi-okf/CHANGELOG.md`, re-run the full validation sequence, and fill
+      in Outcomes & Retrospective. (2026-07-30T05:05Z)
+  - [x] `## Unreleased` entry covering the new test, all three tightenings, and the
+        `--strict` timestamp consequence; `version:` confirmed unchanged.
+  - [x] Full sequence from clean: `cabal build`, `cabal test` (9 passed),
+        `cabal run shikumi-okf-example`, `git status --porcelain` (empty — regeneration
+        byte-identical), `okf validate --profile-enforce` (`OK: 3 concepts`),
+        `cabal-fmt --check`, `dhall format --check`.
+  - [x] All four acceptance corruptions re-run against the finished profile: baseline exit 0,
+        each break exit 1, tree restored clean.
+  - [x] Corrected this plan's own Purpose / Big Picture demonstration, which did not work as
+        written (see Surprises & Discoveries).
+  - [x] Outcomes & Retrospective filled in.
 
 
 ## Surprises & Discoveries
@@ -215,6 +243,22 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
   text, not just a comment, so a one-line summary is usually the better choice with the long
   rationale left in the file's header block.
 
+- **This plan's own headline demonstration in Purpose / Big Picture did not work, and was
+  corrected.** As originally written it ran
+  `printf 'resource: nonsense\n' >> …/heartbeat.md`, which appends to the Markdown *body*,
+  leaving the frontmatter's real `resource` untouched. Run against the finished profile it
+  printed `OK: 3 concepts` and exited 0 — the opposite of what the section promised. It also
+  invoked the bare `okf`, which is 0.1.2.1 on `PATH` and cannot read this schema at all. The
+  section now uses the 0.3.0.0 binary and a `python3` in-place edit of the frontmatter, and
+  the replacement was run end-to-end to confirm it exits 1 with the two expected lines.
+  Ironically the plan already warned about both hazards, but only in Concrete Steps.
+
+  A related tooling detail: the Nix development shell provides **GNU** sed, not BSD sed, so
+  the macOS-idiomatic `sed -i '' 's|…|…|' file` fails there with
+  `sed: can't read s|…|…|: No such file or directory` (GNU sed reads the empty string as the
+  script and the real script as a filename). All in-place edits in this plan use `python3`
+  instead, which behaves the same either way.
+
 
 ## Decision Log
 
@@ -294,7 +338,79 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Both problems the plan set out to fix are fixed, and all four milestones landed as separate
+green commits on `master`:
+
+```text
+d905608 test(okf): validate generated bundle against the real profile
+48e0959 feat(okf)!: check frontmatter value shapes and the timestamp format
+11fe551 feat(okf)!: close the top-level frontmatter key set
+28d2817 feat(okf)!: require a well-formed shikumi:// resource per document kind
+```
+
+The profile is now checked in-process. `cabal test shikumi-okf` reports 9 passing tests
+including the two new ones, and the suite reads the shipped descriptor rather than a Haskell
+paraphrase of it:
+
+```text
+  Profile
+    profile/shikumi.dhall loads and compiles:                     OK
+    generated bundle conforms to profile/shikumi.dhall:           OK
+```
+
+That dependency was proven, not assumed: appending `, bogusField = True` to
+`shikumi-okf/profile/shikumi.dhall` turned both tests red with a message naming the
+descriptor's absolute path, and restoring the file returned all 9 to green. The kind of rot
+that went unnoticed across two `okf-core` major releases is now a red test.
+
+The profile also checks what values contain. All four acceptance corruptions were run
+against the committed `example/out` bundle with the 0.3.0.0 `okf` binary; the untouched
+bundle exits 0 (`OK: 3 concepts`) and each single-document edit exits 1:
+
+```text
+A. title as a two-element list
+   profile: programs/heartbeat: frontmatter cardinality at title must be scalar, found list: ["Heartbeat","Extra"]
+B. timestamp: yesterday
+   profile: programs/heartbeat: frontmatter value at timestamp must match format rfc3339-utc, found: "yesterday"
+C. undeclared owner: someone key
+   profile: programs/heartbeat: frontmatter field not declared by profile: owner
+D. resource: not-a-uri
+   profile: programs/heartbeat: frontmatter value at resource must match format uri-with-scheme(shikumi), found: "not-a-uri"
+   profile: programs/heartbeat: resource must use scheme shikumi://, found: not-a-uri
+```
+
+Every one of those passed silently before this plan. The generator's determinism guarantee
+is intact — after `cabal run -v0 shikumi-okf-example -- shikumi-okf/example/out`,
+`git status --porcelain shikumi-okf/example/out` printed nothing — and both formatters
+(`cabal-fmt --check`, `dhall format --check`) pass. The package `version:` field is
+unchanged, as intended; the release bump belongs in a separate `chore(release):` commit.
+
+Nothing was left undone and no milestone was descoped. Two deviations from the plan as
+written, both recorded above: the `Conformance` group was deleted outright rather than kept
+as a reduced smoke check (the plan permitted either; see the Decision Log for why nothing was
+worth keeping), and the plan's own headline demonstration in Purpose / Big Picture had to be
+rewritten because it did not work.
+
+Three lessons worth carrying forward. First, **the plan's own verification commands deserve
+the same skepticism as the code.** The Purpose section's demonstration appended to the
+Markdown body rather than the frontmatter and invoked an `okf` too old to read the schema, so
+it exited 0 against the finished profile — it would have "proved" success no matter what was
+implemented. The plan warned about both hazards, but only in a later section. A demonstration
+command is only trustworthy once it has been run and seen to fail on the broken input, which
+is the same discipline the plan correctly insisted on for the descriptor-corruption proof.
+
+Second, **the gap this plan closed was a verification gap, not a knowledge gap.** The
+descriptor rotted not because anyone misunderstood the schema but because the only thing
+checking it was a human running a CLI by hand. Sequencing Milestone 1 first was the single
+highest-leverage decision here: it made Milestones 2 through 4 self-verifying, and each of
+them was in fact caught-or-confirmed by `cabal test` before ever reaching the CLI.
+
+Third, **a `description` on a profile field rule is diagnostic output, not a comment.** The
+long `timestamp` rationale this plan prescribed is echoed verbatim in every `--strict`
+violation line, on top of an advisory okf's core validator already emits. The text was kept
+as specified — it is advisory-only and `--strict` is not the documented everyday command —
+but future field rules should carry a one-line summary and leave the rationale in the file's
+header block.
 
 
 ## Context and Orientation
@@ -956,3 +1072,31 @@ command-line formatter and type checker (present in the development shell), and 
 0.3.0.0 binary from the sibling checkout at `/Users/shinzui/Keikaku/bokuno/okf`. The `okf`
 on `PATH` is 0.1.2.1 and cannot read this schema; upgrading that installation is outside
 this plan's scope.
+
+
+## Revision Note (2026-07-30, during implementation)
+
+Three changes were made to this plan while implementing it, all reflected in the sections
+above rather than only here.
+
+The Purpose / Big Picture demonstration was rewritten. As originally written it appended
+`resource: nonsense` to the end of `heartbeat.md`, which lands in the Markdown body and
+leaves the frontmatter untouched, and it invoked the bare `okf` from `PATH`, which is
+version 0.1.2.1 and cannot read this profile's schema. Run against the finished profile the
+original command printed `OK: 3 concepts` and exited 0 — it would have appeared to succeed
+regardless of what was implemented. It now uses the 0.3.0.0 binary and a `python3` edit of
+the frontmatter, and was executed end-to-end to confirm it exits 1 with the two expected
+violation lines.
+
+The `cd shikumi-okf && … && cd ..` idiom in Concrete Steps was replaced with a subshell,
+`(cd shikumi-okf && …)`. In the original form a failure anywhere in the chain skips the
+trailing `cd ..` and strands the shell inside `shikumi-okf/`, where the next
+`cabal test shikumi-okf` fails with a Cabal-7043 error about the target referring to the
+library — confusing, and unrelated to the tests. This happened during implementation.
+
+Four entries were added to Surprises & Discoveries (data-files resolving to the source tree,
+cardinality/format being mode-independent, the unrelated `log:` timestamp advisory, the
+verbosity of field-rule descriptions in violation output, and the two command hazards above)
+and one to the Decision Log (deleting the `Conformance` group outright rather than keeping a
+reduced smoke check). Progress was checked off milestone by milestone with observed output,
+and Outcomes & Retrospective was filled in at completion.
