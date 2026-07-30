@@ -48,7 +48,7 @@ library
 
   build-depends:
     , base      >=4.20     && <5
-    , okf-core  ^>=0.1.0.0
+    , okf-core  ^>=0.3.0.0
     , shikumi   ^>=0.3.0.0
     , text      ^>=2.1
 
@@ -73,7 +73,7 @@ test-suite shikumi-okf-test
     , directory
     , effectful
     , filepath
-    , okf-core     ^>=0.1.0.0
+    , okf-core     ^>=0.3.0.0
     , shikumi      ^>=0.3.0.0
     , shikumi-okf  ^>=0.1.0.1
     , tasty

@@ -30,7 +30,8 @@ byte-identical output. A CI check can regenerate into `out/` and fail if
 
 ## Validate it with the standalone okf CLI
 
-The `okf` binary lives in the sibling `okf` repository. From there:
+The `okf` binary lives in the sibling `okf` repository. `profile/shikumi.dhall`
+uses the `0.3.0.0` profile schema, so `--profile` needs `okf` `>=0.3`. From there:
 
 ```bash
 cabal run okf -- validate <repo>/shikumi-okf/example/out
