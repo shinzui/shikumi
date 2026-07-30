@@ -65,16 +65,21 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
 
 ## Progress
 
-- [ ] Milestone 1: in-process profile conformance test.
-  - [ ] Add `data-files: profile/shikumi.dhall` to `shikumi-okf/shikumi-okf.cabal`.
-  - [ ] Add `Paths_shikumi_okf` to the test suite's `other-modules` and `autogen-modules`.
-  - [ ] Add the `Profile` test group to `shikumi-okf/test/Main.hs` that loads, compiles, and
+- [x] Milestone 1: in-process profile conformance test. (2026-07-30T04:30Z)
+  - [x] Add `data-files: profile/shikumi.dhall` to `shikumi-okf/shikumi-okf.cabal`.
+  - [x] Add `Paths_shikumi_okf` to the test suite's `other-modules` and `autogen-modules`.
+  - [x] Add the `Profile` test group to `shikumi-okf/test/Main.hs` that loads, compiles, and
         validates against the real descriptor.
-  - [ ] Confirm the new test fails when the descriptor is deliberately corrupted, then passes
-        when restored (this is the proof it is actually reading the file).
-  - [ ] Replace the duplicated hermetic `Conformance` group with a comment pointing at the
-        new real check, keeping only assertions the profile cannot express.
-  - [ ] Commit.
+  - [x] Confirm the new test fails when the descriptor is deliberately corrupted, then passes
+        when restored (this is the proof it is actually reading the file). Both `Profile`
+        tests failed with `could not load
+        /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/./profile/shikumi.dhall` naming the
+        real source path; restoring returned all 9 tests to green.
+  - [x] Replace the duplicated hermetic `Conformance` group with a comment pointing at the
+        new real check, keeping only assertions the profile cannot express. (Nothing was
+        left to keep: all three of its assertions are profile-expressible — see the new
+        Decision Log entry.)
+  - [x] Commit.
 - [ ] Milestone 2: value shapes and formats (`Cardinality`, `FieldFormat`).
   - [ ] Add the `scalarOf` helper and set `Scalar` on `type`, `title`, `description`.
   - [ ] Add `timestamp` as a recommended `Scalar` + `Rfc3339Utc` field.
@@ -118,8 +123,44 @@ git checkout shikumi-okf/example/out/programs/heartbeat.md
   relative path would therefore work when run from `shikumi-okf/` and break when run from
   the repository root. This is why Milestone 1 uses Cabal's `data-files` mechanism.
 
+- **`data-files` resolves to the source tree for an in-place build, so the corruption proof
+  works without reinstalling.** `getDataFileName "profile/shikumi.dhall"` returned
+  `/Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/./profile/shikumi.dhall` — the working
+  copy itself, not a staged copy under `dist-newstyle`. Editing the descriptor therefore
+  changes what the next `cabal test` reads, with no rebuild needed (the descriptor is not a
+  build input, so nothing recompiles). Evidence, after appending `, bogusField = True`:
+
+  ```text
+    Profile
+      profile/shikumi.dhall loads and compiles:                     FAIL
+      generated bundle conforms to profile/shikumi.dhall:           FAIL
+        Exception: user error (could not load
+        /Users/shinzui/Keikaku/bokuno/shikumi/shikumi-okf/./profile/shikumi.dhall:
+        Error: Invalid input
+        75 | , bogusField = True
+           | ^
+        unexpected ','
+  ```
+
+  The fallback candidate-search described in Idempotence and Recovery was not needed.
+
 
 ## Decision Log
+
+- Decision: Delete the `Conformance` group outright rather than keeping a reduced version of
+  it, and remove the now-unused `conceptType`/`conceptResource` imports.
+  Rationale: The plan permitted keeping it as a smoke check "if in doubt". There was no
+  doubt: each of its three assertions is expressed by the descriptor and now checked against
+  the real file. The app/program `type` strings are covered by `allowUnknownTypes = False`
+  plus the two `TypeRule`s, and the app-vs-program *placement* is covered by each rule's
+  `pathPattern` (`apps/*`, `programs/*`), so a program document carrying `type: Shikumi App`
+  violates the app rule's path pattern. The `shikumi://` resource prefix is covered by
+  `resourceScheme = Some "shikumi"` on both rules, and Milestone 4 adds a parsed
+  `UriWithScheme "shikumi"` format on top. Concept count and ordering, which the profile
+  genuinely cannot express, were already asserted by the untouched `Generate` group.
+  Keeping a second copy would have reintroduced exactly the drift this milestone exists to
+  prevent. The deletion is recorded as a comment on the new `Profile` group.
+  Date: 2026-07-30
 
 - Decision: Do the test (Milestone 1) before any profile tightening.
   Rationale: The tightenings in Milestones 2–4 change what the profile accepts. Without an

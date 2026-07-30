@@ -9,15 +9,23 @@
 module Main (main) where
 
 import Control.Exception (IOException, catch)
+import Data.Foldable (toList)
 import Data.List (sort)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
-import Okf.Bundle (conceptIdOf, conceptResource, conceptType, walkBundle)
+import Okf.Bundle (conceptIdOf, walkBundle)
 import Okf.ConceptId (ConceptId, parseConceptId, renderConceptId)
 import Okf.Graph (Edge (..), Graph (..), buildGraph)
+import Okf.Profile
+  ( CompiledProfile,
+    compileProfile,
+    loadProfileFile,
+    validateProfile,
+  )
 import Okf.Validation (ValidationProfile (PermissiveConformance), validateBundle)
+import Paths_shikumi_okf (getDataFileName)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Module (predict)
 import Shikumi.Okf.Generate (generateBundle, writeProgramBundle)
@@ -241,21 +249,26 @@ tests =
                   ids
         ],
       testGroup
-        "Conformance"
-        -- Hermetic invariants matching profile/shikumi.dhall (the .dhall profile
-        -- itself is enforced end-to-end by `okf validate --profile-enforce`; this
-        -- asserts the same conventions in-process without dhall or a file path).
-        [ testCase "types and resource scheme match the shikumi profile" $
+        "Profile"
+        -- The real descriptor, not a Haskell restatement of it. This fails if
+        -- profile/shikumi.dhall stops type-checking against the okf-core schema,
+        -- stops compiling as a coherent profile, or stops describing what the
+        -- generator actually emits.
+        --
+        -- This replaces a former "Conformance" group that re-asserted the
+        -- profile's conventions (concept types, `shikumi://` resource scheme)
+        -- in-process against a Haskell copy of them, and so could never notice
+        -- the descriptor itself going stale. Every convention it checked is now
+        -- expressed by the descriptor and enforced here against the real file.
+        [ testCase "profile/shikumi.dhall loads and compiles" $ do
+            _ <- loadAndCompileProfile
+            pure (),
+          testCase "generated bundle conforms to profile/shikumi.dhall" $ do
+            compiled <- loadAndCompileProfile
             case generateBundle demoApp Nothing demoManifest of
-              Left err -> fail (show err)
-              Right (appC : programCs) -> do
-                conceptType appC @?= "Shikumi App"
-                mapM_ (\c -> conceptType c @?= "Shikumi Program") programCs
-                let resources = map conceptResource (appC : programCs)
-                assertBool
-                  "every resource uses the shikumi:// scheme"
-                  (all (maybe False ("shikumi://" `T.isPrefixOf`)) resources)
-              Right [] -> fail "expected at least the app concept"
+              Left err -> fail ("generateBundle failed: " <> show err)
+              Right concepts ->
+                validateProfile PermissiveConformance compiled concepts @?= []
         ],
       testGroup
         "RoundTrip"
@@ -298,6 +311,21 @@ freshTempDir name = do
   removeDirectoryRecursive root `catch` \(_ :: IOException) -> pure ()
   createDirectoryIfMissing True root
   pure root
+
+-- | Load and compile the shipped profile descriptor, failing the test with a
+-- readable message at whichever stage breaks. The path is resolved through
+-- Cabal's data-files mechanism, so it does not depend on the working directory
+-- the test was launched from.
+loadAndCompileProfile :: IO CompiledProfile
+loadAndCompileProfile = do
+  path <- getDataFileName "profile/shikumi.dhall"
+  loaded <- loadProfileFile path
+  case loaded of
+    Left err -> fail ("could not load " <> path <> ": " <> T.unpack err)
+    Right spec ->
+      case compileProfile spec of
+        Left errs -> fail ("profile did not compile: " <> show (toList errs))
+        Right compiled -> pure compiled
 
 expectConceptId :: Text -> IO ConceptId
 expectConceptId raw =

@@ -24,6 +24,11 @@ maintainer:      nadeem@gmail.com
 build-type:      Simple
 extra-doc-files: CHANGELOG.md
 
+-- Shipped so consumers get the profile their bundles are checked against, and so
+-- the test suite can locate it via Paths_shikumi_okf.getDataFileName regardless
+-- of the directory cabal was invoked from.
+data-files:      profile/shikumi.dhall
+
 common common-options
   ghc-options:
     -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
@@ -63,11 +68,13 @@ executable shikumi-okf-example
     , text
 
 test-suite shikumi-okf-test
-  import:         common-options
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is:        Main.hs
-  ghc-options:    -threaded -with-rtsopts=-N
+  import:          common-options
+  type:            exitcode-stdio-1.0
+  hs-source-dirs:  test
+  main-is:         Main.hs
+  other-modules:   Paths_shikumi_okf
+  autogen-modules: Paths_shikumi_okf
+  ghc-options:     -threaded -with-rtsopts=-N
   build-depends:
     , base
     , directory
