@@ -1,6 +1,6 @@
 let Schema =
-      https://raw.githubusercontent.com/shinzui/mori-schema/026ae74331e5c516542af1dd96f041c658ed4621/package.dhall
-        sha256:18258ef583580a897f4af3e7c86db0342afb42fb40efc535b217ba1089230141
+      https://raw.githubusercontent.com/shinzui/mori-schema/b85081a0e935a976202fd7a1227f8b93e2cbeb23/package.dhall
+        sha256:1501e5c3e55e78d2a58774e2f8aefda20e32b948fa7caf639473fce90929464b
 
 in  Schema.Project::{
     , project = Schema.ProjectIdentity::{
@@ -27,4 +27,13 @@ in  Schema.Project::{
         }
       ]
     , dependencies = [ "shinzui/baikai" ]
+    , okfBundles =
+      [ Schema.OkfBundle::{
+        , name = "improvement-requests"
+        , path = "docs/improvement-requests"
+        , profile = Some "docs/improvement-requests/profile.dhall"
+        , okfVersion = "0.1"
+        , description = Some "Shikumi-owned improvement requests"
+        }
+      ]
     }
