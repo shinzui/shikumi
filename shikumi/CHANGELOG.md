@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0.2 — 2026-08-07
+
 ### Changed
 
 - Upgraded the baikai provider cohort to the `0.5` series: `baikai`,

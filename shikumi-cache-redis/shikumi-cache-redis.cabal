@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-cache-redis
-version:         0.1.2.1
+version:         0.1.2.2
 synopsis:        Redis-backed shikumi cache (EP-6)
 category:        AI
 description:

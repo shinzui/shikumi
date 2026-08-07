@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-trace
-version:         0.2.0.1
+version:         0.2.0.2
 synopsis:
   Hierarchical tracing, observability, and deterministic replay for shikumi (EP-7)
 

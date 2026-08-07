@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0.0 — 2026-08-07
+
 ### Added
 
 - **Generated bundles target OKF v0.2.** The bundle root's `index.md` declares

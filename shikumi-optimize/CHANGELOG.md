@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1.2 — 2026-08-07
+
 ### Changed
 
 - Upgraded the `baikai` dependency to the `0.5` series (`>=0.5 && <0.6`).
