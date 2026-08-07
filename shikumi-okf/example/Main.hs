@@ -11,16 +11,17 @@
 -- > cabal run shikumi-okf-example
 --
 -- then validate the result with the standalone @okf@ CLI (see the package docs and
--- EP-31). Because no timestamp is passed, regenerating an unchanged manifest yields
--- byte-identical output, so the committed @example/out@ tree can be regenerated and
--- diffed in CI.
+-- EP-31). It uses 'defaultGenerateOptions', which declares OKF v0.2 and records
+-- @process:shikumi-okf@ as the producer with no generation time — so regenerating
+-- an unchanged manifest yields byte-identical output and the committed
+-- @example/out@ tree can be regenerated and diffed in CI.
 module Main (main) where
 
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Module (predict)
-import Shikumi.Okf.Generate (writeProgramBundle)
+import Shikumi.Okf.Generate (defaultGenerateOptions, writeProgramBundle)
 import Shikumi.Okf.Types
   ( AppInfo (..),
     ProgramDoc (..),
@@ -100,7 +101,7 @@ main = do
   let root = case args of
         (dir : _) -> dir
         [] -> "out"
-  result <- writeProgramBundle root exampleApp Nothing manifest
+  result <- writeProgramBundle root exampleApp defaultGenerateOptions manifest
   case result of
     Left err -> error ("bundle generation failed: " <> show err)
     Right () -> putStrLn ("Wrote OKF bundle to " <> root)

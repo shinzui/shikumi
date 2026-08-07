@@ -18,28 +18,41 @@ cabal run shikumi-okf-example -- shikumi-okf/example/out
 This writes the committed `out/` tree:
 
 ```text
+out/index.md                     # the bundle root, declaring okf_version: "0.2"
 out/apps/example-app.md          # the Shikumi App concept (links to each program)
 out/programs/classify-ticket.md  # a Shikumi Program concept (typed Predict)
 out/programs/heartbeat.md        # a Shikumi Program concept (opaque Embed)
 out/**/index.md                  # generated OKF indexes
 ```
 
-Because no timestamp is passed, regenerating from an unchanged manifest produces
-byte-identical output. A CI check can regenerate into `out/` and fail if
+The bundle targets **OKF v0.2**: the root index declares the version and every
+concept records its producer under the v0.2 `generated` family, which is what
+`okf validate --strict` asks for.
+
+```yaml
+generated:
+  by: process:shikumi-okf
+```
+
+The example uses `defaultGenerateOptions`, which supplies no `generated.at`, so
+regenerating from an unchanged manifest produces byte-identical output. A CI
+check can regenerate into `out/` and fail if
 `git status --porcelain shikumi-okf/example/out` reports any change.
 
 ## Validate it with the standalone okf CLI
 
-The `okf` binary lives in the sibling `okf` repository. `profile/shikumi.dhall`
-uses the `0.3.0.0` profile schema, so `--profile` needs `okf` `>=0.3`. From there:
+The `okf` binary lives in the sibling `okf` repository
+(`mori://shinzui/okf`). `profile/shikumi.dhall` uses the `0.5.0.0` profile schema
+and sets `requireBundleVersion = Some "0.2"`, so `--profile` needs `okf` `>=0.5`.
+From there:
 
 ```bash
 cabal run okf -- validate <repo>/shikumi-okf/example/out
-# OK: 3 concepts
+# OK: 3 concepts (okf_version 0.2)
 
-cabal run okf -- validate <repo>/shikumi-okf/example/out \
+cabal run okf -- validate <repo>/shikumi-okf/example/out --strict \
   --profile <repo>/shikumi-okf/profile/shikumi.dhall --profile-enforce
-# OK: 3 concepts   (exit 0 — conforms to the shikumi profile)
+# OK: 3 concepts (okf_version 0.2)   (exit 0 — conforms to the shikumi profile)
 
 cabal run okf -- graph <repo>/shikumi-okf/example/out --json
 # edges: apps/example-app -> programs/classify-ticket
@@ -57,7 +70,7 @@ already exists in mori-schema):
   [ Schema.OkfBundle::{
     , name = "programs"
     , path = "shikumi-okf/example/out"
-    , okfVersion = "0.1"
+    , okfVersion = "0.2"
     , profile = Some "<path-or-pinned-url>/shikumi.dhall"
     }
   ]

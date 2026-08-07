@@ -8,27 +8,54 @@
 -- is thin and the declared metadata carries the documentation).
 module Main (main) where
 
-import Control.Exception (IOException, catch)
+import Control.Exception (IOException, catch, evaluate)
 import Data.Foldable (toList)
 import Data.List (sort)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
-import Okf.Bundle (conceptIdOf, walkBundle)
+import Okf.Actor (Actor (ProcessActor))
+import Okf.Bundle
+  ( BundleInventory,
+    Concept,
+    bundleInventoryOfConcepts,
+    conceptDocument,
+    conceptGenerated,
+    conceptIdOf,
+    walkBundle,
+  )
 import Okf.ConceptId (ConceptId, parseConceptId, renderConceptId)
+import Okf.Document (Generated (..), OKFDocument (..), frontmatterLookup)
 import Okf.Graph (Edge (..), Graph (..), buildGraph)
+import Okf.Index
+  ( OkfVersion (..),
+    VersionDeclaration (VersionDeclared, VersionUndeclared),
+    readBundleVersion,
+  )
+import Okf.Markdown (computationBlocks)
 import Okf.Profile
   ( CompiledProfile,
     compileProfile,
     loadProfileFile,
     validateProfile,
+    validateProfileVersion,
   )
-import Okf.Validation (ValidationProfile (PermissiveConformance), validateBundle)
+import Okf.Validation
+  ( ValidationProfile (PermissiveConformance, StrictAuthoring),
+    validateBundle,
+  )
 import Paths_shikumi_okf (getDataFileName)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Module (predict)
-import Shikumi.Okf.Generate (generateBundle, writeProgramBundle)
+import Shikumi.Okf.Generate
+  ( GenerateOptions (..),
+    defaultGenerateOptions,
+    defaultGeneratedBy,
+    generateBundle,
+    okfVersion02,
+    writeProgramBundle,
+  )
 import Shikumi.Okf.Render (renderProgramBody)
 import Shikumi.Okf.Types
   ( AppInfo (..),
@@ -204,7 +231,38 @@ expectedNoopBody =
 -- ---------------------------------------------------------------------------
 
 main :: IO ()
-main = defaultMain tests
+main = do
+  warmUpMarkdown
+  defaultMain tests
+
+-- | Parse one Markdown document on the main thread before tasty forks.
+--
+-- @cmark-gfm@ registers its core extensions lazily: @CMarkGFM.commonmarkToNode@
+-- calls @cmark_gfm_core_extensions_ensure_registered@ inside 'unsafePerformIO'
+-- on every call, whatever extension list it was given, and that C function is
+-- not thread-safe. Two tasty threads reaching it at once make
+-- @cmark_register_node_flag@ print @flag initialization error@ and @abort()@ the
+-- process — no test failure, just SIGABRT partway through the run.
+--
+-- okf-core 0.5 made this reachable: it enabled footnotes and routed all three of
+-- its parse sites through one options list, so validating a bundle now parses
+-- far more Markdown than it used to, and this suite runs with @-N@. One parse
+-- here does the registration once, single-threaded, so the tests below race over
+-- an already-initialised library.
+--
+-- __This is not redundant with the fork.__ @cabal.project@ pins
+-- @shinzui/cmark-gfm-hs@, which fixes the registration properly, but that pin
+-- governs builds of this repository only: a consumer building @shikumi-okf@
+-- from Hackage resolves stock @cmark-gfm@ and needs this warm-up. Delete it only
+-- when the fix is released upstream.
+--
+-- The defect is in the @cmark-gfm@ bindings, not in okf or shikumi. Full
+-- mechanism: @mori://kivikakk/cmark-gfm-hs@, upstream-issues entry
+-- @cmark-gfm-hs-unsafe-concurrent-extension-registration@.
+warmUpMarkdown :: IO ()
+warmUpMarkdown = do
+  _ <- evaluate (length (computationBlocks "# Computation\n\n    warm up\n"))
+  pure ()
 
 tests :: TestTree
 tests =
@@ -234,19 +292,74 @@ tests =
       testGroup
         "Generate"
         [ testCase "generated bundle has no validation errors" $
-            case generateBundle demoApp Nothing demoManifest of
+            withConcepts $ \concepts ->
+              validateBundle PermissiveConformance declaredV02 (inventoryOf concepts) concepts @?= [],
+          testCase "one app concept plus one per program" $
+            withConcepts $ \concepts -> do
+              let ids = map (renderConceptId . conceptIdOf) concepts
+              assertEqual
+                "concept ids"
+                ["apps/demo", "programs/qa", "programs/noop-summary", "programs/qa-polished"]
+                ids
+        ],
+      -- OKF v0.2 (okf-core 0.5) moved provenance from the v0.1 `timestamp` key
+      -- to the `generated` family and gave a bundle a way to declare the dialect
+      -- it targets. These pin both halves: what goes into every concept, and
+      -- what goes into the bundle root.
+      testGroup
+        "OKF v0.2"
+        [ testCase "every concept records process:shikumi-okf as its producer" $
+            withConcepts $ \concepts ->
+              assertEqual
+                "generated family"
+                (map (const (Just (Generated (ProcessActor "shikumi-okf") Nothing))) concepts)
+                (map conceptGenerated concepts),
+          testCase "defaultGeneratedBy is the actor written" $
+            defaultGeneratedBy @?= ProcessActor "shikumi-okf",
+          testCase "no concept carries the superseded v0.1 timestamp key" $
+            withConcepts $ \concepts ->
+              assertEqual
+                "timestamp keys"
+                []
+                [ renderConceptId (conceptIdOf c)
+                | c <- concepts,
+                  let OKFDocument {frontmatter} = conceptDocument c,
+                  Just _ <- [frontmatterLookup "timestamp" frontmatter]
+                ],
+          -- The strict pass is what asks for `generated`, and what reports a
+          -- v0.1 key surviving in a bundle that declares v0.2. A permissive run
+          -- would stay silent on both, so it could not notice this regressing.
+          testCase "strict validation of a v0.2-declaring bundle is clean" $
+            withConcepts $ \concepts ->
+              validateBundle StrictAuthoring declaredV02 (inventoryOf concepts) concepts @?= [],
+          testCase "generated.at is omitted by default and written when supplied" $ do
+            let opts =
+                  defaultGenerateOptions
+                    { generated = Just (Generated (ProcessActor "shikumi-okf") (Just "2026-08-07T00:00:00Z"))
+                    }
+            case generateBundle demoApp opts demoManifest of
               Left err -> fail ("generateBundle failed: " <> show err)
               Right concepts ->
-                validateBundle PermissiveConformance concepts @?= [],
-          testCase "one app concept plus one per program" $
-            case generateBundle demoApp Nothing demoManifest of
-              Left err -> fail (show err)
-              Right concepts -> do
-                let ids = map (renderConceptId . conceptIdOf) concepts
                 assertEqual
-                  "concept ids"
-                  ["apps/demo", "programs/qa", "programs/noop-summary", "programs/qa-polished"]
-                  ids
+                  "generated.at"
+                  (map (const (Just "2026-08-07T00:00:00Z")) concepts)
+                  (map ((generatedAt =<<) . conceptGenerated) concepts),
+          testCase "generated = Nothing writes no provenance at all" $ do
+            let opts = defaultGenerateOptions {generated = Nothing}
+            case generateBundle demoApp opts demoManifest of
+              Left err -> fail ("generateBundle failed: " <> show err)
+              Right concepts ->
+                assertEqual "generated family" [] (mapMaybe conceptGenerated concepts),
+          testCase "the written bundle root declares okf_version 0.2" $ do
+            root <- freshTempDir "shikumi-okf-version"
+            result <- writeProgramBundle root demoApp defaultGenerateOptions demoManifest
+            case result of
+              Left err -> fail ("writeProgramBundle failed: " <> show err)
+              Right () -> do
+                declared <- readBundleVersion root
+                declared @?= Right (VersionDeclared (OkfVersion 0 2)),
+          testCase "okfVersion02 is the version declared" $
+            okfVersion02 @?= OkfVersion {okfVersionMajor = 0, okfVersionMinor = 2}
         ],
       testGroup
         "Profile"
@@ -265,16 +378,24 @@ tests =
             pure (),
           testCase "generated bundle conforms to profile/shikumi.dhall" $ do
             compiled <- loadAndCompileProfile
-            case generateBundle demoApp Nothing demoManifest of
-              Left err -> fail ("generateBundle failed: " <> show err)
-              Right concepts ->
-                validateProfile PermissiveConformance compiled concepts @?= []
+            withConcepts $ \concepts ->
+              validateProfile PermissiveConformance compiled concepts @?= [],
+          -- The profile carries `requireBundleVersion = Some "0.2"`, which is a
+          -- separate entry point from validateProfile because it consults no
+          -- concepts. Both directions are pinned: an undeclared bundle must
+          -- deviate, or the requirement would be inert and untested.
+          testCase "the profile requires a v0.2 declaration, and ours satisfies it" $ do
+            compiled <- loadAndCompileProfile
+            validateProfileVersion declaredV02 compiled @?= []
+            assertBool
+              "an undeclared bundle deviates"
+              (not (null (validateProfileVersion VersionUndeclared compiled)))
         ],
       testGroup
         "RoundTrip"
         [ testCase "app links to every program (graph edges)" $ do
             root <- freshTempDir "shikumi-okf-roundtrip"
-            result <- writeProgramBundle root demoApp Nothing demoManifest
+            result <- writeProgramBundle root demoApp defaultGenerateOptions demoManifest
             case result of
               Left err -> fail ("writeProgramBundle failed: " <> show err)
               Right () -> do
@@ -301,6 +422,24 @@ tests =
 -- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
+
+-- | Generate the demo bundle with the default options and hand the concepts to
+-- an assertion, failing the test rather than pattern-matching at each call site.
+withConcepts :: ([Concept] -> IO a) -> IO a
+withConcepts assertion =
+  case generateBundle demoApp defaultGenerateOptions demoManifest of
+    Left err -> fail ("generateBundle failed: " <> show err)
+    Right concepts -> assertion concepts
+
+-- | What the generator declares, restated here so a test reads the same
+-- declaration a reader of the bundle root would.
+declaredV02 :: VersionDeclaration
+declaredV02 = VersionDeclared okfVersion02
+
+-- | The inventory an in-memory bundle can honestly report: its own concepts and
+-- no non-Markdown file, because there is no directory holding one.
+inventoryOf :: [Concept] -> BundleInventory
+inventoryOf = bundleInventoryOfConcepts
 
 -- | A clean temp directory (removed if it exists), so the round-trip test is
 -- idempotent across runs.

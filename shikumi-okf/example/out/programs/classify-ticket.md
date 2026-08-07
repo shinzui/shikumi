@@ -6,6 +6,8 @@ resource: shikumi://shinzui/example-app/programs/classify-ticket
 tags:
 - support
 - classification
+generated:
+  by: process:shikumi-okf
 ---
 
 # Classify Ticket

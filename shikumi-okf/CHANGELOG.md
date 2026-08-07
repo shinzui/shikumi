@@ -4,11 +4,90 @@
 
 ### Added
 
+- **Generated bundles target OKF v0.2.** The bundle root's `index.md` declares
+  `okf_version: "0.2"` and every concept records its producer in the v0.2
+  `generated` family (`generated.by: process:shikumi-okf`), which is what
+  `okf validate --strict` asks for since okf-core 0.5. `okf validate --strict
+  --profile profile/shikumi.dhall --profile-enforce` passes on the shipped
+  example bundle.
+
+- `GenerateOptions`, `defaultGenerateOptions`, `defaultGeneratedBy`, and
+  `okfVersion02` in `Shikumi.Okf.Generate`. Build options by overriding
+  `defaultGenerateOptions` rather than as a record literal, so a field added in a
+  later release leaves the call site compiling. `generated = Nothing` writes no
+  provenance at all — this generator will not claim authorship on a caller's
+  behalf — and `okfVersion = Nothing` preserves whatever declaration the
+  destination already carries rather than walking a hand-migrated bundle back.
+
 - `profile/shikumi.dhall` is now shipped as a Cabal `data-files` entry, so
   installing this package also installs the profile its bundles are meant to
   satisfy.
 
 ### Changed
+
+- **BREAKING** Upgraded `okf-core` from `^>=0.3.0.0` to `^>=0.5.0.0`, the release
+  that implements OKF v0.2.
+
+- **BREAKING** `generateBundle`, `writeProgramBundle`, `programConcept`, and
+  `appConcept` take a `GenerateOptions` where they took a `Maybe Text`
+  timestamp. Pass `defaultGenerateOptions` for the previous call shape; move a
+  timestamp you were passing into
+  `defaultGenerateOptions {generated = Just (Generated actor (Just t))}`.
+
+  The parameter could not simply be reinterpreted. It wrote the v0.1 `timestamp`
+  key, which OKF v0.2 supersedes with `generated`, and a bundle that declares
+  v0.2 while still carrying `timestamp` is reported by okf-core 0.5 as retaining
+  a superseded key. Generation still reads no clock: `generated.at` remains
+  caller-supplied and absent by default, so regenerating an unchanged manifest is
+  still byte-identical and the regenerate-and-diff CI check still works.
+
+- **BREAKING** `profile/shikumi.dhall` targets OKF v0.2. It sets
+  `okfVersion = "0.2"` and `requireBundleVersion = Some "0.2"`, so a bundle that
+  declares no version — or an older one — is now a profile deviation. It replaces
+  the `timestamp` rule with a `generated` object rule constraining `by` (required,
+  `actor` format) and `at` (optional, RFC 3339 UTC). Because `allowUnknownFields`
+  is `False`, a stray `timestamp` is now reported as an undeclared key.
+
+  The descriptor needs `okf` `>=0.5` to load: `requireBundleVersion` and
+  `objectFields` do not exist in the 0.3 schema.
+
+- **`profile/shikumi.dhall` imports the okf schema from a pinned URL** —
+  `https://raw.githubusercontent.com/shinzui/okf/v0.5.0.0/okf-core/dhall/package.dhall`
+  with a `sha256:` integrity hash — instead of the relative path
+  `../../../okf/okf-core/dhall/package.dhall` into a sibling checkout.
+
+  The relative path resolved against whatever happened to be in a developer's
+  working tree. That is how this descriptor silently stopped type-checking when
+  okf's schema moved ahead of the pinned `okf-core` release, and it could never
+  have worked for anyone installing this package from Hackage, where no sibling
+  checkout exists. The hash covers the fully resolved, normalized expression, so
+  it pins every transitive `defaults/*` and `mk/*` file too, and a moved tag
+  fails the load rather than changing the schema underneath the profile. Dhall
+  serves a hashed import from `~/.cache/dhall` once resolved, so only the first
+  load on a machine touches the network.
+
+- The committed `example/out` bundle was regenerated: the root index gained its
+  version declaration and each concept gained `generated`.
+
+### Fixed
+
+- The test suite parses one Markdown document on the main thread before tasty
+  forks. `cmark-gfm`'s `commonmarkToNode` calls
+  `cmark_gfm_core_extensions_ensure_registered` inside `unsafePerformIO` on every
+  call, whatever extension list it is given, and that C function is not
+  thread-safe: two threads reaching it at once make `cmark_register_node_flag`
+  print `flag initialization error` and `abort()` the process. okf-core 0.5 made
+  this reachable by enabling footnotes and routing all three of its parse sites
+  through one options list, so validating a bundle now parses far more Markdown
+  than it used to, and this suite runs with `-N`. The result was a reproducible
+  SIGABRT partway through the run — not a test failure, so it reported as an
+  empty log rather than as a diagnosis.
+
+  This is a workaround for a defect in the `cmark-gfm` bindings
+  (`mori://kivikakk/cmark-gfm-hs`), not in okf or shikumi, and it protects only
+  this test suite. A consumer that reads OKF bundles from several threads can hit
+  the same abort; the durable fix is to make the registration thread-safe
+  upstream.
 
 - The test suite now checks the real `profile/shikumi.dhall` instead of a Haskell
   paraphrase of it. A new `Profile` group loads the descriptor (located through

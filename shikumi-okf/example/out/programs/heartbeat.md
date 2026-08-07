@@ -5,6 +5,8 @@ description: Declared-agent heartbeat that emits a fixed digest.
 resource: shikumi://shinzui/example-app/programs/heartbeat
 tags:
 - agent
+generated:
+  by: process:shikumi-okf
 ---
 
 # Heartbeat
