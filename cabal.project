@@ -30,6 +30,37 @@ packages:
 -- other package's build plan: only shikumi-okf lists it under build-depends, so
 -- `cabal build shikumi` (core) never compiles it.
 
+-- cmark-gfm fork: makes core-extension registration thread-safe, so parsing
+-- Markdown from more than one thread does not abort the process.
+--
+-- okf-core reaches cmark-gfm on every bundle read. Upstream's
+-- `ensurePluginsRegistered` calls straight through to a C function that guards
+-- itself with a plain non-atomic check-then-set, so two threads can both
+-- register the core extensions; the second registration calls
+-- `cmark_register_node_flag` on an already-initialised global, which prints
+-- "flag initialization error in cmark_register_node_flag" and abort()s. The
+-- symptom is SIGABRT, not a catchable exception -- shikumi-okf's suite died at
+-- exit code 134 with an empty log until this pin landed. Measured on a
+-- 16-thread reproducer: stock aborted 7/20 runs, the fork 0/20.
+--
+-- The full mechanism is recorded upstream-side at
+-- mori://kivikakk/cmark-gfm-hs, entry
+-- `cmark-gfm-hs-unsafe-concurrent-extension-registration`.
+--
+-- Note this pin governs builds *of this repository only*. A package that
+-- depends on shikumi-okf from Hackage does not inherit it and must add the same
+-- stanza, or it keeps the abort. That is why shikumi-okf's test suite also
+-- warms up registration on its main thread: the warm-up is what protects a
+-- consumer building without this stanza, and it is not redundant with it.
+--
+-- Pinned by commit, never by branch, so the resolution is reproducible. Remove
+-- this stanza to fall back to Hackage cmark-gfm 0.2.6 exactly -- which is the
+-- newest release, so there is no fixed version to move to instead.
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/cmark-gfm-hs.git
+  tag: a9014e8c4974d636e7c8f85cd97812905d217faf
+
 -- blake3 (EP-6 cache key) vendors SIMD C/asm. Its non-x86 fallback for the SSE
 -- flags still compiles x86 intrinsics (mmintrin.h), which fails under clang on
 -- aarch64-darwin. Disable the SIMD flags so only the portable pure-C path
