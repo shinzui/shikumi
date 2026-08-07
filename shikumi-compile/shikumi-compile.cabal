@@ -48,10 +48,10 @@ library
     Shikumi.Compile.ZeroShot
 
   build-depends:
-    , aeson
+    , aeson         >=2.2      && <2.3
     , base          >=4.20     && <5
-    , bytestring
-    , effectful
+    , bytestring    >=0.11     && <0.13
+    , effectful     >=2.5      && <2.7
     , generic-lens  >=2.2      && <2.4
     , lens          ^>=5.3
     , shikumi       ^>=0.3.0.0

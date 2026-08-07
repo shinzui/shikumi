@@ -45,19 +45,19 @@ library
     Shikumi.Eval.Usage
 
   build-depends:
-    , aeson
+    , aeson         >=2.2      && <2.3
     , baikai        >=0.5      && <0.6
     , base          >=4.20     && <5
-    , bytestring
-    , containers
-    , effectful
-    , generic-lens
+    , bytestring    >=0.11     && <0.13
+    , containers    >=0.6      && <0.9
+    , effectful     >=2.5      && <2.7
+    , generic-lens  >=2.2      && <2.4
     , lens          ^>=5.3
     , shikumi       ^>=0.3.0.0
-    , tasty
-    , tasty-golden
+    , tasty         >=1.4      && <1.6
+    , tasty-golden  >=2.3      && <2.4
     , text          ^>=2.1
-    , vector
+    , vector        >=0.13     && <0.14
 
 test-suite shikumi-eval-test
   import:         common-options

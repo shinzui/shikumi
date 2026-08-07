@@ -38,10 +38,10 @@ library
   hs-source-dirs:  src
   exposed-modules: Shikumi.Cache.Backend.Postgres
   build-depends:
-    , aeson
+    , aeson          >=2.2      && <2.3
     , base           >=4.20     && <5
-    , effectful
-    , hasql
+    , effectful      >=2.5      && <2.7
+    , hasql          >=1.9      && <1.11
     , shikumi-cache  ^>=0.1.2.0
     , text           ^>=2.1
 

@@ -44,22 +44,22 @@ library
     Shikumi.Cache.Types
 
   build-depends:
-    , aeson
+    , aeson          >=2.2      && <2.3
     , baikai         >=0.5      && <0.6
     , base           >=4.20     && <5
-    , blake3
-    , bytestring
-    , containers
-    , direct-sqlite
-    , effectful
-    , generic-lens
+    , blake3         >=0.3      && <0.4
+    , bytestring     >=0.11     && <0.13
+    , containers     >=0.6      && <0.9
+    , direct-sqlite  >=2.3      && <2.4
+    , effectful      >=2.5      && <2.7
+    , generic-lens   >=2.2      && <2.4
     , lens           ^>=5.3
-    , scientific
+    , scientific     >=0.3      && <0.4
     , shikumi        ^>=0.3.0.0
-    , stm
+    , stm            >=2.5      && <2.6
     , text           ^>=2.1
-    , time
-    , vector
+    , time           >=1.12     && <1.17
+    , vector         >=0.13     && <0.14
 
 test-suite shikumi-cache-test
   import:         common-options

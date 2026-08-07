@@ -43,20 +43,20 @@ library
     Shikumi.Trace.OpenTelemetry
 
   build-depends:
-    , aeson
+    , aeson                                  >=2.2      && <2.3
     , base                                   >=4.20     && <5
-    , containers
-    , generic-lens
+    , containers                             >=0.6      && <0.9
+    , generic-lens                           >=2.2      && <2.4
     , hs-opentelemetry-api                   >=1.0      && <1.1
     , hs-opentelemetry-exporter-otlp         >=1.0      && <1.1
     , hs-opentelemetry-sdk                   >=1.0      && <1.1
     , hs-opentelemetry-semantic-conventions  >=1.40     && <2
     , lens                                   ^>=5.3
-    , scientific
+    , scientific                             >=0.3      && <0.4
     , shikumi-trace                          ^>=0.2.0.0
     , text                                   ^>=2.1
-    , time
-    , unordered-containers
+    , time                                   >=1.12     && <1.17
+    , unordered-containers                   >=0.2      && <0.3
 
 test-suite shikumi-trace-otel-test
   import:         common-options
