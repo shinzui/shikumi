@@ -129,7 +129,7 @@ usageTotalsPerCall =
 -- non-zero usage as 'usageResponse'.
 usageTerminalEvents :: Text -> [AssistantMessageEvent]
 usageTerminalEvents t =
-  [EventDone (doneTerminal Nothing Stop (AssistantMessage (usageResponse t ^. #message)))]
+  [EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (usageResponse t ^. #message)))]
 
 -- | An assistant 'Response' whose body decodes (via the fallback adapter) to a
 -- record with the given @(field, value)@ sections.

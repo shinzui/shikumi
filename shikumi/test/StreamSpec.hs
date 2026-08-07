@@ -122,7 +122,7 @@ streamEventsFor deltas terminalText =
   ]
     ++ [TextDelta (DeltaPayload 0 d) | d <- deltas]
     ++ [ TextEnd (BlockEndPayload 0 (T.concat deltas)),
-         EventDone (doneTerminal Nothing Stop (AssistantMessage (payloadWith terminalText)))
+         EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (payloadWith terminalText)))
        ]
   where
     payloadWith t = (_Response ^. #message) & #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))

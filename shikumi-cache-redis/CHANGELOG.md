@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Upgraded the `baikai` dependency to the `0.5` series (`>=0.5 && <0.6`).
+  Dependency bounds only — no changes to the exported API.
+
 ## 0.1.2.1 - 2026-07-20
 
 ### Changed

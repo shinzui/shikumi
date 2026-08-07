@@ -23,8 +23,20 @@
 --     repetends; it never affects the typed-output guarantee, which is decoded
 --     from the assistant __text__ ('AssistantContent', which round-trips
 --     exactly) — cost is metadata.
---   * 'AssistantPayload' / 'Response' use @defaultOptions@ (matching baikai's
+--   * 'AssistantPayload' uses @defaultOptions@ (matching baikai's
 --     @deriving anyclass ToJSON@).
+--   * 'Response' is written out by hand with the same keys @defaultOptions@
+--     produced, minus @evidence@ — see below.
+--
+-- __'Response' does not cache its 'Baikai.Evidence.ModelCallEvidence'.__ Since
+-- baikai 0.5 a 'Response' may carry the evidence record for the call that
+-- produced it. That record describes /one/ crossing of the provider boundary; a
+-- cache hit is precisely the case where no such crossing happened, so replaying
+-- a stored record would attribute another call's evidence to this one — the
+-- exact misattribution the evidence vocabulary exists to prevent. The encoder
+-- therefore drops the field and the decoder always yields @evidence = Nothing@.
+-- Dropping it also keeps the encoding byte-identical to what pre-0.5 shikumi
+-- wrote, so cache entries written by an older build still read back.
 --
 -- This module is the __single home__ for these orphans across the whole
 -- framework. EP-7's @Shikumi.Trace.ResponseJSON@ re-exports them from here rather
@@ -45,9 +57,11 @@ import Data.Aeson
     camelTo2,
     defaultOptions,
     genericParseJSON,
-    genericToJSON,
+    object,
     withObject,
     (.:),
+    (.:?),
+    (.=),
   )
 import Data.Aeson.Types (Parser)
 import Data.Scientific (Scientific)
@@ -85,7 +99,44 @@ instance FromJSON AssistantPayload where
   parseJSON = genericParseJSON defaultOptions
 
 instance ToJSON Response where
-  toJSON = genericToJSON defaultOptions
+  toJSON
+    Response
+      { message = m,
+        model = mdl,
+        api = a,
+        provider = p,
+        responseId = rid,
+        latencyMs = ms,
+        errorInfo = e,
+        evidence = _
+      } =
+      object
+        [ "message" .= m,
+          "model" .= mdl,
+          "api" .= a,
+          "provider" .= p,
+          "responseId" .= rid,
+          "latencyMs" .= ms,
+          "errorInfo" .= e
+        ]
 
 instance FromJSON Response where
-  parseJSON = genericParseJSON defaultOptions
+  parseJSON = withObject "Response" $ \o -> do
+    m <- o .: "message"
+    mdl <- o .: "model"
+    a <- o .: "api"
+    p <- o .: "provider"
+    rid <- o .:? "responseId"
+    ms <- o .: "latencyMs"
+    e <- o .:? "errorInfo"
+    pure
+      Response
+        { message = m,
+          model = mdl,
+          api = a,
+          provider = p,
+          responseId = rid,
+          latencyMs = ms,
+          errorInfo = e,
+          evidence = Nothing
+        }

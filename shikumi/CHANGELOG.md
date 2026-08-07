@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- Upgraded the baikai provider cohort to the `0.5` series: `baikai`,
+  `baikai-claude`, and `baikai-openai` now require `>=0.5 && <0.6`.
+  `baikai-effectful` stays on the `0.3` series, floored at `0.3.0.3` — the first
+  release whose own `baikai` bound admits `0.5`. Dependency bounds only; no
+  changes to the exported API.
+
+  baikai 0.5 adds an optional model-call evidence record. shikumi does not opt
+  in: it never sets `Options.evidence`, so no digest is computed and no evidence
+  event is emitted on any call shikumi makes.
+
 ## 0.3.0.1 - 2026-07-20
 
 ### Changed

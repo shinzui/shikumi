@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Changed
+
+- Upgraded the `baikai` dependency to the `0.5` series (`>=0.5 && <0.6`).
+
+- `Shikumi.Cache.ResponseJSON`'s orphan `ToJSON`/`FromJSON` for
+  `Baikai.Response.Response` are written out by hand instead of derived, and
+  they neither write nor read baikai 0.5's new `evidence` field. A cache hit
+  replays a stored response without any provider call, so carrying the
+  original call's `ModelCallEvidence` would attribute a record of a real
+  boundary crossing to a call that never made one. Decoding always yields
+  `evidence = Nothing`.
+
+  The encoded keys are otherwise unchanged, so entries written by a pre-0.5
+  shikumi still read back and `currentKeyVersion` is untouched. (baikai
+  deliberately ships no `FromJSON ModelCallEvidence`, so the derived instance
+  could not have been kept regardless.)
+
 ## 0.1.2.1 - 2026-07-20
 
 ### Changed

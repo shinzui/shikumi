@@ -53,6 +53,14 @@ flattenAssistantText = T.concat . V.toList . V.mapMaybe textOf
 stubApi :: Api
 stubApi = Custom "stub"
 
+-- | Every stub ignores 'Options.thinking' and puts nothing on any wire, so the
+-- truthful description of what it does with a reasoning-effort request is
+-- 'noThinkingRequested' — not a translation invented to look plausible.
+-- baikai only calls this for a caller who asked for strict evidence, which no
+-- shikumi interpreter does.
+stubDescribeThinking :: Model -> Options -> ThinkingTranslation
+stubDescribeThinking _ _ = noThinkingRequested
+
 -- | A hand-built 'Model' whose 'api' routes to the stub provider.
 stubModel :: Model
 stubModel =
@@ -101,7 +109,7 @@ stubEvents t =
     TextStart IndexPayload {contentIndex = 0},
     TextDelta DeltaPayload {contentIndex = 0, delta = t},
     TextEnd BlockEndPayload {contentIndex = 0, content = t},
-    EventDone (doneTerminal Nothing Stop (AssistantMessage (stubPayloadWith t)))
+    EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (stubPayloadWith t)))
   ]
 
 -- | Build an isolated registry from a @complete@ implementation, reusing the
@@ -114,7 +122,8 @@ mkRegistry streamText completeFn = do
     ApiProvider
       { apiTag = stubApi,
         complete = completeFn,
-        stream = \_ _ _ -> Stream.fromList (stubEvents streamText)
+        stream = \_ _ _ -> Stream.fromList (stubEvents streamText),
+        describeThinking = stubDescribeThinking
       }
   pure reg
 
@@ -159,7 +168,7 @@ failingStubRegistry ref failTimes t =
 streamErrorEvents :: Rational -> Text -> [AssistantMessageEvent]
 streamErrorEvents cost msg =
   [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message), responseId = Nothing},
-    EventError (doneTerminal Nothing ErrorReason (AssistantMessage errPayload))
+    EventError (doneTerminal Nothing Nothing ErrorReason (AssistantMessage errPayload))
   ]
   where
     errPayload =
@@ -189,7 +198,8 @@ failingStreamStubRegistry ref failTimes t = do
             Stream.fromList $
               if n <= failTimes
                 then streamErrorEvents 0 ("stub stream failure #" <> T.pack (show n))
-                else stubEvents t
+                else stubEvents t,
+        describeThinking = stubDescribeThinking
       }
   pure reg
 
@@ -204,7 +214,8 @@ failingStreamCostStubRegistry cost = do
     ApiProvider
       { apiTag = stubApi,
         complete = \_ _ _ -> pure (stubResponse ""),
-        stream = \_ _ _ -> Stream.fromList (streamErrorEvents cost "stub stream failure")
+        stream = \_ _ _ -> Stream.fromList (streamErrorEvents cost "stub stream failure"),
+        describeThinking = stubDescribeThinking
       }
   pure reg
 

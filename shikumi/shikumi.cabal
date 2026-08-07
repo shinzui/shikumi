@@ -53,11 +53,11 @@ library
 
   build-depends:
     , aeson
-    , baikai             >=0.4  && <0.5
-    , baikai-claude      >=0.4  && <0.5
-    , baikai-effectful   >=0.3  && <0.4
-    , baikai-openai      >=0.4  && <0.5
-    , base               >=4.20 && <5
+    , baikai             >=0.5     && <0.6
+    , baikai-claude      >=0.5     && <0.6
+    , baikai-effectful   >=0.3.0.3 && <0.4
+    , baikai-openai      >=0.5     && <0.6
+    , base               >=4.20    && <5
     , base64-bytestring
     , bytestring
     , containers
@@ -109,10 +109,10 @@ test-suite shikumi-test
 
   build-depends:
     , aeson
-    , baikai             >=0.4      && <0.5
-    , baikai-claude      >=0.4      && <0.5
-    , baikai-effectful   >=0.3      && <0.4
-    , baikai-openai      >=0.4      && <0.5
+    , baikai             >=0.5      && <0.6
+    , baikai-claude      >=0.5      && <0.6
+    , baikai-effectful   >=0.3.0.3  && <0.4
+    , baikai-openai      >=0.5      && <0.6
     , base
     , base64-bytestring
     , bytestring
