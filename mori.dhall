@@ -243,7 +243,7 @@ in  Schema.Project::{
         , name = "improvement-requests"
         , path = "docs/improvement-requests"
         , profile = Some "docs/improvement-requests/profile.dhall"
-        , okfVersion = "0.1"
+        , okfVersion = "0.2"
         , description = Some "Shikumi-owned improvement requests"
         }
       ]
