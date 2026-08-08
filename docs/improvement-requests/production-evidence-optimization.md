@@ -3,6 +3,9 @@ type: Improvement Request
 title: Add production-evidence optimization and promotion reports to Shikumi
 description: Produce sealed evidence datasets and auditable candidate-versus-baseline promotion reports.
 timestamp: "2026-07-30T00:50:00Z"
+generated:
+  by: human:nadeem
+  at: "2026-07-30T00:50:00Z"
 requestId: IR-2
 status: proposed
 origin: mori://shinzui/kikan

@@ -5,6 +5,9 @@ description: >-
   Implement and release Shikumi's planned dynamic-tool adapter so Baikai MCP tools enter the same
   bounded ToolRegistry and ReAct dispatch path as native tools.
 timestamp: 2026-07-30T14:36:35Z
+generated:
+  by: human:nadeem
+  at: "2026-07-30T14:36:35Z"
 requestId: IR-1
 status: proposed
 origin: mori://shinzui/shikigami
