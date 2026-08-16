@@ -1,6 +1,11 @@
 let Schema =
-      https://raw.githubusercontent.com/shinzui/mori-schema/06da43590476f4ddc64386e91be9ca88a1f3c9d6/package.dhall
-        sha256:dd0c3e0094714498fe7b2562aa85998624b13198758d9160b5ea74b253491836
+      https://raw.githubusercontent.com/shinzui/mori-schema/e4899c15b6a7c36f5d6f2619c8a36ceabe58fc41/package.dhall
+        sha256:f33943bf2a160e4dc2087e482a3e784d39e79ff58d5ec67c1f53bcee3389e323
+
+let projectRef =
+      \(namespace : Text) ->
+      \(name : Text) ->
+        Schema.MoriRef::{ namespace, name }
 
 let testDep =
       \(depName : Text) ->
@@ -11,6 +16,7 @@ let testDep =
           , kind = Some Schema.DependencyKind.ThirdParty
           , source = Some Schema.DependencySource.Hackage
           , scope = Some Schema.DependencyScope.Test
+          , versionConstraint = None Text
           }
 
 in  Schema.Project::{
@@ -238,11 +244,38 @@ in  Schema.Project::{
       , "composewell/streamly"
       , "UnkindPartition/tasty"
       ]
+    , dependencyRefs =
+      [ projectRef "haskell" "aeson"
+      , projectRef "shinzui" "baikai"
+      , projectRef "k0001" "hs-blake3"
+      , projectRef "shinzui" "cmark-gfm-hs"
+      , projectRef "effectful" "effectful"
+      , projectRef "shinzui" "ephemeral-pg"
+      , projectRef "hasql" "hasql"
+      , projectRef "informatikr" "hedis"
+      , projectRef "snoyberg" "http-client"
+      , projectRef "iand675" "hs-opentelemetry"
+      , projectRef "ekmett" "lens"
+      , projectRef "shinzui" "okf"
+      , projectRef "pcapriotti" "optparse-applicative"
+      , projectRef "composewell" "streamly"
+      , projectRef "UnkindPartition" "tasty"
+      ]
     , okfBundles =
       [ Schema.OkfBundle::{
         , name = "improvement-requests"
         , path = "docs/improvement-requests"
-        , profile = Some "docs/improvement-requests/profile.dhall"
+        , profileBinding = Some
+            ( Schema.ProfileBinding.Published
+                Schema.PinnedImport::{
+                , publisher = "shinzui/okf-profiles"
+                , publisherRef = Some (projectRef "shinzui" "okf-profiles")
+                , export = Some "coordination.improvementRequests"
+                , version = Some "v0.8.0"
+                , pin = Some
+                    "sha256:0d66bb25b99e74a10598be06eef30356f331ff9c1c557e8578daf48cbd50d8d3"
+                }
+            )
         , okfVersion = "0.2"
         , description = Some "Shikumi-owned improvement requests"
         }
