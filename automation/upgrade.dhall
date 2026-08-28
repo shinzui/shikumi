@@ -41,12 +41,18 @@ in  Schema.Automation::{
             }
           ]
         ,
-          -- NOT IN EFFECT TODAY, and declared anyway. Only Mori's VCS router
-          -- branches on a reaction's `schedule`: AutomationRouter reads
-          -- `reactionDef ^. #schedule`, while SignalTriggerRouter and
-          -- ProjectAutomationRouter never look at it. A signal-triggered
-          -- reaction like this one therefore runs its actions immediately and
-          -- ignores the delay, the coalesce key, AND the idempotency check.
+          -- NOT IN EFFECT TODAY, and declared anyway. AutomationRouter (VCS
+          -- events) and ProjectAutomationRouter (Project facts) share
+          -- `resolveMatchedReaction`, whose closing branch decides queued vs
+          -- scheduled vs immediate. SignalTriggerRouter reimplements that
+          -- resolution and returns TriggerReaction unconditionally, reading
+          -- neither `queued` nor `schedule`. A signal-triggered reaction like
+          -- this one therefore runs its actions immediately and ignores the
+          -- delay, the coalesce key, AND the idempotency check. Raised as
+          -- mori://shinzui/mori/okf/improvement-requests/concepts/IR-22.
+          --
+          -- Note the asymmetry: automation/announce.dhall is triggered by a
+          -- Project fact, so a schedule there WOULD be honoured.
           --
           -- Observed on kioku, whose identical PT12H block has never once
           -- deferred: two deliveries on 2026-08-28 ran the action within
