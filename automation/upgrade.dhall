@@ -40,7 +40,25 @@ in  Schema.Automation::{
               env = [] : List { mapKey : Text, mapValue : Text }
             }
           ]
-        , schedule = Some Schema.Schedule::{
+        ,
+          -- NOT IN EFFECT TODAY, and declared anyway. Only Mori's VCS router
+          -- branches on a reaction's `schedule`: AutomationRouter reads
+          -- `reactionDef ^. #schedule`, while SignalTriggerRouter and
+          -- ProjectAutomationRouter never look at it. A signal-triggered
+          -- reaction like this one therefore runs its actions immediately and
+          -- ignores the delay, the coalesce key, AND the idempotency check.
+          --
+          -- Observed on kioku, whose identical PT12H block has never once
+          -- deferred: two deliveries on 2026-08-28 ran the action within
+          -- seconds, the second of them even though the check would have
+          -- skipped it for a dirty tree.
+          --
+          -- This is safe here only because scripts/upgrade-baikai.sh repeats
+          -- every guard scripts/baikai-bump-needed.sh makes -- branch, clean
+          -- tree, real cohort advance -- and exits 0 when any of them refuses.
+          -- Do not let those two scripts diverge while this is true; the check
+          -- is documentation of intent, not a gate that runs.
+          schedule = Some Schema.Schedule::{
           ,
             -- Baikai's release fact is recorded from the umbrella tag, and the
             -- seven packages of that cut reach Hackage as seven separate
