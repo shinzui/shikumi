@@ -38,3 +38,13 @@ services-down:
 # Tail the process-compose log.
 services-log:
     tail -f .dev/process-compose.log
+
+# ── Dependency cohorts ──────────────────────────────────────────────────────
+
+# Move the Baikai cohort bounds to the newest releases Hackage prefers, verify
+# by a full build and every test suite, and commit. Also the action of the
+# `upgrade-baikai-cohort` mori reaction (automation/upgrade.dhall). Backs
+# everything out on any failure; a baikai major needs a source migration this
+# cannot do, and will stop at the build.
+upgrade-baikai:
+    ./scripts/upgrade-baikai.sh
