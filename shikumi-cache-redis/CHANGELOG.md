@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.2.3 — 2026-08-29
+
 ### Changed
 
 - Every library dependency now carries a PVP upper bound: `aeson`, `bytestring`,

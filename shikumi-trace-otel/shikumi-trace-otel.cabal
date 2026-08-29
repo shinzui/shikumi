@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-trace-otel
-version:         0.1.1.0
+version:         0.1.1.1
 synopsis:
   OpenTelemetry export of shikumi hierarchical trace trees (EP-7)
 

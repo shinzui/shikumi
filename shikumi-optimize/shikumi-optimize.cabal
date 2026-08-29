@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-optimize
-version:         0.2.1.2
+version:         0.2.1.3
 synopsis:        The optimizer framework for shikumi LM programs (EP-10)
 category:        AI
 description:

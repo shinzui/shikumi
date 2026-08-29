@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-tools
-version:         0.3.0.2
+version:         0.3.0.3
 synopsis:
   Typed tools and ReAct agents for shikumi LM programs (EP-11)
 

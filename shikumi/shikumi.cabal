@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi
-version:         0.3.0.2
+version:         0.3.0.3
 synopsis:        Typed, structured, evaluable LM programs over baikai
 category:        AI
 description:
