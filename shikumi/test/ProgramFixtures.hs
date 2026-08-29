@@ -36,8 +36,8 @@ import Baikai
   ( AssistantContent (..),
     Context,
     Response,
-    _Response,
-    _TextContent,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -150,7 +150,7 @@ markerBody fields = T.unlines (concatMap sect fields ++ ["[[ ## completed ## ]]"
 -- | An assistant 'Response' carrying @t@ as its single text block.
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 outlineResponse :: Response
 outlineResponse = mkResponse (markerBody [("points", "[\"intro\", \"body\", \"end\"]")])

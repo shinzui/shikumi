@@ -8,7 +8,7 @@
 -- typed answer is extracted.
 module CodeActSpec (tests) where
 
-import Baikai (_Model)
+import Baikai (emptyModel)
 import Control.Lens ((&), (.~))
 import Data.Aeson (object, (.=))
 import Data.Generics.Labels ()
@@ -108,7 +108,7 @@ tests =
                 { maxIters = 3,
                   compaction = defaultCompactionConfig {reserveTokens = 10, keepRecent = 1}
                 }
-            model = _Model & #contextWindow .~ 100
+            model = emptyModel & #contextWindow .~ 100
             script =
               [ mkUsageResponse model 10 (turn "result = 1" False),
                 mkUsageResponse model 90 (turn "result = 2" False),

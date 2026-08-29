@@ -45,7 +45,7 @@ module Shikumi.Routing
   )
 where
 
-import Baikai (Context, Message (..), Model, Options, ResponseFormat (..), assistant)
+import Baikai (Context, JsonSchemaFormat (strict), Message (..), Model, Options, ResponseFormat (..), assistant, jsonSchemaFormat)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (FromJSON, Result (..), Value, fromJSON)
 import Data.Generics.Labels ()
@@ -125,7 +125,7 @@ translateForWire m ctx opts =
       withSchema o
         | isNative,
           Just s <- mSchema =
-            o & #responseFormat .~ Just (JsonSchema {name = "output", schema = s, strict = True})
+            o & #responseFormat .~ Just (JsonSchema ((jsonSchemaFormat "output" s) {strict = True}))
         | otherwise = o
       withTemp o = case mTemp of
         Just t -> o & #temperature .~ Just t

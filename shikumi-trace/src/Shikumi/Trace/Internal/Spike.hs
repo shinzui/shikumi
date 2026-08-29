@@ -33,11 +33,11 @@ import Baikai
     Context,
     Response,
     TextContent (..),
-    _Context,
-    _Model,
-    _Options,
-    _Response,
-    _TextContent,
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -68,10 +68,10 @@ runSpike = runEff $ do
       pure ()
   liftIO (readIORef captured)
   where
-    oneCall = complete _Model neutralCtx _Options
+    oneCall = complete emptyModel neutralCtx emptyOptions
 
 neutralCtx :: Context
-neutralCtx = _Context
+neutralCtx = emptyContext
 
 -- ---------------------------------------------------------------------------
 -- The mechanism under test
@@ -134,7 +134,7 @@ runScripted rs0 act = do
 -- | A 'Response' carrying @t@ as its single assistant text block.
 stubResponse :: Text -> Response
 stubResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | Concatenate the assistant text blocks of a response.
 responseText :: Response -> Text

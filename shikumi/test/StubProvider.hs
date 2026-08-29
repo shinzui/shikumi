@@ -64,7 +64,7 @@ stubDescribeThinking _ _ = noThinkingRequested
 -- | A hand-built 'Model' whose 'api' routes to the stub provider.
 stubModel :: Model
 stubModel =
-  _Model
+  emptyModel
     & #api
     .~ stubApi
     & #modelId
@@ -76,23 +76,23 @@ stubModel =
 
 -- | A minimal request context (one user turn).
 stubContext :: Context
-stubContext = _Context & #messages .~ V.singleton (user "ping")
+stubContext = emptyContext & #messages .~ V.singleton (user "ping")
 
 -- | Default request options.
 stubOptions :: Options
-stubOptions = _Options
+stubOptions = emptyOptions
 
 -- | An assistant payload carrying the given text as its single text block.
 stubPayloadWith :: Text -> AssistantPayload
 stubPayloadWith t =
-  (_Response ^. #message)
+  (emptyResponse ^. #message)
     & #content
-    .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+    .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | A fixed assistant response carrying the given text as its single text block.
 stubResponse :: Text -> Response
 stubResponse t =
-  _Response
+  emptyResponse
     & #message
     .~ stubPayloadWith t
     & #model
@@ -105,7 +105,7 @@ stubResponse t =
 -- | A deterministic, valid event sequence for the given text.
 stubEvents :: Text -> [AssistantMessageEvent]
 stubEvents t =
-  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message), responseId = Nothing},
+  [ EventStart StartPayload {partial = AssistantMessage (emptyResponse ^. #message), responseId = Nothing},
     TextStart IndexPayload {contentIndex = 0},
     TextDelta DeltaPayload {contentIndex = 0, delta = t},
     TextEnd BlockEndPayload {contentIndex = 0, content = t},
@@ -119,11 +119,12 @@ mkRegistry streamText completeFn = do
   reg <- newProviderRegistry
   registerApiProviderWith
     reg
-    ApiProvider
-      { apiTag = stubApi,
-        complete = completeFn,
-        stream = \_ _ _ -> Stream.fromList (stubEvents streamText),
-        describeThinking = stubDescribeThinking
+    ( apiProviderWith
+        stubApi
+        (\_ _ _ -> Stream.fromList (stubEvents streamText))
+        completeFn
+    )
+      { describeThinking = stubDescribeThinking
       }
   pure reg
 
@@ -167,12 +168,12 @@ failingStubRegistry ref failTimes t =
 -- interpreters map this to a transient 'Shikumi.Error.ProviderFailure'.
 streamErrorEvents :: Rational -> Text -> [AssistantMessageEvent]
 streamErrorEvents cost msg =
-  [ EventStart StartPayload {partial = AssistantMessage (_Response ^. #message), responseId = Nothing},
+  [ EventStart StartPayload {partial = AssistantMessage (emptyResponse ^. #message), responseId = Nothing},
     EventError (doneTerminal Nothing Nothing ErrorReason (AssistantMessage errPayload))
   ]
   where
     errPayload =
-      (_Response ^. #message)
+      (emptyResponse ^. #message)
         & #errorMessage
         .~ Just msg
         & #usage
@@ -189,17 +190,19 @@ failingStreamStubRegistry ref failTimes t = do
   reg <- newProviderRegistry
   registerApiProviderWith
     reg
-    ApiProvider
-      { apiTag = stubApi,
-        complete = \_ _ _ -> pure (stubResponse t),
-        stream = \_ _ _ -> Stream.concatEffect $ do
-          n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
-          pure $
-            Stream.fromList $
-              if n <= failTimes
-                then streamErrorEvents 0 ("stub stream failure #" <> T.pack (show n))
-                else stubEvents t,
-        describeThinking = stubDescribeThinking
+    ( apiProviderWith
+        stubApi
+        ( \_ _ _ -> Stream.concatEffect $ do
+            n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
+            pure $
+              Stream.fromList $
+                if n <= failTimes
+                  then streamErrorEvents 0 ("stub stream failure #" <> T.pack (show n))
+                  else stubEvents t
+        )
+        (\_ _ _ -> pure (stubResponse t))
+    )
+      { describeThinking = stubDescribeThinking
       }
   pure reg
 
@@ -211,11 +214,12 @@ failingStreamCostStubRegistry cost = do
   reg <- newProviderRegistry
   registerApiProviderWith
     reg
-    ApiProvider
-      { apiTag = stubApi,
-        complete = \_ _ _ -> pure (stubResponse ""),
-        stream = \_ _ _ -> Stream.fromList (streamErrorEvents cost "stub stream failure"),
-        describeThinking = stubDescribeThinking
+    ( apiProviderWith
+        stubApi
+        (\_ _ _ -> Stream.fromList (streamErrorEvents cost "stub stream failure"))
+        (\_ _ _ -> pure (stubResponse ""))
+    )
+      { describeThinking = stubDescribeThinking
       }
   pure reg
 

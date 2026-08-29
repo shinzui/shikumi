@@ -62,12 +62,12 @@ import Baikai
     ToolCall,
     ToolChoice (..),
     Usage,
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyToolCall,
     flattenAssistantBlocks,
     user,
-    _Context,
-    _Model,
-    _Options,
-    _ToolCall,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecodeStrict, encode)
@@ -208,7 +208,7 @@ reactLoop sig reg cfg i = do
   pure (o, traj)
   where
     impl :: ProtocolImpl i o
-    impl = resolveProtocol (protocol cfg) _Model sig reg
+    impl = resolveProtocol (protocol cfg) emptyModel sig reg
 
     -- Propose -> dispatch -> observe, accumulating steps (newest first). The
     -- iteration counter advances once per model turn, even when a native model
@@ -235,14 +235,14 @@ reactLoop sig reg cfg i = do
       let (ctx, opts) = renderExtract impl i traj
       (trajForExtract, resp) <-
         catchError
-          ((traj,) <$> complete _Model ctx opts)
+          ((traj,) <$> complete emptyModel ctx opts)
           ( \_cs -> \case
               e@(ContextWindowExceeded {})
                 | not (enabled (compaction cfg)) -> throwError e
               ContextWindowExceeded {} -> do
                 compacted <- forceCompactTrajectory traj
                 let (ctx', opts') = renderExtract impl i compacted
-                (compacted,) <$> complete _Model ctx' opts'
+                (compacted,) <$> complete emptyModel ctx' opts'
               e -> throwError e
           )
       o <- either throwError pure (parseExtract impl resp)
@@ -252,14 +252,14 @@ reactLoop sig reg cfg i = do
     completeProposeRecover acc = do
       let (ctx, opts) = renderPropose impl i (soFar acc)
       catchError
-        ((acc,) <$> complete _Model ctx opts)
+        ((acc,) <$> complete emptyModel ctx opts)
         ( \_cs -> \case
             e@(ContextWindowExceeded {})
               | not (enabled (compaction cfg)) -> throwError e
             ContextWindowExceeded {} -> do
               compacted <- forceCompactAcc acc
               let (ctx', opts') = renderPropose impl i (soFar compacted)
-              (compacted,) <$> complete _Model ctx' opts'
+              (compacted,) <$> complete emptyModel ctx' opts'
             e -> throwError e
         )
 
@@ -270,11 +270,11 @@ reactLoop sig reg cfg i = do
 
     forceCompactAcc :: [Step] -> Eff es [Step]
     forceCompactAcc acc =
-      reverse <$> compactTail (compaction cfg) _Model renderStepLine summaryStep (reverse acc)
+      reverse <$> compactTail (compaction cfg) emptyModel renderStepLine summaryStep (reverse acc)
 
     forceCompactTrajectory :: Trajectory -> Eff es Trajectory
     forceCompactTrajectory traj = do
-      compacted <- compactTail (compaction cfg) _Model renderStepLine summaryStep (V.toList (steps traj))
+      compacted <- compactTail (compaction cfg) emptyModel renderStepLine summaryStep (V.toList (steps traj))
       pure (traj {steps = V.fromList compacted})
 
     dispatchCalls :: Text -> NonEmpty (Text, Value) -> [Step] -> Eff es [Step]
@@ -321,7 +321,7 @@ renderStepLine s = renderTrajectory (Trajectory (V.singleton s) TerminatedFinish
 -- | A baikai 'ToolCall' built from a name and a raw arguments object (the call id
 -- is irrelevant on the prompt path and synthesized on the native path).
 mkToolCall :: Text -> Value -> ToolCall
-mkToolCall nm args = _ToolCall & #name .~ nm & #arguments .~ args
+mkToolCall nm args = emptyToolCall & #name .~ nm & #arguments .~ args
 
 -- ---------------------------------------------------------------------------
 -- The protocol seam
@@ -387,7 +387,7 @@ promptImpl sig reg =
                 <> "\n"
                 <> proposeGrammar
             msg = user (taskBlock i <> "\n\n" <> historyBlock traj)
-         in (buildCtx sys [msg] V.empty Nothing, _Options),
+         in (buildCtx sys [msg] V.empty Nothing, emptyOptions),
       parsePropose = \resp -> actionToProposal <$> parseActionText (responseText resp),
       renderExtract = \i traj ->
         let sys =
@@ -395,7 +395,7 @@ promptImpl sig reg =
                 <> "\n\n"
                 <> extractGuide (toSchema (Proxy @o))
             msg = user (taskBlock i <> "\n\n" <> historyBlock traj)
-         in (buildCtx sys [msg] V.empty Nothing, _Options),
+         in (buildCtx sys [msg] V.empty Nothing, emptyOptions),
       parseExtract = \resp -> parseOutput (stripFences (responseText resp))
     }
 
@@ -416,7 +416,7 @@ nativeImpl sig reg =
               getInstruction sig
                 <> "\n\nUse a tool when you need one, or answer directly when you have enough information."
             msg = user (taskBlock i <> "\n\n" <> historyBlock traj)
-            opts = _Options & #toolChoice .~ Just ToolChoiceAuto
+            opts = emptyOptions & #toolChoice .~ Just ToolChoiceAuto
          in (buildCtx sys [msg] (registryBaikai reg) Nothing, opts),
       -- Tool-call blocks -> calls executed in order; no tool call (plain text) -> finish.
       parsePropose = \resp ->
@@ -436,7 +436,7 @@ nativeImpl sig reg =
             -- Suppress tools so the model answers; attach the output schema (a
             -- no-op until EP-2's responseFormat is wired in the local baikai).
             opts =
-              attachSchema (toSchema (Proxy @o)) _Options
+              attachSchema (toSchema (Proxy @o)) emptyOptions
                 & #toolChoice .~ Just ToolChoiceNone
          in (buildCtx sys [msg] V.empty Nothing, opts),
       parseExtract = \resp -> parseOutput (stripFences (responseText resp))
@@ -448,7 +448,7 @@ nativeImpl sig reg =
 
 buildCtx :: Text -> [Message] -> Vector Tool -> Maybe ToolChoice -> Context
 buildCtx sys msgs tools _ =
-  _Context
+  emptyContext
     & #systemPrompt .~ Just sys
     & #messages .~ V.fromList msgs
     & #tools .~ tools

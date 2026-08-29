@@ -6,7 +6,7 @@
 -- prompt path; a native-capable model picks the native path).
 module ProtocolSpec (tests) where
 
-import Baikai (Api (..), _Model)
+import Baikai (Api (..), emptyModel)
 import Control.Lens ((&), (.~))
 import Data.Aeson (object, (.=))
 import Data.Generics.Labels ()
@@ -60,9 +60,9 @@ tests =
             V.length (steps tP) @?= 2
           _ -> assertFailure "both protocols should succeed",
       testCase "ProtocolAuto picks prompt for a CLI model" $
-        resolveProtocolKind ProtocolAuto (_Model & #api .~ AnthropicMessagesCli) @?= ProtocolPrompt,
+        resolveProtocolKind ProtocolAuto (emptyModel & #api .~ AnthropicMessagesCli) @?= ProtocolPrompt,
       testCase "ProtocolAuto picks native for a native-capable model" $
-        resolveProtocolKind ProtocolAuto (_Model & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= ProtocolNative,
+        resolveProtocolKind ProtocolAuto (emptyModel & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= ProtocolNative,
       testCase "native turn with two tool calls executes both in order" $ do
         let parisArgs = object ["city" .= ("Paris" :: Text), "units" .= ("c" :: Text)]
             londonArgs = object ["city" .= ("London" :: Text), "units" .= ("c" :: Text)]

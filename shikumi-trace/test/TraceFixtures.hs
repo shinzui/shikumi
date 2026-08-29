@@ -27,12 +27,12 @@ import Baikai
     Response,
     TextContent (..),
     UserContent (UserText),
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyResponse,
+    emptyTextContent,
     user,
-    _Context,
-    _Model,
-    _Options,
-    _Response,
-    _TextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -47,25 +47,25 @@ import Shikumi.LLM (LLM (..))
 -- @stub/stub-model@.
 stubModel :: Model
 stubModel =
-  _Model
+  emptyModel
     & #provider .~ "stub"
     & #modelId .~ "stub-model"
     & #api .~ Custom "stub"
 
 -- | A one-user-turn request context carrying @t@ (varies the cache key per stage).
 ctxFor :: Text -> Context
-ctxFor t = _Context & #messages .~ V.singleton (user t)
+ctxFor t = emptyContext & #messages .~ V.singleton (user t)
 
 -- | Default options.
 optsFor :: Options
-optsFor = _Options
+optsFor = emptyOptions
 
 -- | A response carrying @t@ as its single assistant text block, with small fixed
 -- token counts and latency so span attributes are populated.
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response
-    & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse
+    & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
     & #message . #usage . #inputTokens .~ 10
     & #message . #usage . #outputTokens .~ 5
     & #latencyMs .~ 12

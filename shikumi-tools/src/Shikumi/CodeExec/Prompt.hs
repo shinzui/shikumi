@@ -11,7 +11,7 @@ module Shikumi.CodeExec.Prompt
   )
 where
 
-import Baikai (Context, Options, user, _Context, _Options)
+import Baikai (Context, Options, emptyContext, emptyOptions, user)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value, encode)
 import Data.ByteString.Lazy qualified as LBS
@@ -25,8 +25,8 @@ import Data.Vector qualified as V
 -- options. The neutral one-turn shape both code-execution loops use per model call.
 simpleContext :: Text -> Text -> (Context, Options)
 simpleContext sys userMsg =
-  ( _Context & #systemPrompt .~ Just sys & #messages .~ V.singleton (user userMsg),
-    _Options
+  ( emptyContext & #systemPrompt .~ Just sys & #messages .~ V.singleton (user userMsg),
+    emptyOptions
   )
 
 -- | Strip a leading/trailing Markdown code fence (@```@ / @```json … ```@), if any,

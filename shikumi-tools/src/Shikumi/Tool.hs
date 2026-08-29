@@ -48,7 +48,7 @@ module Shikumi.Tool
   )
 where
 
-import Baikai (ToolCall, _Tool)
+import Baikai (ToolCall, emptyTool)
 import Baikai qualified as B
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (ToJSON, Value, encode)
@@ -100,7 +100,7 @@ toolSchemaOf _ = toSchema (Proxy @i)
 -- schema into @parameters@. This is the single sanctioned typed -> wire lowering.
 lowerTool :: forall i o. (ToSchema i) => Tool i o -> B.Tool
 lowerTool t =
-  _Tool
+  emptyTool
     & #name .~ name t
     & #description .~ description t
     & #parameters .~ toolSchemaOf t

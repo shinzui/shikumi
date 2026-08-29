@@ -8,9 +8,9 @@ import Baikai
   ( AssistantContent (..),
     Model,
     Response,
-    _Model,
-    _Response,
-    _TextContent,
+    emptyModel,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
@@ -39,12 +39,12 @@ runFakeLLM canned = interpret $ \_ -> \case
 runSig :: (LLM :> es) => Adapter i o -> Signature i o -> i -> Eff es (Either ShikumiError o)
 runSig adapter signature i = do
   let (ctx, opts) = render adapter signature i
-  resp <- complete (_Model :: Model) ctx opts
+  resp <- complete (emptyModel :: Model) ctx opts
   pure (parse adapter signature resp)
 
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 sig :: Signature Article Summary
 sig = setDemos [Demo sampleArticle sampleSummary] (mkSignature "Summarize the article")

@@ -68,8 +68,8 @@ import Baikai
     Context,
     Response,
     TextContent (..),
-    _Response,
-    _TextContent,
+    emptyResponse,
+    emptyTextContent,
   )
 import Baikai.Content (UserContent (..))
 import Baikai.Message (AssistantPayload (..), Message (..), UserPayload (..))
@@ -425,4 +425,4 @@ markerBody fields = T.unlines (concatMap sect fields ++ ["[[ ## completed ## ]]"
 -- | An assistant 'Response' carrying @body@ as its single text block.
 mkResponse :: Text -> Response
 mkResponse body =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ body))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ body))

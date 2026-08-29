@@ -13,6 +13,7 @@ import Baikai
   ( AssistantContent (..),
     AssistantMessageEvent (..),
     Context,
+    JsonSchemaFormat (strict),
     Message (..),
     Model,
     Options,
@@ -20,7 +21,8 @@ import Baikai
     StopReason (..),
     TextContent (..),
     doneTerminal,
-    _Model,
+    emptyModel,
+    jsonSchemaFormat,
   )
 import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Control.Lens ((^.))
@@ -162,7 +164,7 @@ nativeAttachesSchema =
     case captured of
       [(_, _, o)] -> do
         o ^. #responseFormat
-          @?= Just (JsonSchema {name = "output", schema = deriveSchema @Outline, strict = True})
+          @?= Just (JsonSchema ((jsonSchemaFormat "output" (deriveSchema @Outline)) {strict = True}))
         assertBool
           "private schema key stripped before transport"
           (Map.notMember metaResponseSchemaKey (o ^. #metadata))
@@ -171,7 +173,7 @@ nativeAttachesSchema =
 fallbackLeavesSchemaUnset :: TestTree
 fallbackLeavesSchemaUnset =
   testCase "fallback model leaves responseFormat unset" $ do
-    captured <- captureRouted _Model (predict topicToOutline) (Topic "cats")
+    captured <- captureRouted emptyModel (predict topicToOutline) (Topic "cats")
     case captured of
       [(_, _, o)] -> do
         o ^. #responseFormat @?= Nothing
@@ -228,7 +230,7 @@ nativeReceivesJsonDemos =
 fallbackPromptUnchangedAndStampsStripped :: TestTree
 fallbackPromptUnchangedAndStampsStripped =
   testCase "fallback model keeps the marker prompt and native stamps are stripped" $ do
-    captured <- captureRouted _Model (predict topicToOutline) (Topic "cats")
+    captured <- captureRouted emptyModel (predict topicToOutline) (Topic "cats")
     case captured of
       [(_, ctx, o)] -> do
         let sys = maybe "" id (ctx ^. #systemPrompt)
@@ -265,7 +267,7 @@ routesStreamModelAndStripsMetadata =
       [(m, _, o)] -> do
         m ^. #modelId @?= openai_gpt_4o_mini ^. #modelId
         o ^. #responseFormat
-          @?= Just (JsonSchema {name = "output", schema = deriveSchema @Outline, strict = True})
+          @?= Just (JsonSchema ((jsonSchemaFormat "output" (deriveSchema @Outline)) {strict = True}))
         assertBool
           "private schema key stripped before transport"
           (Map.notMember metaResponseSchemaKey (o ^. #metadata))

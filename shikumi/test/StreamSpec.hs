@@ -20,11 +20,11 @@ import Baikai
     StopReason (..),
     TerminalPayload (..),
     doneTerminal,
-    _Context,
-    _Model,
-    _Options,
-    _Response,
-    _TextContent,
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -102,13 +102,13 @@ popEvents ref = atomicModifyIORef' ref step
 -- | A response carrying @t@ as its single assistant text block.
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | The 'Response' assembled from a stream's terminal event.
 terminalResponse :: [AssistantMessageEvent] -> Response
 terminalResponse evs =
   case [p | EventDone TerminalPayload {message = AssistantMessage p} <- evs] of
-    (p : _) -> _Response & #message .~ p
+    (p : _) -> emptyResponse & #message .~ p
     [] -> mkResponse ""
 
 -- | A valid event sequence: @deltas@ stream as text chunks, and the terminal event
@@ -117,7 +117,7 @@ terminalResponse evs =
 -- the value streaming incrementally, the terminal carries the whole structured reply.
 streamEventsFor :: [Text] -> Text -> [AssistantMessageEvent]
 streamEventsFor deltas terminalText =
-  [ EventStart (StartPayload (AssistantMessage (_Response ^. #message)) Nothing),
+  [ EventStart (StartPayload (AssistantMessage (emptyResponse ^. #message)) Nothing),
     TextStart (IndexPayload 0)
   ]
     ++ [TextDelta (DeltaPayload 0 d) | d <- deltas]
@@ -125,7 +125,7 @@ streamEventsFor deltas terminalText =
          EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (payloadWith terminalText)))
        ]
   where
-    payloadWith t = (_Response ^. #message) & #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+    payloadWith t = (emptyResponse ^. #message) & #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | A recording callback: append each event to the IORef in order.
 recorder :: (IOE :> es) => IORef [StreamEvent] -> StreamEvent -> Eff es ()
@@ -144,7 +144,7 @@ tests =
         rec <- newIORef []
         resp <-
           runEff . runStreamingLLM ref $
-            streamComplete "answer" _Model _Context _Options (recorder rec)
+            streamComplete "answer" emptyModel emptyContext emptyOptions (recorder rec)
         evs <- readIORef rec
         evs
           @?= [ StreamFieldChunk (FieldChunk "answer" "Hel" False),

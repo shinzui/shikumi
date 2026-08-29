@@ -21,7 +21,7 @@ module Shikumi.CodeExec.ProgramOfThought
   )
 where
 
-import Baikai (_Model)
+import Baikai (emptyModel)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -90,7 +90,7 @@ potLoop cfg sig i = go 0 Nothing
     propose :: Maybe (Text, Text) -> Eff es Text
     propose mPrev = do
       let (ctx, opts) = simpleContext (proposeSys mPrev) (toPrompt i)
-      resp <- complete _Model ctx opts
+      resp <- complete emptyModel ctx opts
       pure (stripFences (responseText resp))
 
     -- Extract: hand the model the final code and its output, ask for the typed o.
@@ -98,7 +98,7 @@ potLoop cfg sig i = go 0 Nothing
     extract code out = do
       let prompt = toPrompt i <> "\n\nThe code:\n" <> code <> "\n\nIts output:\n" <> out
           (ctx, opts) = simpleContext extractSys prompt
-      resp <- complete _Model ctx opts
+      resp <- complete emptyModel ctx opts
       either throwError pure (parseOutput (stripFences (responseText resp)))
 
     proposeSys Nothing =

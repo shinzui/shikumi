@@ -4,13 +4,13 @@
 -- ('Shikumi.Refine.bestOfN', 'Shikumi.Refine.refine',
 -- 'Shikumi.Refine.multiChainComparison').
 --
--- Every test installs the production router (@routeLLM . runRouting _Model@) above a
+-- Every test installs the production router (@routeLLM . runRouting emptyModel@) above a
 -- deterministic stub @LLM@ (see "RefineStub") so per-sample temperature reaches the
 -- wire exactly as in production — no network, no API key. The headline assertion
 -- (M4) shows a deliberately-weak program's score strictly improves once wrapped.
 module RefineSpec (tests) where
 
-import Baikai (Context, Options, _Model)
+import Baikai (Context, Options, emptyModel)
 import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -70,7 +70,7 @@ tests =
 -- Run helpers — router over the stub, mirroring production install order
 -- ---------------------------------------------------------------------------
 
--- | Run a program sequentially under @routeLLM . runRouting _Model@ over the
+-- | Run a program sequentially under @routeLLM . runRouting emptyModel@ over the
 -- decision-rule stub; returns the result and the completion count.
 runCounted ::
   (Context -> Options -> Text) ->
@@ -82,7 +82,7 @@ runCounted decide prog input = do
   res <-
     runEff
       . runErrorNoCallStack @ShikumiError
-      . runRouting _Model
+      . runRouting emptyModel
       . runStub ref decide
       . routeLLM
       $ runProgram prog input
@@ -100,7 +100,7 @@ runCountedConc decide prog input = do
   runEff
     . runErrorNoCallStack @ShikumiError
     . runConcurrent
-    . runRouting _Model
+    . runRouting emptyModel
     . runStub ref decide
     . routeLLM
     $ runProgramConc prog input
@@ -116,7 +116,7 @@ runThrowing prog input = do
   res <-
     runEff
       . runErrorNoCallStack @ShikumiError
-      . runRouting _Model
+      . runRouting emptyModel
       . runThrowingLLM ref
       . routeLLM
       $ runProgram prog input
@@ -134,7 +134,7 @@ runRecorded decide prog input = do
   res <-
     runEff
       . runErrorNoCallStack @ShikumiError
-      . runRouting _Model
+      . runRouting emptyModel
       . runRecordingStub cap decide
       . routeLLM
       $ runProgram prog input

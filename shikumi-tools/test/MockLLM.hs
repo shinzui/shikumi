@@ -22,9 +22,9 @@ import Baikai
   ( AssistantContent (..),
     Model,
     Response,
-    _Response,
-    _TextContent,
-    _ToolCall,
+    emptyResponse,
+    emptyTextContent,
+    emptyToolCall,
   )
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value)
@@ -110,7 +110,7 @@ pop ref = atomicModifyIORef' ref step
 -- | An assistant 'Response' carrying @t@ as its single text block.
 mkTextResponse :: Text -> Response
 mkTextResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | A text response that also carries a resolved model and input-token usage.
 mkUsageResponse :: Model -> Natural -> Text -> Response
@@ -127,10 +127,10 @@ mkToolCallResponse callId nm args = mkToolCallsResponse [(callId, nm, args)]
 -- | An assistant 'Response' carrying several native tool-call blocks in order.
 mkToolCallsResponse :: [(Text, Text, Value)] -> Response
 mkToolCallsResponse calls =
-  _Response
+  emptyResponse
     & #message
       . #content
       .~ V.fromList
-        [ AssistantToolCall (_ToolCall & #id_ .~ callId & #name .~ nm & #arguments .~ args)
+        [ AssistantToolCall (emptyToolCall & #id_ .~ callId & #name .~ nm & #arguments .~ args)
         | (callId, nm, args) <- calls
         ]

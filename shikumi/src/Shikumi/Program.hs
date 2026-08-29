@@ -82,7 +82,7 @@ module Shikumi.Program
   )
 where
 
-import Baikai (Model, _Model)
+import Baikai (Model, emptyModel)
 import Data.Aeson (FromJSON, ToJSON, Value)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
@@ -255,10 +255,10 @@ embed = Embed
 -- ambient model is supplied below the stack by "Shikumi.Routing".@runRouting@ and
 -- the router ("Shikumi.Routing".@routeLLM@) overwrites this placeholder with it on
 -- every outgoing call. With no router installed (the bare-stub test path) the call
--- still carries '_Model', which 'adapterFor' maps to the prompt-fallback adapter —
+-- still carries 'emptyModel', which 'adapterFor' maps to the prompt-fallback adapter —
 -- preserving EP-4's original behaviour for un-routed runs.
 placeholderModel :: Model
-placeholderModel = _Model
+placeholderModel = emptyModel
 
 -- | Interpret a program as a typed @Eff@ computation. A 'Predict' node overlays
 -- its 'Params' onto the signature (effective instruction + decoded demos), renders

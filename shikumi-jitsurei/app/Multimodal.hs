@@ -20,7 +20,7 @@ import Baikai
     Response,
     TextContent (..),
     UserContent (..),
-    _Model,
+    emptyModel,
   )
 import Control.Lens ((^.))
 import Data.ByteString qualified as BS
@@ -95,7 +95,7 @@ runDescribe :: (Context -> Response) -> IO (Either ShikumiError Caption)
 runDescribe responder =
   runEff . runStubLLM responder $ do
     let (ctx, opts) = render fallbackAdapter describeSig describeInput
-    resp <- complete _Model ctx opts
+    resp <- complete emptyModel ctx opts
     pure (parse fallbackAdapter describeSig resp)
 
 main :: IO ()

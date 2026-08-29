@@ -28,7 +28,7 @@ module Shikumi.Module
   )
 where
 
-import Baikai (user, _Context, _Model, _Options)
+import Baikai (emptyContext, emptyModel, emptyOptions, user)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Object, Value (Object))
 import Data.Aeson.Key qualified as Key
@@ -191,15 +191,15 @@ twoStep ::
 twoStep sig = embed $ \i -> do
   -- 1. Free-form call: plain prose, no structured shape requested.
   let ffCtx =
-        _Context
+        emptyContext
           & #systemPrompt .~ Just (freeFormSystem sig)
           & #messages .~ V.fromList [user (toPrompt i)]
-  ffResp <- complete _Model ffCtx _Options
+  ffResp <- complete emptyModel ffCtx emptyOptions
   -- 2. Extraction call: coerce the prose into the typed output via the marker
   --    fallback adapter (a robust extraction target that already round-trips).
   let exSig = extractSig sig
       (exCtx, exOpts) = render fallbackAdapter exSig (ExtractIn (responseText ffResp))
-  exResp <- complete _Model exCtx exOpts
+  exResp <- complete emptyModel exCtx exOpts
   either throwError pure (parse fallbackAdapter exSig exResp)
 
 -- | The plain-prose system prompt for the free-form call (mirrors DSPy's

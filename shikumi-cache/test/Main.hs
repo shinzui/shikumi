@@ -20,12 +20,12 @@ import Baikai
     Response,
     StopReason (ErrorReason),
     defaultAnthropicMessagesCompat,
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyResponse,
     user,
     userAt,
-    _Context,
-    _Model,
-    _Options,
-    _Response,
   )
 import Control.Exception (bracket)
 import Control.Lens ((&), (.~))
@@ -71,16 +71,16 @@ import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 -- ---------------------------------------------------------------------------
 
 fixModel :: Model
-fixModel = _Model & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
+fixModel = emptyModel & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
 
 fixCtx :: Context
 fixCtx =
-  _Context
+  emptyContext
     & #systemPrompt .~ Just "You are helpful."
     & #messages .~ V.singleton (user "ping")
 
 fixOpts :: Options
-fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
+fixOpts = emptyOptions & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 
 -- | The pinned cache key for @(fixModel, fixCtx, fixOpts)@ — the value EP-7 must
 -- reproduce. Captured from a first run; any drift in field set, canonical JSON,
@@ -89,7 +89,7 @@ pinnedKey :: T.Text
 pinnedKey = "b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564"
 
 stubResponse :: Response
-stubResponse = _Response
+stubResponse = emptyResponse
 
 someTime :: UTCTime
 someTime = read "2026-06-08 00:00:00 UTC"

@@ -2,7 +2,7 @@
 -- @spike@ (M0), @tree@ (M1), @store@ (M2), @replay@ (M3), @e2e@ (M5).
 module Main (main) where
 
-import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options)
+import Baikai (Context, Model, Options, Response, emptyContext, emptyModel, emptyOptions, user)
 import Control.Exception (try)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value (Object), decode, encode, object, (.=))
@@ -337,16 +337,16 @@ responder c =
 -- | The EP-6 golden fixture and its pinned digest, copied here so the two plans
 -- are proven byte-for-byte identical.
 fixModel :: Model
-fixModel = _Model & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
+fixModel = emptyModel & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
 
 fixCtx :: Context
 fixCtx =
-  _Context
+  emptyContext
     & #systemPrompt .~ Just "You are helpful."
     & #messages .~ V.singleton (user "ping")
 
 fixOpts :: Options
-fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
+fixOpts = emptyOptions & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 
 pinnedKey :: Text
 pinnedKey = "b31fd70140abbd0198c6b7caec748a8389bf93be909164bdcc340731b7032564"

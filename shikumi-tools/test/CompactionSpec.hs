@@ -1,6 +1,6 @@
 module CompactionSpec (tests) where
 
-import Baikai (_Model, _Usage)
+import Baikai (emptyModel, zeroUsage)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value (..))
 import Data.Generics.Labels ()
@@ -50,24 +50,24 @@ tests =
     "Compaction"
     [ testCase "usageExceedsWindow flips at the boundary" $ do
         let cfg = defaultCompactionConfig {reserveTokens = 100}
-            model = _Model & #contextWindow .~ 1000
-            usage n = _Usage & #inputTokens .~ n
+            model = emptyModel & #contextWindow .~ 1000
+            usage n = zeroUsage & #inputTokens .~ n
         overflowThreshold cfg model @?= 900
         usageExceedsWindow cfg model (usage 899) @?= False
         usageExceedsWindow cfg model (usage 900) @?= True
         usageExceedsWindow (cfg {enabled = False}) model (usage 900) @?= False
-        usageExceedsWindow cfg _Model (usage 0) @?= False
-        overflowThreshold cfg (_Model & #contextWindow .~ 50) @?= 0,
+        usageExceedsWindow cfg emptyModel (usage 0) @?= False
+        overflowThreshold cfg (emptyModel & #contextWindow .~ 50) @?= 0,
       testCase "compactTail folds older items and keeps the recent tail" $ do
         let cfg = defaultCompactionConfig {keepRecent = 2}
         res <-
           runEffMock [mkTextResponse "S"] $
-            compactTail cfg _Model id ("summary:" <>) (["e1", "e2", "e3", "e4", "e5", "e6"] :: [Text])
+            compactTail cfg emptyModel id ("summary:" <>) (["e1", "e2", "e3", "e4", "e5", "e6"] :: [Text])
         res @?= Right ["summary:S", "e5", "e6"],
       testCase "compactTail with enabled=False is the identity and calls no model" $ do
         let cfg = defaultCompactionConfig {enabled = False, keepRecent = 0}
             items = ["e1", "e2", "e3"] :: [Text]
-        res <- runEffMock [] $ compactTail cfg _Model id ("summary:" <>) items
+        res <- runEffMock [] $ compactTail cfg emptyModel id ("summary:" <>) items
         res @?= Right items,
       testCase "agent on tiny window compacts and completes" $ do
         let cfg =
@@ -76,7 +76,7 @@ tests =
                   protocol = ProtocolPrompt,
                   compaction = defaultCompactionConfig {reserveTokens = 10, keepRecent = 1}
                 }
-            model = _Model & #contextWindow .~ 100
+            model = emptyModel & #contextWindow .~ 100
             script =
               [ mkUsageResponse model 10 (callReply "first"),
                 mkUsageResponse model 90 (callReply "second"),
@@ -108,7 +108,7 @@ tests =
                   protocol = ProtocolPrompt,
                   compaction = defaultCompactionConfig {reserveTokens = 10, keepRecent = 0}
                 }
-            model = _Model & #contextWindow .~ 100
+            model = emptyModel & #contextWindow .~ 100
             script =
               [ mkUsageResponse model 10 (callReply "first"),
                 mkTextResponse "reactive summary",
@@ -133,7 +133,7 @@ tests =
                   compaction = defaultCompactionConfig {enabled = False, reserveTokens = 10, keepRecent = 0}
                 }
             script =
-              [ mkUsageResponse (_Model & #contextWindow .~ 100) 10 (callReply "first"),
+              [ mkUsageResponse (emptyModel & #contextWindow .~ 100) 10 (callReply "first"),
                 mkTextResponse "unused summary",
                 mkTextResponse finishReply,
                 mkTextResponse extractReply
@@ -152,7 +152,7 @@ tests =
                   protocol = ProtocolPrompt,
                   compaction = defaultCompactionConfig {reserveTokens = 10, keepRecent = 1}
                 }
-            model = _Model & #contextWindow .~ 100
+            model = emptyModel & #contextWindow .~ 100
             script =
               [ mkUsageResponse model 10 (callReply "first"),
                 mkTextResponse finishReply,
@@ -176,7 +176,7 @@ tests =
                   protocol = ProtocolPrompt,
                   compaction = defaultCompactionConfig {reserveTokens = 10, keepRecent = 0}
                 }
-            model = _Model & #contextWindow .~ 100
+            model = emptyModel & #contextWindow .~ 100
             script =
               [ mkUsageResponse model 10 (callReply "first"),
                 mkTextResponse "reactive summary"

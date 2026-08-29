@@ -25,7 +25,7 @@ module Shikumi.CodeExec.CodeAct
   )
 where
 
-import Baikai (Model, Response, ToolCall, Usage, _Model, _ToolCall)
+import Baikai (Model, Response, ToolCall, Usage, emptyModel, emptyToolCall)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecodeStrict)
 import Data.Aeson.KeyMap qualified as KM
@@ -130,7 +130,7 @@ codeActLoop cfg sig reg i = do
           (ctx, opts) = simpleContext extractSys prompt
       (trajForExtract, resp) <-
         catchError
-          ((traj,) <$> complete _Model ctx opts)
+          ((traj,) <$> complete emptyModel ctx opts)
           ( \_cs -> \case
               e@(ContextWindowExceeded {})
                 | not (enabled (compaction cfg)) -> throwError e
@@ -138,7 +138,7 @@ codeActLoop cfg sig reg i = do
                 compacted <- forceCompactTrajectory traj
                 let prompt' = "Task:\n" <> toPrompt i <> "\n\nTrajectory:\n" <> renderTrajectory compacted
                     (ctx', opts') = simpleContext extractSys prompt'
-                (compacted,) <$> complete _Model ctx' opts'
+                (compacted,) <$> complete emptyModel ctx' opts'
               e -> throwError e
           )
       o <- either throwError pure (parseOutput (stripFences (responseText resp)))
@@ -148,14 +148,14 @@ codeActLoop cfg sig reg i = do
     completeTurnRecover acc = do
       let (ctx, opts) = simpleContext turnSys (turnUser acc)
       catchError
-        ((acc,) <$> complete _Model ctx opts)
+        ((acc,) <$> complete emptyModel ctx opts)
         ( \_cs -> \case
             e@(ContextWindowExceeded {})
               | not (enabled (compaction cfg)) -> throwError e
             ContextWindowExceeded {} -> do
               compacted <- forceCompactAcc acc
               let (ctx', opts') = simpleContext turnSys (turnUser compacted)
-              (compacted,) <$> complete _Model ctx' opts'
+              (compacted,) <$> complete emptyModel ctx' opts'
             e -> throwError e
         )
 
@@ -166,11 +166,11 @@ codeActLoop cfg sig reg i = do
 
     forceCompactAcc :: [Step] -> Eff es [Step]
     forceCompactAcc acc =
-      reverse <$> compactTail (compaction cfg) _Model renderStepLine summaryStep (reverse acc)
+      reverse <$> compactTail (compaction cfg) emptyModel renderStepLine summaryStep (reverse acc)
 
     forceCompactTrajectory :: Trajectory -> Eff es Trajectory
     forceCompactTrajectory traj = do
-      compacted <- compactTail (compaction cfg) _Model renderStepLine summaryStep (V.toList (steps traj))
+      compacted <- compactTail (compaction cfg) emptyModel renderStepLine summaryStep (V.toList (steps traj))
       pure (traj {steps = V.fromList compacted})
 
     turnUser acc =
@@ -213,7 +213,7 @@ parseCall code = do
 
 -- | A baikai 'ToolCall' from a name and raw arguments object (the id is irrelevant).
 mkToolCall :: Text -> Value -> ToolCall
-mkToolCall nm args = _ToolCall & #name .~ nm & #arguments .~ args
+mkToolCall nm args = emptyToolCall & #name .~ nm & #arguments .~ args
 
 -- | A synthetic step recording an unparseable reply, fed back as an observation.
 correctiveStep :: Text -> Step

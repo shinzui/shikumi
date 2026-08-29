@@ -7,8 +7,8 @@ module XmlAdapterSpec (tests) where
 import Baikai
   ( AssistantContent (..),
     Response,
-    _Response,
-    _TextContent,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -30,7 +30,7 @@ sig = setDemos [Demo sampleArticle sampleSummary] (mkSignature "Summarize the ar
 -- | Build a response whose single assistant text block carries the given body.
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | A hand-written XML reply wrapping each 'Summary' field in tags.
 xmlBody :: Text

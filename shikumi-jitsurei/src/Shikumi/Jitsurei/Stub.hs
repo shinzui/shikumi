@@ -39,9 +39,9 @@ import Baikai
   ( AssistantContent (..),
     Context,
     Response,
-    _Response,
-    _TextContent,
-    _ToolCall,
+    emptyResponse,
+    emptyTextContent,
+    emptyToolCall,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value)
@@ -71,8 +71,8 @@ import Shikumi.Program (Program, runProgram)
 -- decode path expects, so the typed output decodes cleanly.
 markerResponse :: [(Text, Text)] -> Response
 markerResponse fields =
-  _Response
-    & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ body))
+  emptyResponse
+    & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ body))
     & #message . #usage . #inputTokens .~ 18
     & #message . #usage . #outputTokens .~ 5
     & #latencyMs .~ 4
@@ -84,14 +84,14 @@ markerResponse fields =
 -- final extract turn).
 mkTextResponse :: Text -> Response
 mkTextResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- | A native tool-call turn: the assistant asks to invoke @name@ with @args@.
 mkToolCallResponse :: Text -> Text -> Value -> Response
 mkToolCallResponse callId name args =
-  _Response
+  emptyResponse
     & #message . #content
-      .~ V.singleton (AssistantToolCall (_ToolCall & #id_ .~ callId & #name .~ name & #arguments .~ args))
+      .~ V.singleton (AssistantToolCall (emptyToolCall & #id_ .~ callId & #name .~ name & #arguments .~ args))
 
 -- ---------------------------------------------------------------------------
 -- Running a program offline

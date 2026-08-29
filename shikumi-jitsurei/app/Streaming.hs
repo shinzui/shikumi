@@ -24,8 +24,8 @@ import Baikai
     StopReason (..),
     TerminalPayload (..),
     doneTerminal,
-    _Response,
-    _TextContent,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -72,7 +72,7 @@ answerEvents = streamEventsFor ["Hel", "lo"] markerBody
 
 streamEventsFor :: [Text] -> Text -> [AssistantMessageEvent]
 streamEventsFor deltas terminalText =
-  [ EventStart (StartPayload (AssistantMessage (_Response ^. #message)) Nothing),
+  [ EventStart (StartPayload (AssistantMessage (emptyResponse ^. #message)) Nothing),
     TextStart (IndexPayload 0)
   ]
     ++ [TextDelta (DeltaPayload 0 d) | d <- deltas]
@@ -80,13 +80,13 @@ streamEventsFor deltas terminalText =
          EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (payloadWith terminalText)))
        ]
   where
-    payloadWith t = (_Response ^. #message) & #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+    payloadWith t = (emptyResponse ^. #message) & #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 terminalResponse :: [AssistantMessageEvent] -> Response
 terminalResponse evs =
   case [p | EventDone TerminalPayload {message = AssistantMessage p} <- evs] of
-    (p : _) -> _Response & #message .~ p
-    [] -> _Response
+    (p : _) -> emptyResponse & #message .~ p
+    [] -> emptyResponse
 
 runStreamingStub :: [AssistantMessageEvent] -> Eff (LLM : es) a -> Eff es a
 runStreamingStub evs = interpret $ \_ -> \case

@@ -50,9 +50,9 @@ import Baikai
     Options,
     Response,
     TerminalPayload (..),
-    _Model,
-    _Response,
-    _TextContent,
+    emptyModel,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
@@ -183,7 +183,7 @@ firstTextEnd evs = listToMaybe [c | TextEnd (BlockEndPayload _ c) <- evs]
 -- program fails with the real transport error, not a decode of a partial body.
 reassemble :: [AssistantMessageEvent] -> Response
 reassemble evs = case terminalPayloads of
-  (p : _) -> _Response & #message .~ p
+  (p : _) -> emptyResponse & #message .~ p
   [] -> synthResponse (fromMaybe "" (firstTextEnd evs))
   where
     terminalPayloads =
@@ -193,7 +193,7 @@ reassemble evs = case terminalPayloads of
 -- | A response carrying @t@ as its single assistant text block.
 synthResponse :: Text -> Response
 synthResponse t =
-  _Response & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
 
 -- ---------------------------------------------------------------------------
 -- M2/M3: streaming a whole program
@@ -260,7 +260,7 @@ streamPredict ::
   Eff es o
 streamPredict sig ps i cb = do
   sig' <- effectiveSignature sig ps
-  let adapter = adapterFor _Model
+  let adapter = adapterFor emptyModel
       (ctx, opts0) = render adapter sig' i
       (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
       opts = attachNativeRender nativeSys nativeDemos (attachSchema (deriveSchema @o) opts0)
@@ -268,7 +268,7 @@ streamPredict sig ps i cb = do
         (x : _) -> x
         [] -> ""
   cb (StreamStatus (Status LmStart "LM call started"))
-  resp <- streamComplete fieldNm _Model ctx opts cb
+  resp <- streamComplete fieldNm emptyModel ctx opts cb
   cb (StreamStatus (Status LmEnd "LM call finished"))
   either throwError pure (parseResponse sig' resp)
 

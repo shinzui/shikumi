@@ -71,9 +71,9 @@ main :: IO ()
 main = do
   OpenAIApi.register
   prompt <- userNow "Summarize this in two sentences: …"
-  let ctx  = _Context & #systemPrompt .~ Just "You are terse."
+  let ctx  = emptyContext & #systemPrompt .~ Just "You are terse."
                       & #messages .~ V.singleton prompt
-      opts = _Options & #maxTokens .~ Just 256
+      opts = emptyOptions & #maxTokens .~ Just 256
   resp <- completeRequest Models.openai_gpt_4o_mini ctx opts
   print (flattenAssistantText (flattenAssistantBlocks resp))
 ```

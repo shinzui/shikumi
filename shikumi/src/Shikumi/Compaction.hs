@@ -17,10 +17,10 @@ import Baikai
     Response,
     TextContent (..),
     Usage,
+    emptyContext,
+    emptyOptions,
     flattenAssistantBlocks,
     user,
-    _Context,
-    _Options,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -94,7 +94,7 @@ requireErrorRow (Just e) = throwError e
 
 summaryRequest :: Text -> (Context, Options)
 summaryRequest rendered =
-  ( _Context
+  ( emptyContext
       & #systemPrompt
         .~ Just
           ( T.unlines
@@ -104,7 +104,7 @@ summaryRequest rendered =
               ]
           )
       & #messages .~ V.singleton (user rendered),
-    _Options
+    emptyOptions
   )
 
 renderItems :: (a -> Text) -> [a] -> Text

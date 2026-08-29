@@ -1,7 +1,7 @@
 -- | Usage-accounting tests for both blocking and streamed LM calls.
 module UsageSpec (tests) where
 
-import Baikai (_Context, _Model, _Options)
+import Baikai (emptyContext, emptyModel, emptyOptions)
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -48,7 +48,7 @@ tests =
         result <-
           runEff . runPrim $
             runStreamLLM events $
-              withUsageTotals (stream _Model _Context _Options)
+              withUsageTotals (stream emptyModel emptyContext emptyOptions)
         snd result @?= usageTotalsPerCall,
       testCase "evaluate reports non-zero usage end-to-end" $ do
         let ds =

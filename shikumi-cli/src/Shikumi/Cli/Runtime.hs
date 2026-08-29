@@ -21,8 +21,8 @@ import Baikai
   ( AssistantContent (..),
     Context,
     Response,
-    _Response,
-    _TextContent,
+    emptyResponse,
+    emptyTextContent,
   )
 import Control.Lens ((&), (.~))
 import Control.Monad (void)
@@ -99,12 +99,12 @@ recordTrace responder name prog input =
     runErrorNoCallStack (withSpan ProgramSpan name (void (runProgram prog input)))
 
 -- | Build a stub 'Response' as the prompt-fallback adapter's @[[ ## field ## ]]@
--- sections (the path the neutral @_Model@ exercises), carrying small fixed usage so
+-- sections (the path the neutral @emptyModel@ exercises), carrying small fixed usage so
 -- the recorded trace shows token counts.
 markerResponse :: [(Text, Text)] -> Response
 markerResponse fields =
-  _Response
-    & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ body))
+  emptyResponse
+    & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ body))
     & #message . #usage . #inputTokens .~ 18
     & #message . #usage . #outputTokens .~ 5
     & #latencyMs .~ 4

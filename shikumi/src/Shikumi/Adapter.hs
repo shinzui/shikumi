@@ -71,11 +71,11 @@ import Baikai
     Response,
     TextContent (..),
     assistant,
+    emptyContext,
+    emptyOptions,
     flattenAssistantBlocks,
     user,
     userImage,
-    _Context,
-    _Options,
   )
 import Control.Lens (at, (&), (.~), (?~), (^.))
 import Data.Aeson (Object, Value (..), eitherDecodeStrict, toJSON)
@@ -281,7 +281,7 @@ nativeAdapter =
     { render = \sig i ->
         let sys = systemHeader sig <> nativeOutputGuide sig
             ctx = buildContext sys (nativeDemoMessages sig ++ [userTurn i])
-            opts = attachSchema (deriveSchema @o) _Options
+            opts = attachSchema (deriveSchema @o) emptyOptions
          in (ctx, opts),
       parse = \_sig resp -> assistantJSON resp >>= fromModelChecked
     }
@@ -297,7 +297,7 @@ fallbackAdapter =
     { render = \sig i ->
         let sys = systemHeader sig <> fallbackOutputGuide sig
             ctx = buildContext sys (demoMessages sig ++ [userTurn i])
-         in (ctx, _Options),
+         in (ctx, emptyOptions),
       parse = \_sig resp ->
         let sections = parseMarkers (responseText resp)
             obj = sectionsToObject (deriveSchema @o) sections
@@ -329,7 +329,7 @@ xmlAdapter =
     { render = \sig i ->
         let sys = systemHeader sig <> xmlOutputGuide sig
             ctx = buildContext sys (xmlDemoMessages sig ++ [userTurn i])
-         in (ctx, _Options),
+         in (ctx, emptyOptions),
       parse = \sig resp ->
         let names = map fieldName (outputFields sig)
             sections = parseXmlTags names (responseText resp)
@@ -343,7 +343,7 @@ xmlAdapter =
 
 buildContext :: Text -> [Message] -> Context
 buildContext sys msgs =
-  _Context & #systemPrompt .~ Just sys & #messages .~ V.fromList msgs
+  emptyContext & #systemPrompt .~ Just sys & #messages .~ V.fromList msgs
 
 -- | Build the final user turn for an input. If the input has an image field, it is
 -- lowered to a baikai 'userImage' block, with the remaining (text) fields rendered

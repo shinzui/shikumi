@@ -11,7 +11,7 @@
 -- a failure.
 module Main (main) where
 
-import Baikai (Context, Model, Options, Response, user, _Context, _Model, _Options, _Response)
+import Baikai (Context, Model, Options, Response, emptyContext, emptyModel, emptyOptions, emptyResponse, user)
 import Control.Exception (finally)
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
@@ -33,16 +33,16 @@ import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
 fixModel :: Model
-fixModel = _Model & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
+fixModel = emptyModel & #modelId .~ "claude-sonnet-4-6" & #provider .~ "anthropic"
 
 fixCtx :: Context
-fixCtx = _Context & #systemPrompt .~ Just "You are helpful." & #messages .~ V.singleton (user "ping")
+fixCtx = emptyContext & #systemPrompt .~ Just "You are helpful." & #messages .~ V.singleton (user "ping")
 
 fixOpts :: Options
-fixOpts = _Options & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
+fixOpts = emptyOptions & #temperature .~ Just 0.0 & #maxTokens .~ Just 1024
 
 stubResponse :: Response
-stubResponse = _Response
+stubResponse = emptyResponse
 
 someTime :: UTCTime
 someTime = read "2026-06-08 00:00:00 UTC"

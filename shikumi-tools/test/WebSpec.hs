@@ -3,7 +3,7 @@
 
 module WebSpec (tests) where
 
-import Baikai (ToolCall, _ToolCall)
+import Baikai (ToolCall, emptyToolCall)
 import Control.Lens ((&), (.~))
 import Data.Aeson (Value, object, (.=))
 import Data.ByteString qualified as BS
@@ -31,7 +31,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 tc :: Text -> Value -> ToolCall
-tc nm args = _ToolCall & #name .~ nm & #arguments .~ args
+tc nm args = emptyToolCall & #name .~ nm & #arguments .~ args
 
 tests :: TestTree
 tests =

@@ -35,12 +35,12 @@ import Baikai
     Response,
     TextContent (..),
     UserContent (UserText),
+    emptyContext,
+    emptyModel,
+    emptyOptions,
+    emptyResponse,
+    emptyTextContent,
     user,
-    _Context,
-    _Model,
-    _Options,
-    _Response,
-    _TextContent,
   )
 import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
@@ -72,7 +72,7 @@ demoArticle = "Shikumi turns LM calls into typed, traceable, replayable programs
 -- | The demo model's routing identity (LM-call spans read @stub/stub-model@).
 demoModel :: Model
 demoModel =
-  _Model
+  emptyModel
     & #provider .~ "stub"
     & #modelId .~ "stub-model"
     & #api .~ Custom "stub"
@@ -145,15 +145,15 @@ replayMode path = do
 -- ---------------------------------------------------------------------------
 
 opts :: Options
-opts = _Options
+opts = emptyOptions
 
 ctxFor :: Text -> Context
-ctxFor t = _Context & #messages .~ V.singleton (user t)
+ctxFor t = emptyContext & #messages .~ V.singleton (user t)
 
 mkResponse :: Text -> Response
 mkResponse t =
-  _Response
-    & #message . #content .~ V.singleton (AssistantText (_TextContent & #text .~ t))
+  emptyResponse
+    & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ t))
     & #message . #usage . #inputTokens .~ 24
     & #message . #usage . #outputTokens .~ 9
     & #latencyMs .~ 7
