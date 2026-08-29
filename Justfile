@@ -1,5 +1,5 @@
 # shikumi developer tasks. Run inside `nix develop` (the dev shell exports the
-# Postgres/Redis socket env and initialises the local PG cluster).
+# Postgres/Redis socket environment and initialises the local PG cluster).
 
 # Show available recipes.
 default:
@@ -22,6 +22,11 @@ test-one pkg:
     cabal test {{pkg}}
 
 # ── Local services (UNIX sockets; see process-compose.yaml) ──────────────────
+
+# Create the configured development database after PostgreSQL becomes ready.
+# Re-running this is harmless when the database already exists.
+create-database:
+    createdb -h "$PGHOST" "$PGDATABASE" 2>/dev/null || true
 
 # Start Postgres + Redis (socket-only) under process-compose.
 services:
