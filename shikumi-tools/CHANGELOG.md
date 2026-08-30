@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Widened the `http-client-tls` upper bound to admit 0.4. The web tool uses
+  the unchanged `tlsManagerSettings` API, and 0.4 is the compatible line for
+  the TLS 2.x / Crypton 1.1 cohort selected by baikai 0.6.
+
 ## 0.3.0.3 — 2026-08-29
 
 ### Changed
