@@ -206,6 +206,10 @@ Start with the [user guide](docs/user/README.md):
 | [Tools & agents](docs/user/tools-and-agents.md) | Typed tools, built-in work tools, ReAct agents, code execution |
 | [CLI](docs/user/cli.md) | Registry wiring and offline subcommands |
 
+The [capability catalog](docs/capabilities/index.md) provides stable `CAP-N`
+handles, package and interface ownership, release provenance, openable evidence,
+dependencies, and explicit limits for everything the repository ships today.
+
 The implementation history lives under [docs/plans](docs/plans) and
 [docs/masterplans](docs/masterplans). Those files are useful for design context, but the
 user guide is the maintained usage documentation.
