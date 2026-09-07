@@ -19,6 +19,7 @@ import Effectful (Eff, runEff, type (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Effectful.Prim (runPrim)
 import GHC.Generics (Generic)
+import ObservationSpec qualified
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Cache.Key (CacheKey (..))
 import Shikumi.Cache.Key qualified as Key
@@ -100,7 +101,7 @@ main =
   defaultMain $
     testGroup
       "shikumi-trace"
-      [spikeTests, treeTests, storeTests, replayTests, e2eTests, nodeTests, correlateTests, feedbackTests]
+      [ObservationSpec.tests, spikeTests, treeTests, storeTests, replayTests, e2eTests, nodeTests, correlateTests, feedbackTests]
 
 -- ---------------------------------------------------------------------------
 -- M0

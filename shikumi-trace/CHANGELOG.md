@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add isolated `runProgramObserved` and `NodeObservation`, sharing traced control flow and retaining failed-attempt evidence with rejection lineage. Embed remains opaque; concurrent outer executions use separate storage.
+
 ## 0.2.0.3 — 2026-08-29
 
 ### Changed

@@ -23,7 +23,7 @@ A user can bootstrap a two-stage program whose intermediate records differ from 
 
 
 - [x] (2026-09-07) Milestone 1: typed capture and traversal compatibility; core (142), compile (17), trace (27), and OKF suites pass.
-- [ ] Milestone 2: isolated execution observations and retry eligibility.
+- [x] (2026-09-07 02:26Z) Milestone 2: isolated execution observations, retry rejection lineage, and concurrent outer isolation; all 31 trace tests pass. ADR-2 recorded and strict ADR validation passes.
 - [ ] Milestone 3: validated node-local recovery and matching.
 - [ ] Milestone 4: consumers, persistence, documentation, ADR and integration checks.
 
@@ -40,6 +40,9 @@ The chain-of-thought compiler changes the internal output type. Its capture code
 On 2026-09-06, choose explicit typed capture codecs rather than deriving JSON from rendered prompt text. Predict currently retains FromModel and ToPrompt dictionaries, which do not imply ToJSON. Keep ordinary predict programs runnable without new encoding constraints. Recovering demos requires an explicit capture-capable leaf or the legacy single-leaf outer codec.
 
 On 2026-09-06, limit automatic teacher/student matching to equal structural paths and equal input/output schema evidence plus successful target decoding. Expose an explicit mapping for different teacher structures; never broadcast outer demos across internal nodes. Default selection is deterministic, with seeded independent sampling configurable per node.
+
+
+On 2026-09-07, use a shared sequential walker with scope and leaf callbacks. Observation-only execution needs Prim but no Time, Trace, CurrentNode, or IOE. Record rejection scope labels and starting invocation ordinals; keep Embed boundaries explicitly opaque. See [ADR-2](../adr/0002-keep-capture-codecs-in-templates-and-isolate-observations.md).
 
 
 ## Outcomes & Retrospective
@@ -128,3 +131,5 @@ Use existing Aeson, Effectful Prim references, and tracing mechanisms. Discover 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
 Revision (2026-09-07): implemented and validated milestone 1; captured codecs remain template-owned and the chain-of-thought rewrite adapts their wire output.
+
+Revision (2026-09-07): completed milestone 2 and recorded ADR-2; observation identity and failed-scope eligibility are covered by deterministic trace tests.

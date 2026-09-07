@@ -44,6 +44,7 @@ library
     Shikumi.Trace.Feedback
     Shikumi.Trace.Internal.Spike
     Shikumi.Trace.Node
+    Shikumi.Trace.Observation
     Shikumi.Trace.Program
     Shikumi.Trace.Replay
     Shikumi.Trace.ResponseJSON
@@ -81,7 +82,10 @@ test-suite shikumi-trace-test
   hs-source-dirs: test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
-  other-modules:  TraceFixtures
+  other-modules:
+    ObservationSpec
+    TraceFixtures
+
   build-depends:
     , aeson
     , baikai            >=0.6      && <0.7

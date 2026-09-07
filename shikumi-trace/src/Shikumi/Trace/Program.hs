@@ -39,11 +39,13 @@ module Shikumi.Trace.Program
     -- * Node-aware capture and execution
     tracedNodeLLM,
     runProgramTraced,
+    walkProgramWith,
   )
 where
 
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
+import Data.Text (Text)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, localSeqUnlift, send)
 import Effectful.Error.Static (Error, catchError, throwError)
@@ -162,48 +164,65 @@ runProgramTraced ::
   Program i o ->
   i ->
   Eff es o
-runProgramTraced = go []
+runProgramTraced = walkProgramWith withSpan leaf bumpRetry
+  where
+    leaf _ node@(Embed _) i = runProgram node i
+    leaf path node i = localNode path (runProgram node i)
+
+-- | Shared sequential control flow. A scope callback may retain failure lineage;
+-- the leaf callback handles predictions and opaque Embed executions.
+walkProgramWith ::
+  forall i o es.
+  (LLM :> es, Error ShikumiError :> es) =>
+  (forall a. SpanKind -> Text -> Eff es a -> Eff es a) ->
+  (forall x y. NodePath -> Program x y -> x -> Eff es y) ->
+  Eff es () ->
+  Program i o ->
+  i ->
+  Eff es o
+walkProgramWith scope leaf onRetry = go []
   where
     go :: forall x y. [NodeStep] -> Program x y -> x -> Eff es y
     go prefix node@(PredictCaptured _ _ _) i =
-      withSpan ModuleSpan "Predict" (localNode (NodePath (reverse prefix)) (runProgram node i))
+      scope ModuleSpan "Predict" (leaf (NodePath (reverse prefix)) node i)
     go prefix node@(Predict _ _) i =
-      withSpan ModuleSpan "Predict" (localNode (NodePath (reverse prefix)) (runProgram node i))
+      scope ModuleSpan "Predict" (leaf (NodePath (reverse prefix)) node i)
     go prefix (Compose f g) i =
-      withSpan CombinatorSpan "Compose" (go (StepComposeL : prefix) f i >>= go (StepComposeR : prefix) g)
+      scope CombinatorSpan "Compose" (go (StepComposeL : prefix) f i >>= go (StepComposeR : prefix) g)
     go prefix (FMap k p) i =
-      withSpan CombinatorSpan "FMap" (k <$> go (StepFMap : prefix) p i)
+      scope CombinatorSpan "FMap" (k <$> go (StepFMap : prefix) p i)
     go prefix (Map _ p) xs =
-      withSpan CombinatorSpan "Map" (traverse (go (StepMap : prefix) p) xs)
+      scope CombinatorSpan "Map" (traverse (go (StepMap : prefix) p) xs)
     go prefix (Parallel a b) i =
-      withSpan CombinatorSpan "Parallel" ((,) <$> go (StepParallelL : prefix) a i <*> go (StepParallelR : prefix) b i)
+      scope CombinatorSpan "Parallel" ((,) <$> go (StepParallelL : prefix) a i <*> go (StepParallelR : prefix) b i)
     go prefix (Retry n p) i =
-      withSpan CombinatorSpan "Retry" (tracedRetry (go (StepRetry : prefix)) (const True) n p i)
+      scope CombinatorSpan "Retry" (tracedRetry onRetry (go (StepRetry : prefix)) (const True) n p i)
     go prefix (RetryWhen ok n p) i =
-      withSpan CombinatorSpan "RetryWhen" (tracedRetry (go (StepRetryWhen : prefix)) ok n p i)
+      scope CombinatorSpan "RetryWhen" (tracedRetry onRetry (go (StepRetryWhen : prefix)) ok n p i)
     go prefix (Validate v p) i =
-      withSpan CombinatorSpan "Validate" (go (StepValidate : prefix) p i >>= acceptOrReject v)
+      scope CombinatorSpan "Validate" (go (StepValidate : prefix) p i >>= acceptOrReject v)
     go prefix (MajorityVote k sched reduce p) i =
-      withSpan CombinatorSpan "MajorityVote" $
+      scope CombinatorSpan "MajorityVote" $
         reduce <$> traverse (\mt -> withSampleTemp mt (go (StepMajorityVote : prefix) p i)) (sampleTemps k sched)
     go prefix (Ensemble ps reduce) i =
-      withSpan CombinatorSpan "Ensemble" $
+      scope CombinatorSpan "Ensemble" $
         reduce <$> sequence [go (StepEnsemble idx : prefix) p i | (idx, p) <- zip [0 ..] ps]
-    go _ (Embed f) i =
-      withSpan CombinatorSpan "Embed" (f i)
+    go prefix node@(Embed _) i =
+      scope CombinatorSpan "Embed" (leaf (NodePath (reverse prefix)) node i)
 
 tracedRetry ::
-  (Trace :> es, Error ShikumiError :> es) =>
+  (Error ShikumiError :> es) =>
+  Eff es () ->
   (Program x y -> x -> Eff es y) ->
   (ShikumiError -> Bool) ->
   Int ->
   Program x y ->
   x ->
   Eff es y
-tracedRetry run ok n p i = attempt (max 1 n)
+tracedRetry onRetry run ok n p i = attempt (max 1 n)
   where
     attempt left =
       run p i `catchError` \_cs e ->
         if ok e && left > 1
-          then bumpRetry >> attempt (left - 1)
+          then onRetry >> attempt (left - 1)
           else throwError e
