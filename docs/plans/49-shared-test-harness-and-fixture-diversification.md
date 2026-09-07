@@ -53,8 +53,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-09-07) M1: commit with the required trailers.
 - [x] (2026-09-07) M2: turn `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` into a re-export shim; run all 14 current examples.
 - [x] (2026-09-07) M2: commit.
-- [ ] M3: migrate `shikumi-cli/src/Shikumi/Cli/Runtime.hs`; `cabal test shikumi-cli` passes.
-- [ ] M3: commit.
+- [x] (2026-09-07) M3: migrate `shikumi-cli/src/Shikumi/Cli/Runtime.hs`; `cabal test shikumi-cli` passes.
+- [x] (2026-09-07) M3: commit.
 - [ ] M4: delete `shikumi-tools/test/MockLLM.hs`; update the 16 current importing test modules; `cabal test shikumi-tools` passes.
 - [ ] M4: full `cabal test all` green; commit.
 
@@ -135,6 +135,9 @@ Milestone 1: shared package compiles warning-free; all six fixture tests pass. `
 
 Milestone 2: the compatibility shim builds and all 14 current examples exit zero.
 A recursive diff of the before/after stdout directories is empty: all outputs are byte-identical.
+
+Milestone 3: the CLI library builds warning-free, all 10 CLI tests pass, and
+`cabal run -v0 exe:shikumi -- --help` prints usage successfully.
 
 
 ## Context and Orientation

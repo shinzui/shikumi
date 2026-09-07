@@ -46,24 +46,22 @@ library
 
   build-depends:
     , aeson
-    , baikai                >=0.6  && <0.7
-    , base                  >=4.20 && <5
+    , baikai                >=0.6      && <0.7
+    , base                  >=4.20     && <5
     , bytestring
     , containers
     , directory
     , effectful
     , filepath
-    , generic-lens
-    , lens                  ^>=5.3
     , optparse-applicative
     , shikumi
     , shikumi-compile
     , shikumi-eval
     , shikumi-optimize
+    , shikumi-testing       ^>=0.1.0.0
     , shikumi-trace
     , shikumi-trace-otel
     , text                  ^>=2.1
-    , vector
 
 executable shikumi
   import:         common-options

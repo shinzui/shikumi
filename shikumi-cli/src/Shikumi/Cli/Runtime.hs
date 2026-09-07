@@ -17,49 +17,19 @@ module Shikumi.Cli.Runtime
   )
 where
 
-import Baikai
-  ( AssistantContent (..),
-    Context,
-    Response,
-    emptyResponse,
-    emptyTextContent,
-  )
-import Control.Lens ((&), (.~))
+import Baikai (Context, Response)
 import Control.Monad (void)
-import Data.Generics.Labels ()
 import Data.Text (Text)
-import Data.Text qualified as T
-import Data.Vector qualified as V
-import Effectful (Eff, IOE, runEff)
-import Effectful.Concurrent (Concurrent, runConcurrent)
-import Effectful.Dispatch.Dynamic (interpret)
-import Effectful.Error.Static (Error, runErrorNoCallStack)
-import Effectful.Prim (Prim, runPrim)
-import Shikumi.Effect.Time (Time, runTime)
+import Effectful (runEff)
+import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Prim (runPrim)
+import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
+import Shikumi.Testing (markerResponse, runStub, runStubEval, runStubLLM)
 import Shikumi.Trace (SpanKind (ProgramSpan), TraceTree, runTrace, tracedLLM, withSpan)
 import Shikumi.Trace.Replay (runLLMReplay)
 import Shikumi.Trace.Store (replayIndex)
-
--- | A base @LLM@ interpreter that answers every completion from a deterministic
--- responder. Stateless, so it needs no @IOE@.
-runStubLLM :: (Context -> Response) -> Eff (LLM : es) a -> Eff es a
-runStubLLM responder = interpret $ \_ -> \case
-  Complete _ c _ -> pure (responder c)
-  Stream {} -> pure []
-
--- | Run an evaluation/optimization action offline against the stub LM. Provides
--- exactly the row @evaluate@/@optimize@ require (@LLM@, @Concurrent@,
--- @Error ShikumiError@, @Time@, @IOE@). @Time@ is shikumi's own clock effect
--- ('Shikumi.Effect.Time'), discharged by 'runTime' against the real system clock.
-runStubEval ::
-  (Context -> Response) ->
-  Eff '[LLM, Concurrent, Error ShikumiError, Time, Prim, IOE] a ->
-  IO (Either ShikumiError a)
-runStubEval responder =
-  runEff . runPrim . runTime . runErrorNoCallStack . runConcurrent . runStubLLM responder
 
 -- | Run a single program against the stub LM (the reference "recorded run" used by
 -- @replay@'s identity check).
@@ -68,8 +38,7 @@ runStubProgram ::
   Program i o ->
   i ->
   IO (Either ShikumiError o)
-runStubProgram responder prog input =
-  runEff . runErrorNoCallStack . runStubLLM responder $ runProgram prog input
+runStubProgram = runStub
 
 -- | Re-run a program using only the responses recorded in a trace, via EP-7's
 -- fail-closed replay interpreter. Contacts no provider (structurally:
@@ -97,17 +66,3 @@ recordTrace ::
 recordTrace responder name prog input =
   runEff . runPrim . runTime . runTrace . runStubLLM responder . tracedLLM $
     runErrorNoCallStack (withSpan ProgramSpan name (void (runProgram prog input)))
-
--- | Build a stub 'Response' as the prompt-fallback adapter's @[[ ## field ## ]]@
--- sections (the path the neutral @emptyModel@ exercises), carrying small fixed usage so
--- the recorded trace shows token counts.
-markerResponse :: [(Text, Text)] -> Response
-markerResponse fields =
-  emptyResponse
-    & #message . #content .~ V.singleton (AssistantText (emptyTextContent & #text .~ body))
-    & #message . #usage . #inputTokens .~ 18
-    & #message . #usage . #outputTokens .~ 5
-    & #latencyMs .~ 4
-  where
-    body = T.unlines (concatMap sect fields ++ ["[[ ## completed ## ]]"])
-    sect (k, v) = ["[[ ## " <> k <> " ## ]]", v]
