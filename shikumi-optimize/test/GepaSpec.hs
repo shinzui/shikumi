@@ -5,6 +5,9 @@
 -- mutation, and the end-to-end held-out lift + serialization round-trip.
 module GepaSpec (tests) where
 
+import Data.IORef (newIORef, readIORef)
+import Data.Map.Strict qualified as Map
+import Data.Text qualified as T
 import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
@@ -18,23 +21,31 @@ import Shikumi.LLM (LLM)
 import Shikumi.Optimize
   ( Budget (..),
     Candidate (..),
+    FeedbackCallback (..),
     FeedbackMetric,
+    GEPAConfig (..),
     captureFeedback,
     defaultBudget,
+    defaultGEPAConfig,
     dominates,
     gepa,
+    gepaWith,
     mutateNode,
     optimize,
+    optimizeWith,
     paretoFrontier,
     reflectiveProposer,
     sampleParent,
     scoreOn,
     withLmCallCount,
   )
+import Shikumi.Optimize.Execution qualified as X
+import Shikumi.Optimize.Feedback qualified as F
+import Shikumi.Optimize.Report qualified as R
 import Shikumi.Program (Params (..), foldParams, nodeFieldsIndexed, programParams)
 import Shikumi.Trace.Feedback (feedbackFor)
 import Shikumi.Trace.Node (programNodePaths)
-import StubLM (Label (..), Sentence (..), ruleInstruction, runGepaStubLM, sentimentProg)
+import StubLM (Label (..), Sentence (..), ruleInstruction, runGepaStubLM, runGepaStubLMCapturing, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -67,7 +78,7 @@ runGepa :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] a -> IO (
 runGepa act = runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $ runGepaStubLM act
 
 tests :: TestTree
-tests = testGroup "Gepa" [paretoPure, feedbackCapture, reflectiveMutation, heldoutLift, budgetGate, roundTrips]
+tests = testGroup "Gepa" [paretoPure, feedbackCapture, reflectiveMutation, heldoutLift, budgetGate, roundTrips, validatedSplit, validatedBudgetStop, emptyValidation]
 
 -- ---------------------------------------------------------------------------
 -- Pure Pareto-frontier tests
@@ -176,3 +187,67 @@ roundTrips =
       Right cp -> case decodeCompiledOnto sentimentProg (encodeCompiled cp) of
         Left err -> assertFailure ("decode failed: " <> err)
         Right cp' -> programParams (compiledProgram cp') @?= programParams (compiledProgram cp)
+
+validatedSplit :: TestTree
+validatedSplit = testCase "validation reverses training ranking without leaking its sentinel" $ do
+  ref <- newIORef []
+  let train = dataset [example (Sentence "good TRAIN") (Label "neutral")]
+      validation = dataset [example (Sentence "good VALIDATION_SENTINEL") (Label "positive")]
+      callback = FeedbackCallback (F.legacyFeedback (\_ _ -> (boolScore True, "be more specific")))
+      cfg =
+        (defaultGEPAConfig callback)
+          { validationDataset = Just validation,
+            feedbackConfig = F.defaultFeedbackConfig {F.includeProgramCritique = True},
+            minibatchSize = 1
+          }
+      controls = X.defaultRunConfig {X.runLimits = X.RunLimits 30 2 2 1}
+  result <-
+    runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
+      runGepaStubLMCapturing ref (optimizeWith controls (gepaWith cfg reflectiveProposer) train exactMatch sentimentProg)
+  case result of
+    Left e -> assertFailure (show e)
+    Right (_, report) -> do
+      R.selectedCandidate report @?= Just 1
+      map R.objectiveValues (R.candidates report) @?= map (Map.singleton "quality") [0, 1]
+  requests <- readIORef ref
+  let reflections = filter (T.isInfixOf "## proposedInstruction ##") requests
+  assertBool "reflection occurred" (not (null reflections))
+  assertBool "validation absent from reflection" (all (not . T.isInfixOf "VALIDATION_SENTINEL") reflections)
+
+validatedBudgetStop :: TestTree
+validatedBudgetStop = testCase "budget stop during later proposal retains completed validation winner" $ do
+  let callback = FeedbackCallback (F.legacyFeedback (\_ _ -> (boolScore True, "be more specific")))
+      cfg =
+        (defaultGEPAConfig callback)
+          { validationDataset = Just (dataset [example (Sentence "good validation") (Label "positive")]),
+            feedbackConfig = F.defaultFeedbackConfig {F.includeProgramCritique = True},
+            minibatchSize = 1
+          }
+      controls = X.defaultRunConfig {X.runLimits = X.RunLimits 6 3 1 1}
+  result <-
+    runGepa $
+      optimizeWith
+        controls
+        (gepaWith cfg reflectiveProposer)
+        (dataset [example (Sentence "good training") (Label "neutral")])
+        exactMatch
+        sentimentProg
+  case result of
+    Left e -> assertFailure (show e)
+    Right (compiled, report) -> do
+      R.selectedCandidate report @?= Just 1
+      R.runStatus report @?= R.BudgetStopped
+      R.admittedOperations report @?= 6
+      map R.candidateStatus (R.candidates report) @?= [R.CandidateCompleted, R.CandidateCompleted, R.CandidateIncomplete]
+      case foldParams (compiledProgram compiled) of
+        p : _ -> instructionOverride p @?= Just ruleInstruction
+        [] -> assertFailure "missing predictor"
+
+emptyValidation :: TestTree
+emptyValidation = testCase "explicit empty validation fails even at zero budget" $ do
+  let cfg = (defaultGEPAConfig (FeedbackCallback (F.legacyFeedback fbMetric))) {validationDataset = Just (dataset [])}
+      controls = X.defaultRunConfig {X.runLimits = X.RunLimits 0 0 1 1}
+  result <- runGepa (optimizeWith controls (gepaWith cfg reflectiveProposer) trainset exactMatch sentimentProg)
+  case result of
+    Left _ -> pure ()
+    Right _ -> assertFailure "empty validation was silently accepted"

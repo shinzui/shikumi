@@ -22,13 +22,18 @@ A user can optimize using training feedback while selecting candidates on a sepa
 ## Progress
 
 
-Implementation has not started. Populate timestamped milestone checkboxes when implementation begins.
+- [x] (2026-09-07) Read the plan, skill specification, prerequisite implementation, and Effectful registry/source documentation. Plan 52 is complete.
+- [x] (2026-09-07) Milestone 1: validated configuration and additive report driver.
+- [x] (2026-09-07) Milestone 2: atomic admission and failure-safe generic candidate lifecycle.
+- [x] (2026-09-07) Milestone 3: validation split and named objectives.
+- [x] (2026-09-07) Milestone 4: bounded generations and concurrency regressions.
+- [ ] Milestone 5: offline example, documentation, ADR, and full validation.
 
 
 ## Surprises & Discoveries
 
 
-None yet.
+The prerequisite plan 52 is implemented and validated, despite the stale master-plan registry. The first integration pass passes all 109 optimizer tests, including objective frontiers, report JSON, caught admission errors, the concurrent final-slot ceiling, and opposite training/validation rankings with a sentinel request check.
 
 
 ## Decision Log
@@ -41,10 +46,16 @@ On 2026-09-06, define the hard budget unit as an admitted Shikumi LLM Complete o
 On 2026-09-06, define a finite declared objective set with direction and missing-value policy. A Pareto frontier is the set of candidates not worse in all objectives and strictly worse in at least one than another. It does not choose a unique winner; an explicit primary-objective/tie policy does that. Training and validation examples are separate from any protected final holdout, which this optimizer never receives.
 
 
+On 2026-09-07, use serial examples inside bounded candidate batches and an independent dispatch semaphore. Keep serializable RunLimits separate from the executable observer. The generic runSearchSession returns the original typed error alongside its diagnostic report; optimizeWith propagates non-session errors, while its lifecycle sink retains terminal metadata. Candidate status and event constructors use CandidateEnded carrying the explicit terminal status to avoid conflicting Haskell constructor names.
+
+On 2026-09-07, training screening verifies execution without requiring training-score improvement: rejecting every training regression would contradict the opposite-ranking validation acceptance fixture. All required validation positions still gate selection. No intention was supplied in either frontmatter; the optional skill question was asked once and implementation proceeded without a trailer.
+
+On 2026-09-07, refine the deterministic contract to candidate reservation IDs, generation snapshots, parent selection, and result folding. Physical operation order and final-slot allocation across arbitrary concurrent callbacks remain runtime-dependent. Enforcing total ordering across opaque nested operations can prevent barrier-dependent workers from making progress; claiming it from an atomic counter would be false. Width one provides reproducible scheduling for deterministic providers. The source API, user guide, acceptance section, and ADR-5 state this limitation explicitly.
+
 ## Outcomes & Retrospective
 
 
-Not implemented. Record actual test and example evidence here at completion.
+The shared driver, objective policy, split-aware GEPA path, and lifecycle implementation are in place. The offline optimizer suite passes 114 tests before the final baseline-retention and empty-validation additions. Full repository build, example execution, and final validation remain in progress.
 
 
 ## Context and Orientation
@@ -80,7 +91,7 @@ Add an LLM interposer using atomic admission before forwarding each Complete/Str
 
 Provide evaluateCandidate/session batch primitives receiving candidate identity, dataset, runner, and metric/evidence callbacks. Results preserve example identity and apply plan 52's failure classification. Candidate completion requires all required validation examples; partial aggregate scores are never eligible to win. Keep the best completed candidate on budget stop, falling back to the unscored baseline if none completed. Reserve candidate-count slots before execution and record unused/incomplete work honestly. This is the generic seam consumed by plan 57, not a GEPA-specific function.
 
-Emit RunStarted, CandidateStarted, CandidateCompleted, CandidateFailed, CandidateIncomplete, BudgetStopped, and one terminal RunFinished event on normal, scored-failure, budget-stop, and typed-error paths as applicable. Assign monotonically ordered event IDs at the sink boundary; candidate IDs reflect deterministic scheduling order, not finish order. Isolate observer exceptions under a declared best-effort policy and record observer failure without altering candidate scores; cancellation must still propagate. Keep raw prompts, datasets, and tool payloads out of events by default. Use structured resource cleanup so terminal bookkeeping occurs on cancellation where possible without swallowing it. A stub counter proves a retrying candidate cannot make cap+1 admitted operations, including simultaneous workers racing for the last slot.
+Emit RunStarted, CandidateStarted, CandidateCompleted, CandidateFailed, CandidateIncomplete, BudgetStopped, and one terminal RunFinished event on normal, scored-failure, budget-stop, and typed-error paths as applicable. Assign monotonically ordered event IDs at the sink boundary; candidate IDs reflect deterministic scheduling order, not finish order. Isolate observer exceptions under a declared best-effort policy and record observer failure without altering candidate scores; cancellation must still propagate. Keep raw prompts, datasets, and tool payloads out of events by default. Use structured resource cleanup so terminal bookkeeping occurs on cancellation where possible without swallowing it. Opaque candidate reservations belong to one session, execute once, and unused reservations remain listed separately in the report. A stub counter proves a retrying candidate cannot make cap+1 admitted operations, including simultaneous workers racing for the last slot.
 
 ### Milestone 3 — Separate validation and named objective selection
 
@@ -94,7 +105,7 @@ Use a fixture with candidate A quality 1.0/cost 3, B quality 0.9/cost 1, C quali
 ### Milestone 4 — Bounded generations and deterministic integration
 
 
-Permit GEPA to propose a finite generation of children from the frontier snapshot, then evaluate them concurrently. Use a bounded job scheduler across candidates and a separate shared semaphore directly around Complete/Stream dispatch. The semaphore enforces total active LLM operations, including concurrency introduced inside a Program or Embed. Acquire a permit before admission/dispatch and release it with exception-safe cleanup on success, failure or cancellation. Never hold a dispatch permit for the lifetime of an example or recursive evaluator, which could deadlock its nested calls. Do not multiply candidate workers by example workers and accidentally exceed either stated bound. Allocate deterministic candidate IDs and admission order, including when the remaining budget can fund only part of the generation. Work admitted to execute can complete out of order; fold completed results into the frontier in candidate order. Adaptive parent selection occurs between generations, so do not pretend parallel scheduling preserves the old single-child search trajectory. Default generation width one preserves that trajectory.
+Permit GEPA to propose a finite generation of children from the frontier snapshot, then evaluate them concurrently. Use a bounded job scheduler across candidates and a separate shared semaphore directly around Complete/Stream dispatch. The semaphore enforces total active LLM operations, including concurrency introduced inside a Program or Embed. Acquire a permit before admission/dispatch and release it with exception-safe cleanup on success, failure or cancellation. Never hold a dispatch permit for the lifetime of an example or recursive evaluator, which could deadlock its nested calls. Do not multiply candidate workers by example workers and accidentally exceed either stated bound. Allocate deterministic candidate IDs and reserve candidate slots in scheduling order, including when only part of a generation fits the candidate ceiling. Atomic operation admission bounds concurrent dispatch, but the worker receiving the final operation slot can depend on runtime scheduling. Width one is required when reproducible budget-stop outcomes matter. Work admitted to execute can complete out of order; fold completed results into the frontier in candidate order. Adaptive parent selection occurs between generations, so do not pretend parallel scheduling preserves the old single-child search trajectory. Default generation width one preserves that trajectory.
 
 Test concurrency with barriers and counters rather than fragile wall-clock speed assertions. Active operations must never exceed configured width; a blocked job is released by another admitted job; report/selection order remains stable under reversed completion. The operation ceiling still holds when the final slot is contested. Propagate cancellation to workers and close each candidate's event lifecycle exactly once.
 
@@ -125,7 +136,7 @@ At milestones 1 and 2 the configuration, counter, and lifecycle tests pass; mile
 
 Zero operation/candidate budget returns an explicitly unscored baseline without dispatch. Mid-candidate budget exhaustion preserves the previous completed winner. Retry, stream, and opaque embedded calls all share one hard admission counter. Concurrent jobs cannot exceed either width or operation ceiling. Provider-internal retries are not labeled separate counted operations unless a future provider-attempt seam supplies them.
 
-Training-only reflection and validation-only selection are verified by captured requests and opposite rankings. Empty explicit validation fails before calls. Objective values preserve units/directions; missing required or non-finite values cannot win. Scalar compatibility produces the old winner for generation width one. Events have stable IDs, one terminal record per started candidate, and truthful run termination; observer failure does not mutate optimization results. Cancellation propagates without leaking workers. Saved reports round-trip and retain candidate IDs, objective frontier, actual counts, and incomplete status. Existing compiled-state formats remain unchanged.
+Training-only reflection and validation-only selection are verified by captured requests and opposite rankings. Empty explicit validation fails before calls. Objective values preserve units/directions; missing required or non-finite values cannot win. Scalar compatibility produces the old winner for generation width one. Events have stable IDs, one terminal record per started candidate, and truthful run termination; observer failure does not mutate optimization results. Cancellation propagates without leaking workers. Saved reports round-trip and retain candidate IDs, objective policy and units, objective frontier, run controls, unused reservations, actual counts, and incomplete status. The deterministic seed controls candidate scheduling and parent selection; concurrent physical dispatch and the identity of a final-slot winner are explicitly outside that guarantee. Existing compiled-state formats remain unchanged.
 
 
 ## Idempotence and Recovery
@@ -142,3 +153,5 @@ Execution.hs owns validated RunConfig, SearchSession es, runSearchSession, atomi
 Use existing Effectful Prim atomic references (as in Search.hs), Concurrent, Time, and typed errors. Inspect APIs through mori://effectful/effectful and its registered docs before coding. Reuse eval accounting and plan 52's evidence runner; no new package bounds are selected. Count LLM dispatch operations separately from predicted costs, provider usage, and dollar spending. The protected holdout and production-evidence envelope remain outside this API.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
+
+Revision (2026-09-07): implemented shared execution and objective contracts; clarified concurrent dispatch determinism, introduced session-owned one-use candidate reservations, and recorded test evidence and ADR-5.

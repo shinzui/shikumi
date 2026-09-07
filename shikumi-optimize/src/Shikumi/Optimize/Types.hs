@@ -41,6 +41,8 @@
 -- the plan's Decision Log.
 module Shikumi.Optimize.Types
   ( Optimizer (..),
+    ConfiguredOptimizer (..),
+    fromLegacyOptimizer,
     Budget (..),
     defaultBudget,
     Scored (..),
@@ -51,11 +53,12 @@ import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error)
 import Effectful.Prim (Prim)
-import Shikumi.Compile.Types (CompiledProgram)
+import Shikumi.Compile.Types (CompiledProgram (..))
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Dataset, Metric)
 import Shikumi.LLM (LLM)
+import Shikumi.Optimize.Execution (SearchSession, markLegacy, sessionStopped)
 import Shikumi.Program (Program)
 
 -- | A search strategy that, given a training dataset, a metric, and a starting
@@ -109,3 +112,17 @@ data Scored a = Scored
     score :: !Double
   }
   deriving stock (Eq, Show)
+
+-- | A strategy receives an explicit, shared execution session.
+newtype ConfiguredOptimizer i o = ConfiguredOptimizer
+  { runConfiguredOptimizer ::
+      forall es.
+      (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
+      SearchSession es -> Dataset i o -> Metric o -> Program i o -> Eff es (CompiledProgram i o)
+  }
+
+fromLegacyOptimizer :: Optimizer i o -> ConfiguredOptimizer i o
+fromLegacyOptimizer opt = ConfiguredOptimizer $ \session ds metric prog -> do
+  markLegacy session
+  halted <- sessionStopped session
+  if halted then pure (CompiledProgram prog) else runOptimizer opt ds metric prog

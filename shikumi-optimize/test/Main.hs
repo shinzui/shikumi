@@ -9,12 +9,14 @@ import AcceptanceSpec qualified
 import BootstrapSpec qualified
 import CoproSpec qualified
 import EnsembleSpec qualified
+import ExecutionSpec qualified
 import FeedbackSpec qualified
 import GepaSpec qualified
 import InstructionSpec qualified
 import KNNSpec qualified
 import LabeledFewShotSpec qualified
 import Miprov2Spec qualified
+import ObjectiveSpec qualified
 import OptimizeSpec qualified
 import ProposeSpec qualified
 import RandomSearchSpec qualified
@@ -35,6 +37,8 @@ main =
         ProposeSpec.tests,
         Miprov2Spec.tests,
         CoproSpec.tests,
+        ExecutionSpec.tests,
+        ObjectiveSpec.tests,
         GepaSpec.tests,
         FeedbackSpec.tests,
         KNNSpec.tests,

@@ -1,7 +1,7 @@
-cabal-version: 3.4
-name:          shikumi-jitsurei
-version:       0.1.0.0
-synopsis:      Worked examples (実例) for the shikumi framework
+cabal-version:   3.4
+name:            shikumi-jitsurei
+version:         0.1.0.0
+synopsis:        Worked examples (実例) for the shikumi framework
 description:
   Runnable cookbook examples for shikumi, mirroring the README's motivating
   examples one-for-one. Every example runs fully offline against a deterministic
@@ -12,10 +12,11 @@ description:
   .
   Not intended for publication.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
@@ -224,3 +225,18 @@ executable jitsurei-codeexec
     , shikumi-tools
     , text
     , vector
+
+-- Validation-selected GEPA and named quality/cost objectives, fully offline.
+executable jitsurei-gepa-objectives
+  import:         common-options
+  main-is:        GepaObjectives.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base              >=4.20 && <5
+    , containers
+    , shikumi
+    , shikumi-eval
+    , shikumi-jitsurei
+    , shikumi-optimize
+    , text

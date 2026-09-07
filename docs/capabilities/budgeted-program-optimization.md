@@ -4,7 +4,7 @@ type: Capability
 description: "Search a Program's instructions, demonstrations, neighbors, and ensembles with multiple optimizers that score typed datasets and stop with the best-so-far candidate at an LM-call budget."
 generated:
   by: process:codex
-  at: "2026-09-07T02:48:16Z"
+  at: "2026-09-07T03:49:40Z"
 capabilityId: CAP-16
 provider: mori://shinzui/shikumi
 status: shipped
@@ -20,6 +20,8 @@ interface:
   - Shikumi.Optimize.RandomSearch
   - Shikumi.Optimize.COPRO
   - Shikumi.Optimize.MIPRO
+  - Shikumi.Optimize.Execution
+  - Shikumi.Optimize.Report
   - Shikumi.Optimize.Feedback
   - Shikumi.Optimize.GEPA
   - Shikumi.Optimize.KNN
@@ -87,3 +89,23 @@ errors escape unless the latter are explicitly classified.
   the matching compiled template.
 - Budget accounting is expressed in LM calls, not currency; provider pricing
   and token totals remain separate runtime observations.
+
+## Configured validation and execution reports
+
+`optimizeWith` and `gepaWith` add separate validation data, named quality/resource
+objectives, and versioned diagnostic reports. The configured session atomically
+admits Shikumi Complete/Stream operations and bounds active dispatches independently
+of candidate batches. Retry and Embed calls share admission with proposal and critic
+calls. Incomplete validation cannot win; a stopped search retains its completed
+winner or reports an unscored baseline. Legacy opaque strategies expose run-level
+accounting with candidate detail explicitly unavailable.
+
+`jitsurei-gepa-objectives` is an offline validation-selected B fixture. Optimizer
+regressions exercise contrary training/validation rankings, sentinel exclusion from
+reflection, cost ceilings and Pareto ties, budget catches and concurrent contention,
+barrier-controlled dispatch width, cancellation cleanup, and report JSON round trips.
+
+These reports are diagnostic, not sealed dataset provenance, promotion authority,
+or protected-holdout comparison artifacts. The hard unit is an admitted framework
+LLM operation, not provider-internal attempts or dollars. The seed controls candidate
+scheduling; concurrent dispatch races and live responses are not deterministic.

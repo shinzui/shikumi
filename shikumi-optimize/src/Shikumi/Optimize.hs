@@ -13,6 +13,7 @@
 module Shikumi.Optimize
   ( -- * The driver
     optimize,
+    optimizeWith,
 
     -- * Re-exports
     module Shikumi.Optimize.Types,
@@ -32,7 +33,7 @@ where
 
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
-import Effectful.Error.Static (Error)
+import Effectful.Error.Static (Error, throwError)
 import Effectful.Prim (Prim)
 import Shikumi.Compile.Types (CompiledProgram)
 import Shikumi.Effect.Time (Time)
@@ -42,6 +43,7 @@ import Shikumi.LLM (LLM)
 import Shikumi.Optimize.Bootstrap
 import Shikumi.Optimize.COPRO
 import Shikumi.Optimize.Ensemble
+import Shikumi.Optimize.Execution
 import Shikumi.Optimize.GEPA
 import Shikumi.Optimize.Instruction
 import Shikumi.Optimize.KNN
@@ -49,6 +51,7 @@ import Shikumi.Optimize.LabeledFewShot
 import Shikumi.Optimize.MIPRO
 import Shikumi.Optimize.Pareto
 import Shikumi.Optimize.RandomSearch
+import Shikumi.Optimize.Report (OptimizationReport, RunStatus (BudgetStopped), runStatus)
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Types
 import Shikumi.Program (Program)
@@ -64,3 +67,20 @@ optimize ::
   Program i o ->
   Eff es (CompiledProgram i o)
 optimize opt train metric prog = runOptimizer opt train metric prog
+
+-- | Run a configured strategy with diagnostic reporting and hard operation admission.
+optimizeWith ::
+  (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
+  RunConfig ->
+  ConfiguredOptimizer i o ->
+  Dataset i o ->
+  Metric o ->
+  Program i o ->
+  Eff es (CompiledProgram i o, OptimizationReport)
+optimizeWith cfg opt ds metric prog = do
+  (result, report) <- runSearchSession cfg $ \session -> runConfiguredOptimizer opt session ds metric prog
+  case result of
+    Right compiled -> pure (compiled, report)
+    Left e
+      | runStatus report == BudgetStopped -> pure (freezeProgram prog, report)
+      | otherwise -> throwError e

@@ -11,15 +11,20 @@ module Shikumi.Optimize.GEPA
     captureFeedback,
     mutateNode,
     gepa,
+    gepaWith,
+    GEPAConfig (..),
+    ObjectiveCallback (..),
+    defaultGEPAConfig,
     gepaWithFeedback,
     FeedbackCallback (..),
     mutateFromEvidence,
   )
 where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM, forM_, when)
 import Data.Either (isRight)
-import Data.List (findIndex, sortOn)
+import Data.List (find, findIndex, sortOn)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
@@ -29,18 +34,23 @@ import Effectful.Prim (Prim)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Effect.Time (Time)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.Eval
   ( Dataset,
+    dataset,
+    datasetExamples,
     datasetSize,
     unScore,
   )
+import Shikumi.Eval.Evaluate (tryShikumi)
 import Shikumi.LLM (LLM)
 import Shikumi.Module (predict)
+import Shikumi.Optimize.Execution qualified as X
 import Shikumi.Optimize.Feedback
 import Shikumi.Optimize.Pareto (Candidate (..), paretoFrontier, sampleParent)
+import Shikumi.Optimize.Report qualified as R
 import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, newBudgetMeter, scoringCost, setNodeInstrIfNew, tryCharge)
-import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
+import Shikumi.Optimize.Types (Budget (..), ConfiguredOptimizer (..), Optimizer (..))
 import Shikumi.Program
   ( NodeFields (..),
     Program,
@@ -53,7 +63,7 @@ import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (mkSignature)
 import Shikumi.Trace.Feedback (FeedbackLog, attachFeedback, feedbackFor, runFeedback)
 import Shikumi.Trace.Node (NodePath (..), programNodePaths)
-import Shikumi.Trace.Observation (NodeObservation (..))
+import Shikumi.Trace.Observation (NodeObservation (..), runProgramObserved)
 
 -- ---------------------------------------------------------------------------
 -- The reflective proposer
@@ -171,11 +181,19 @@ gepa ::
   FeedbackMetric o ->
   Budget ->
   Optimizer i o
-gepa proposer fbMetric =
-  gepaWithFeedback
-    (defaultFeedbackConfig {includeProgramCritique = True})
-    proposer
-    (FeedbackCallback (legacyFeedback fbMetric))
+gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
+  -- Preserve the legacy all-or-nothing predicted seed gate.
+  if datasetSize train == 0 || maxLmCalls budget < scoringCost train student || maxCandidates budget <= 0
+    then pure (freezeProgram student)
+    else do
+      let controls = X.defaultRunConfig {X.runLimits = X.RunLimits (max 0 (maxLmCalls budget)) (max 0 (maxCandidates budget)) 1 1}
+          cfg =
+            (defaultGEPAConfig (FeedbackCallback (legacyFeedback fbMetric)))
+              { feedbackConfig = defaultFeedbackConfig {includeProgramCritique = True},
+                minibatchSize = datasetSize train
+              }
+      (result, _) <- X.runSearchSession controls $ \session -> runConfiguredOptimizer (gepaWith cfg proposer) session train metric student
+      either throwError pure result
 
 -- | An effectful callback portable across the optimizer's existing effect row.
 newtype FeedbackCallback o = FeedbackCallback
@@ -326,3 +344,124 @@ fallbackDatasetSummary k = "A dataset of " <> tshow k <> " example(s)."
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
+
+-- | Callbacks are trusted code. The framework sends only training evidence to
+-- reflection; it is not a security sandbox around caller closures.
+data GEPAConfig i o = GEPAConfig
+  { validationDataset :: !(Maybe (Dataset i o)),
+    feedbackConfig :: !FeedbackConfig,
+    feedbackCallback :: !(FeedbackCallback o),
+    objectivePolicy :: !R.ObjectivePolicy,
+    objectiveCallback :: !(Maybe (ObjectiveCallback o)),
+    minibatchSize :: !Int,
+    childrenPerGeneration :: !Int
+  }
+
+newtype ObjectiveCallback o = ObjectiveCallback
+  { runObjectiveCallback ::
+      forall es.
+      (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
+      X.ObjectiveMetric es o
+  }
+
+defaultGEPAConfig :: FeedbackCallback o -> GEPAConfig i o
+defaultGEPAConfig callback = GEPAConfig Nothing defaultFeedbackConfig callback R.qualityPolicy Nothing 4 1
+
+-- | Configured reflective evolution, with full validation before frontier entry.
+-- Children are proposed serially from a generation snapshot, then scored in
+-- bounded batches. Width one retains adaptive single-child evolution.
+gepaWith :: GEPAConfig i o -> Program ReflectIn ReflectOut -> ConfiguredOptimizer i o
+gepaWith cfg proposer = ConfiguredOptimizer $ \session train metric student -> do
+  either throwError pure (validateFeedbackConfig (feedbackConfig cfg))
+  either (throwError . ValidationFailure) pure (R.validateObjectives (objectivePolicy cfg))
+  when (datasetSize train == 0 || maybe False ((== 0) . datasetSize) (validationDataset cfg)) $
+    throwError (ValidationFailure "GEPA training and explicit validation datasets must be nonempty")
+  when (minibatchSize cfg <= 0 || childrenPerGeneration cfg <= 0) $
+    throwError (ValidationFailure "GEPA minibatch and generation sizes must be positive")
+  let validation = maybe train id (validationDataset cfg)
+      mode = maybe "training-as-validation compatibility" (const "explicit validation") (validationDataset cfg)
+      policy = objectivePolicy cfg
+      minibatch = dataset (take (minibatchSize cfg) (datasetExamples train))
+      objectivesFor expected measured = case objectiveCallback cfg of
+        Nothing -> X.scalarObjectives metric expected measured
+        Just callback -> runObjectiveCallback callback expected measured
+      evaluate ident prog = do
+        X.addPredictedWork session (scoringCost validation prog)
+        report <-
+          X.evaluateCandidate
+            session
+            ident
+            validation
+            (runProgramObserved prog)
+            (failureClassification (feedbackConfig cfg))
+            metric
+            policy
+            objectivesFor
+        pure (report, prog)
+      best completed = case R.selectObjectiveWinner policy (map fst completed) of
+        Nothing -> student
+        Just winner -> maybe student snd (find (\(r, _) -> R.candidateId r == R.candidateId winner) completed)
+      propose step parent = do
+        X.addPredictedWork session (2 * scoringCost minibatch parent + 1)
+        captured <- captureEvidence (feedbackConfig cfg) minibatch (runFeedbackCallback (feedbackCallback cfg)) parent
+        child <-
+          mutateFromEvidence
+            (feedbackConfig cfg)
+            proposer
+            (fallbackProgramSummary (length (programNodePaths student)))
+            (fallbackDatasetSummary (datasetSize train))
+            captured
+            step
+            parent
+        -- The screen verifies training execution/feedback before expensive full
+        -- validation, without rejecting a child solely for lower training quality.
+        _ <- captureEvidence (feedbackConfig cfg) minibatch (legacyFeedback (\e p -> (metric e p, ""))) child
+        pure child
+      loop step completed = do
+        halted <- X.sessionStopped session
+        if halted || step >= X.candidateLimit (X.sessionLimits session) + 4
+          then pure completed
+          else do
+            let front = R.objectiveFrontier policy (map fst completed)
+                parents = [p | (r, p) <- completed, R.candidateId r `elem` map R.candidateId front]
+                parent = if null parents then best completed else parents !! ((X.deterministicSeed (X.sessionLimits session) + step) `mod` length parents)
+            proposals <- tryShikumi $ forM [0 .. childrenPerGeneration cfg - 1] $ \offset -> do
+              ident <- X.reserveCandidate session
+              case ident of
+                Nothing -> pure Nothing
+                Just ix -> do
+                  result <- tryShikumi (propose (step + offset) parent)
+                  case result of
+                    Right child -> pure (Just (ix, child))
+                    Left e -> do
+                      -- Close a reserved proposal as an incomplete/failed candidate
+                      -- through the same generic lifecycle boundary.
+                      _ <-
+                        X.evaluateCandidate
+                          session
+                          ix
+                          validation
+                          (\_ -> throwError e)
+                          (failureClassification (feedbackConfig cfg))
+                          metric
+                          policy
+                          objectivesFor
+                      pure Nothing
+            case proposals of
+              Left e -> do
+                haltedNow <- X.sessionStopped session
+                if haltedNow && e == BudgetExceeded "optimizer operation admission exhausted" then pure completed else throwError e
+              Right pending -> do
+                results <- X.evaluateCandidates session (uncurry evaluate) (catMaybes pending)
+                let completed' = completed ++ results
+                X.setSelection session mode policy
+                loop (step + childrenPerGeneration cfg) completed'
+  X.setSelection session mode policy
+  seedId <- X.reserveCandidate session
+  completed <- case seedId of
+    Nothing -> pure []
+    Just ident -> do
+      seed <- evaluate ident student
+      loop 0 [seed]
+  X.setSelection session mode policy
+  pure (freezeProgram (best completed))

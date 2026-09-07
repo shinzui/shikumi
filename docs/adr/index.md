@@ -12,4 +12,5 @@ okf_version: "0.2"
 - [Keep capture codecs in templates and isolate observations](0002-keep-capture-codecs-in-templates-and-isolate-observations.md) - Capture typed predictor values with explicit template-owned codecs and retain invocation evidence with failed-scope rejection lineage.
 - [Validate bootstrap demonstrations at student nodes](0003-validate-bootstrap-demonstrations-at-student-nodes.md) - Recover accepted teacher invocations into explicit student-node pools with schema preflight and target decoding rather than broadcasting outer examples.
 - [Separate feedback attribution from execution evidence](0004-separate-feedback-attribution-from-execution-evidence.md) - Preserve indexed failed executions while requiring explicit node attribution and bounded redacted reflection evidence.
+- [Own optimizer admission and diagnostic reports in search sessions](0005-own-optimizer-admission-and-diagnostic-reports-in-search-sessions.md) - Separate shared operation admission and candidate lifecycle from search algorithms and validation objective selection.
 

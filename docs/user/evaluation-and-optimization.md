@@ -412,3 +412,74 @@ Search still uses the supplied optimization metric for candidate selection. Exis
 budget reservations estimate student/proposer calls; arbitrary critic calls and retry
 expansion are not yet strictly metered. Split-aware search, lifecycle reports, and
 actual execution budgets belong to the next execution layer.
+
+### Validated GEPA execution and objective reports
+
+`optimizeWith controls (gepaWith config reflectiveProposer)` accepts the usual
+training dataset, scalar metric, and student program. Import execution controls
+from `Shikumi.Optimize.Execution`, report/objective types from
+`Shikumi.Optimize.Report`, and feedback contracts from
+`Shikumi.Optimize.Feedback`. It returns the compiled program and an
+`OptimizationReport` whose JSON version is independent of compiled parameter state.
+
+Build `config` with `defaultGEPAConfig (FeedbackCallback callback)`, then set
+`validationDataset = Just validation`. Empty training or explicit validation is
+an error. Omitting validation deliberately uses training-as-validation and labels
+that mode in the report. Reflection sees only training evidence. A training
+minibatch screens execution before full validation; a lower training score alone
+does not disqualify a candidate that might generalize better. Validation inputs,
+labels, critiques and traces never enter framework-generated reflection requests.
+Caller programs and callbacks are trusted code, not sandboxed against data access.
+Do not provide your protected final holdout to this optimizer.
+
+`runLimits` contains `operationLimit`, `candidateLimit`, `evaluationConcurrency`,
+and `deterministicSeed`. Zero budgets return an unscored baseline. Operation
+admission is atomic before every Shikumi `Complete` or `Stream`, including retries,
+proposers, critics and calls inside `Embed`; admitted failures consume their slot.
+A separate exception-safe semaphore bounds active dispatches, while finite batches
+bound concurrent candidate jobs. Examples within a candidate run sequentially.
+`childrenPerGeneration` defaults to one; larger generations propose from one
+frontier snapshot before concurrent evaluation, changing the adaptive search path.
+Candidate IDs and report/frontier folds follow scheduling order. Concurrent model
+responses and the race for the final operation slot are not reproducible merely
+because the seed is fixed.
+
+Each `ObjectiveSpec` declares its ID, unit, direction, aggregation (`Mean`, `Total`,
+or `Worst`), missing-value policy (`Required` or a finite `Substitute`), and optional
+bounds. `ObjectiveCallback` receives expected output plus `ExampleMeasurement`:
+typed execution evidence, isolated execution-operation counts, provider usage, and
+monotonic latency in seconds. The default adapts the scalar metric to `quality`.
+Raw cost and latency values need not fit `Score`; declare a lower bound of zero
+for nonnegative resources. Non-finite or required-missing values fail a candidate.
+Bounds exclude candidates before Pareto selection. The primary objective, ordered
+tie objectives, then creation order select one member of the non-dominated frontier.
+Only candidates with every required validation position can win.
+
+The session retains ordered candidate outcomes, admitted operations, separately
+estimated work, objective values, frontier and selection reason. A budget stop
+keeps the best completed eligible program; without one, it returns the student
+explicitly unscored. Scored output failures retain their scalar failure policy.
+Typed infrastructure errors propagate; `runSearchSession` is the lower-level API
+returning the original typed error alongside diagnostics for custom strategies.
+`reserveCandidate`, `evaluateCandidate`, and `evaluateCandidates` are independent
+of GEPA and accept evidence-preserving runners and metric callbacks.
+
+`eventSink` receives metadata only: ordered `RunStarted`, `CandidateStarted`,
+`CandidateEnded` with completed/failed/incomplete status, `BudgetStop`, and terminal
+`RunFinished` records. Synchronous observer exceptions increment `observerFailures`
+and do not change scores; cancellation propagates with cleanup bookkeeping.
+Observers must avoid indefinitely blocking. `fromLegacyOptimizer` provides run-level
+accounting and events for opaque strategies, explicitly marking candidate detail
+unavailable. Existing `optimize` remains supported, and `gepa` retains its predicted
+seed gate while using the configured execution core.
+
+Run the fully offline demonstration:
+
+```bash
+nix develop .#ghc9124 -c cabal run shikumi-jitsurei:exe:jitsurei-gepa-objectives
+```
+
+It prints validation-selected candidate B, its objective frontier, actual operations
+versus the cap, and termination status. The fixture's cost values are declared work
+units. Operation limits do not count provider-internal transport retries separately
+and are neither dollar limits nor sealed production-promotion evidence.

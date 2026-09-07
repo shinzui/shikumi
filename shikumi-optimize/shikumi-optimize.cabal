@@ -44,6 +44,7 @@ library
     Shikumi.Optimize.Bootstrap
     Shikumi.Optimize.COPRO
     Shikumi.Optimize.Ensemble
+    Shikumi.Optimize.Execution
     Shikumi.Optimize.Feedback
     Shikumi.Optimize.GEPA
     Shikumi.Optimize.Instruction
@@ -57,6 +58,7 @@ library
     Shikumi.Optimize.Propose.Tips
     Shikumi.Optimize.Propose.Types
     Shikumi.Optimize.RandomSearch
+    Shikumi.Optimize.Report
     Shikumi.Optimize.Search
     Shikumi.Optimize.Types
 
@@ -85,6 +87,7 @@ test-suite shikumi-optimize-test
     BootstrapSpec
     CoproSpec
     EnsembleSpec
+    ExecutionSpec
     FeedbackSpec
     GepaSpec
     InstructionSpec
@@ -92,6 +95,7 @@ test-suite shikumi-optimize-test
     LabeledFewShotSpec
     Miprov2Spec
     NodeBootstrapSpec
+    ObjectiveSpec
     OptimizeSpec
     ProposeSpec
     RandomSearchSpec
