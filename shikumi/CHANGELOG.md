@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `CaptureCodec`, `PredictCaptured`, and `predictCaptured` for opt-in typed node capture. Ordinary prediction constraints and parameter serialization are unchanged. Public GADT matches must handle the new constructor; all core traversals preserve codecs.
+
 ## 0.3.0.3 — 2026-08-29
 
 ### Changed

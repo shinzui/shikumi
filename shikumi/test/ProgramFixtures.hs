@@ -29,6 +29,7 @@ module ProgramFixtures
     -- * Fake LLM interpreters
     runScriptedLLM,
     runRecordingLLM,
+    runFullRecordingLLM,
   )
 where
 
@@ -193,6 +194,14 @@ runRecordingLLM ::
 runRecordingLLM capture ref = interpret $ \_ -> \case
   Complete _ ctx _ -> do
     liftIO (modifyIORef' capture (++ [renderedPrompt ctx]))
+    liftIO (pop ref)
+  Stream _ _ _ -> pure []
+
+-- | Capture every request component, including demos and routing metadata.
+runFullRecordingLLM :: (IOE :> es) => IORef [Text] -> IORef [Response] -> Eff (LLM : es) a -> Eff es a
+runFullRecordingLLM capture ref = interpret $ \_ -> \case
+  Complete model ctx opts -> do
+    liftIO (modifyIORef' capture (++ [T.pack (show (model, ctx, opts))]))
     liftIO (pop ref)
   Stream _ _ _ -> pure []
 

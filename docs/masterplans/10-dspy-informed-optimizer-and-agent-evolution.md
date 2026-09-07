@@ -39,7 +39,7 @@ The initial review found no ADR corpus. The user subsequently requested explicit
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 51 | Recover node-local bootstrap demonstrations | [Plan 51](../plans/51-recover-node-local-bootstrap-demonstrations.md) | None | None | Not Started |
+| 51 | Recover node-local bootstrap demonstrations | [Plan 51](../plans/51-recover-node-local-bootstrap-demonstrations.md) | None | None | Complete |
 | 52 | Capture failure-aware node feedback for GEPA | [Plan 52](../plans/52-capture-failure-aware-node-feedback-for-gepa.md) | EP-51 | None | Not Started |
 | 53 | Add validated multi-objective GEPA execution and lifecycle events | [Plan 53](../plans/53-add-validated-multi-objective-gepa-execution-and-lifecycle-events.md) | EP-52 | None | Not Started |
 | 54 | Add structured resumable ReAct history | [Plan 54](../plans/54-add-structured-resumable-react-history.md) | None | None | Not Started |
@@ -64,7 +64,7 @@ Contributors can implement 51, 54, 55, and 56 independently once file ownership 
 ## Integration Points
 
 
-Plan 51 owns CaptureCodec and capture-capable prediction leaves in core, and NodeObservation/runProgramObserved in shikumi-trace. The core stays independent of shikumi-trace. Capture codecs carry schema evidence for mapping preflight; observed execution internally discharges trace/node effects so existing optimizer effect rows remain sufficient. Captured and ordinary leaves share prediction semantics and execution shape; codecs are caller-owned runtime functions excluded from artifacts. Plan 52 consumes observations with example, path, invocation and control-flow identity and must handle missing codecs. Any compile rewrite changing leaf types must adapt capture encoders or report an explicit unsupported transformation; plan 57's helper recipes must honor this rule.
+Plan 51 owns CaptureCodec and capture-capable prediction leaves in core, and NodeObservation/runProgramObserved in shikumi-trace. The core stays independent of shikumi-trace. Capture codecs carry schema evidence for mapping preflight; observed execution uses observation-only callbacks without requiring trace/node effects, so existing optimizer effect rows remain sufficient. Captured and ordinary leaves share prediction semantics and execution shape; codecs are caller-owned runtime functions excluded from artifacts. Plan 52 consumes observations with example, path, invocation and control-flow identity and must handle missing codecs. Any compile rewrite changing leaf types must adapt capture encoders or report an explicit unsupported transformation; plan 57's helper recipes must honor this rule.
 
 Plan 52 owns EvaluationEvidence, NodeFeedback and program-versus-node attribution. Plan 53 extends evidence with isolated usage summaries and consumes its error classification; recoverable output errors may score, but infrastructure failures and cancellation do not quietly become low quality. Typed budget stops are intercepted at the session boundary. Plan 53 owns SearchSession, RunConfig, the explicit rank-2 ConfiguredOptimizer with fromLegacyOptimizer adapter, OptimizationReport, objective semantics and lifecycle events. Plan 57 calls that shared session through its additive structure-search API. Existing optimize/Optimizer and compiled parameter formats remain usable.
 
@@ -80,13 +80,15 @@ Every child updates its affected Cabal/test registration, changelogs and maintai
 ## Progress
 
 
-Implementation has not started. Populate aggregate timestamped milestone checkboxes when the first child enters implementation; the registry above is authoritative for initial status.
+- [x] (2026-09-07) Plan 51 implementation and child validation: typed capture, observations, node bootstrap and consumers; 81 optimizer tests pass.
+- [x] (2026-09-07) Plan 51 complete: build all and test all pass (16 suites); ADR-2/ADR-3 and maintained documentation delivered.
+- [ ] Remaining children 52–57 and the linked MCP adapter.
 
 
 ## Surprises & Discoveries
 
 
-No implementation discoveries recorded.
+Plan 51 uses an observation-only callback on the shared sequential traced walker, requiring only LLM, Error ShikumiError and Prim. Observations retain typed failures and rejected-scope lineage; Embed boundaries are explicitly opaque. Plan 52 can consume this surface without requiring Trace, CurrentNode, Time or IOE. [ADR-2](../adr/0002-keep-capture-codecs-in-templates-and-isolate-observations.md) records these contracts and [ADR-3](../adr/0003-validate-bootstrap-demonstrations-at-student-nodes.md) records validated node matching.
 
 
 ## Decision Log
@@ -104,7 +106,7 @@ On 2026-09-06, distinguish current behavior from DSPy marketing and historical p
 ## Outcomes & Retrospective
 
 
-No implementation has been performed. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
+Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 can now consume the delivered observation types; the rest of this initiative is unimplemented. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
 
 Final integration runs from the repository root:
 
@@ -120,3 +122,7 @@ git diff --check
 The tests must pass offline, the GEPA example must choose by validation and report bounded calls, the structure example must select/save/restore an exact registered recipe, and the adapter example must round-trip nested data. Agent/RLM/MCP suites supply the remaining end-to-end demonstrations. Record actual output and unresolved limits, then distill durable lessons into ADRs before final completion. These commands are planned validation, not checks already executed during planning.
 
 Revision (2026-09-06): bootstrapped and linked the ADR OKF bundle at the user's request; the feature plans remain unimplemented.
+
+Revision (2026-09-07): record plan 51 implementation and the observation interface delivered for plan 52; other children remain unstarted.
+
+Revision (2026-09-07): mark plan 51 complete after full workspace validation; this satisfies plan 52's capture prerequisite without changing other child statuses.

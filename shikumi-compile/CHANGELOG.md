@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve capture codecs through parameter restoration and RAG; adapt codecs to reasoning/value outputs in the chain-of-thought rewrite. Saved parameter shapes remain unchanged.
+
 ## 0.2.0.3 — 2026-08-29
 
 ### Changed

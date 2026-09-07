@@ -204,7 +204,7 @@ four families.
 | Optimizer | Strategy |
 |---|---|
 | `labeledFewShot k` | Select the best size-`k` set of labeled demos from the training set. Candidate sets enumerated deterministically; no LM calls beyond scoring. |
-| `bootstrapFewShot teacher budget` | Run a teacher program over the training set, keep the runs the metric judged correct, attach those input/output pairs as demos to the student. Tunable via `BootstrapConfig { passThreshold, maxBootstrappedDemos }` (default: only exactly-correct runs, ≤4 demos). |
+| `bootstrapFewShot teacher budget` | Run a teacher program over the training set, keep the runs the metric judged correct, recover each accepted predictor invocation as demos for the matching student node. Tunable via `BootstrapConfig { passThreshold, maxBootstrappedDemos }` (default: only exactly-correct runs, ≤4 demos). |
 | `bootstrapRandomSearch teacher n budget` | Run `bootstrapFewShot` over `n` deterministic seeds (each shuffling the trainset and picking a random demo count) plus a zero-shot baseline, score each, keep the best. Best-of-N is a cheap, robust win over a single bootstrap run; reproducible via a seeded LCG. |
 | `knnFewShot embedder k` | *Per input at run time*, attach the `k` training examples whose inputs are most semantically similar (cosine over an injected `Text -> Vector Double` embedder) as that call's demos — a geography question gets geography demos, an arithmetic one arithmetic demos, from one artifact. `knnFewShotCentroid` is a compile-time fallback that bakes the centroid-nearest demos once. |
 
@@ -249,6 +249,62 @@ tuned     <- optimize (miprov2 Miprov2Light)        trainset exactMatch classify
 BL.writeFile "classify.json" (encodeCompiled optimized)
 -- decodeCompiledOnto classify <$> BL.readFile "classify.json"
 ```
+
+### Bootstrap heterogeneous pipelines
+
+Use `predictCaptured` for every predictor in a composite teacher and student.
+It adds `ToJSON` and `ToSchema` requirements for both input and output, retaining
+explicit wire encoders in the program template. Ordinary `predict` is unchanged;
+a bare single predictor still supports the legacy outer input/output bootstrap.
+
+For example, with record types `Question {question}`, `City {city}`, and
+`Country {country}` and their JSON/schema/prompt instances:
+
+```haskell
+cityStage :: Program Question City
+cityStage = predictCaptured (mkSignature "Extract the city from the question")
+
+countryStage :: Program City Country
+countryStage = predictCaptured (mkSignature "Resolve the city's country")
+
+cityCountry :: Program Question Country
+cityCountry = pipeline cityStage countryStage
+
+-- The first recovered demo is Question -> City; the second is City -> Country.
+optimized <- optimize (bootstrapFewShot cityCountry defaultBudget)
+  trainset exactMatch cityCountry
+```
+
+`bootstrapNodeDemos` returns `(Map NodePath [Demo], BootstrapReport)` under a
+shared budget meter. `withNodeDemos` installs these pools. Matching defaults to
+equal program structure, structural paths, and input/output schema evidence.
+For a differently structured teacher, set `nodeMapping` in
+`defaultNodeBootstrapConfig` to explicit `(teacherPath, studentPath)` pairs.
+Unknown paths and incompatible schemas fail before model calls. Multiple teacher
+paths may feed one target only with `mergeTargetMappings = True`. Unmapped targets
+receive an empty recovered pool. Each captured value must also decode using the
+target predictor's `FromModel` instances; rejected custom encodings are reported
+and never installed. `bootstrapDemosFor` supplies the legacy single-node adapter
+when outer JSON instances are available.
+
+`nodeBootstrapConfig` retains the existing threshold and per-node cap settings.
+With no `nodeSeed`, recovery keeps the first accepted invocations until all mapped
+nodes are full. With `nodeSeed = Just seed`, it collects within the available
+budget and independently shuffles each target's pool using its stable path before
+capping it. Equal seeds reproduce selection; different nodes can receive different
+subsets. RandomSearch and MIPRO consume these node pools. MIPRO uses outer labeled
+examples only for a bare single predictor.
+
+Failed teacher examples and invocations from rejected retry/validation attempts
+contribute no demonstrations. `runProgramObserved` retains their evidence for
+inspection, using fresh storage per example. `Embed` is opaque: its execution
+boundary can be reported, but hidden predictors cannot supply node demos.
+Composite programs with uncaptured leaves fail with an actionable error.
+`bootstrapKeptDemos` is restricted to the documented single-node outer-demo case.
+
+Saved parameter formats are unchanged. Restore onto the capture-capable code
+template to retain codecs. Public `Program` pattern matches must now also handle
+`PredictCaptured`; compiler rewrites that change leaf types must adapt the codec.
 
 > The CLI's `optimize` subcommand currently exposes `labeled-fewshot` and `bootstrap-fewshot`;
 > the modern optimizers above are library-level (call `optimize` directly). The run-time

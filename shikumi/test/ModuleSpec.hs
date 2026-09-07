@@ -15,7 +15,7 @@ import ProgramFixtures
     markerBody,
     mkResponse,
     outlineResponse,
-    runRecordingLLM,
+    runFullRecordingLLM,
     runScriptedLLM,
     topicToOutline,
     topicToVerdict,
@@ -34,7 +34,7 @@ tests =
         let run p = do
               replies <- newIORef [outlineResponse]
               requests <- newIORef []
-              result <- runEff . runErrorNoCallStack @ShikumiError . runRecordingLLM requests replies $ runProgram p (Topic "haskell")
+              result <- runEff . runErrorNoCallStack @ShikumiError . runFullRecordingLLM requests replies $ runProgram p (Topic "haskell")
               sent <- readIORef requests
               pure (result, sent)
         ordinary <- run (predict topicToOutline)

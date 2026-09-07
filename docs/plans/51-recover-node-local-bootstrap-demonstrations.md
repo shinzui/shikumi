@@ -27,7 +27,7 @@ A user can bootstrap a two-stage program whose intermediate records differ from 
 - [x] (2026-09-07 02:31Z) Node-local recovery, schema/path preflight and target decoding implemented; initial optimizer suite passes all 78 tests.
 - [x] (2026-09-07 02:33Z) Milestone 3: explicit mapping, merge, independent subset, random-search selection and retry recovery checks pass (82 optimizer tests).
 - [x] (2026-09-07 02:33Z) Milestone 4 implementation: RandomSearch/MIPRO use node pools; heterogeneous execution and serialization tests, user guide, capability documentation, changelogs, and ADR-3 are written.
-- [ ] Milestone 4 final verification: build all, test all (including final retry integration and full-request equivalence), format, strict ADR check and final commits.
+- [x] (2026-09-07 02:35Z) Milestone 4: cabal build all and cabal test all pass (16 suites), including 142 core, 17 compile, 31 trace, 82 optimize and 18 OKF tests. nix fmt, git diff --check and strict ADR validation pass; implementation and documentation committed on the current branch.
 
 
 ## Surprises & Discoveries
@@ -52,7 +52,20 @@ On 2026-09-07, use a shared sequential walker with scope and leaf callbacks. Obs
 ## Outcomes & Retrospective
 
 
-Milestones 1 and 2 are committed and validated. The first optimizer integration run passed all 78 tests, including the heterogeneous demo and serialization regression. Expanded mapping/merge/seed tests also pass (81 optimizer tests); final all-package validation remains in progress.
+Implemented all four milestones. The city/country regression recovers Question → City at the first node and City → Country at the second; the compiled student and restored capture template both return France with identical node parameters. RandomSearch selects the demonstrated student and MIPRO builds separate valid candidate pools. Tests prove pre-call mapping rejection, explicit cross-structure mapping and merge, rejected-attempt exclusion, deterministic independent subsets, target rejection of dishonest codecs, and isolated outer observations.
+
+The final command `nix develop .#ghc9124 -c bash -c 'cabal build all && cabal test all --test-show-details=direct'` exited 0. All 16 workspace suites passed, including provider dependency suites. Opt-in live provider/embedding tests remained disabled; deterministic acceptance requires no credentials. Focused results:
+
+```text
+shikumi-test: 142 tests, PASS
+shikumi-compile-test: 17 tests, PASS
+shikumi-trace-test: 31 tests, PASS
+shikumi-optimize-test: 82 tests, PASS
+shikumi-okf-test: 18 tests, PASS
+just check-adr: OK, 3 concepts
+```
+
+`nix fmt` and `git diff --check` pass. ADR-2 preserves codec lifetime and invocation identity; ADR-3 preserves mapping, decoding and compatibility constraints. No package version or dependency bound changed and no publication was performed. Composite bootstrap now deliberately requires capture-capable leaves; Embed stays opaque. Budget metering remains the existing predicted-call model, not a new hard admission ceiling for retries/maps. Parameter artifacts contain no codec functions and must be restored onto the intended code template.
 
 
 ## Context and Orientation
@@ -60,7 +73,7 @@ Milestones 1 and 2 are committed and validated. The first optimizer integration 
 
 The core package defines Program i o, a typed representation of an LM computation, in shikumi/src/Shikumi/Program.hs. Predict stores a Signature and Params; Params contains JSON Demo values decoded back to each predictor's types by applyParams. Compose hides the intermediate type, so outer ToJSON constraints cannot encode an internal value. shikumi/src/Shikumi/Signature.hs holds typed signature metadata and demos. shikumi-trace/src/Shikumi/Trace/Node.hs enumerates structural NodePath values in parameter traversal order. Repeated executions of the same node need an invocation number as well as this structural path.
 
-shikumi-trace/src/Shikumi/Trace/Program.hs already supplies runProgramTraced and tags prediction spans with NodePath, but delegates each prediction to runProgram without recording its structured input/output. shikumi-optimize/src/Shikumi/Optimize/Bootstrap.hs currently recovers outer Demo pairs and calls withDemos from shikumi-optimize/src/Shikumi/Optimize/LabeledFewShot.hs, which attaches them everywhere. shikumi-optimize/src/Shikumi/Optimize/RandomSearch.hs also consumes bootstrapKeptDemos. shikumi-optimize/src/Shikumi/Optimize/MIPRO.hs must be audited for the same assumption. The existing BootstrapSpec.hs and RandomSearchSpec.hs under shikumi-optimize/test use the local StubLM.hs fixture.
+shikumi-trace/src/Shikumi/Trace/Program.hs supplies the shared traced/observed walker, delegating predictions to runProgram. shikumi-trace/src/Shikumi/Trace/Observation.hs captures structured node input/output with rejected-scope lineage. shikumi-optimize/src/Shikumi/Optimize/Bootstrap.hs previously broadcast outer Demo pairs; it now recovers validated node pools. RandomSearch.hs and MIPRO.hs in the same optimize directory consume those pools. LabeledFewShot.hs retains its separate labeled-example behavior. The existing BootstrapSpec.hs and RandomSearchSpec.hs under shikumi-optimize/test use the local StubLM.hs fixture.
 
 [ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Implementation records [ADR-2](../adr/0002-keep-capture-codecs-in-templates-and-isolate-observations.md) for codec lifetime and observation identity and [ADR-3](../adr/0003-validate-bootstrap-demonstrations-at-student-nodes.md) for validated matching and compatibility. Existing plans 16, 23, 37, 38, and 42 under docs/plans explain tracing, bootstrap consumers, budget limits, persistence, and trace isolation; the constraints needed here are restated in this document. The follow-on docs/plans/52-capture-failure-aware-node-feedback-for-gepa.md consumes the observation representation owned here. This plan has no hard prerequisite among the new plans.
 
@@ -139,3 +152,5 @@ Revision (2026-09-07): implemented and validated milestone 1; captured codecs re
 Revision (2026-09-07): completed milestone 2 and recorded ADR-2; observation identity and failed-scope eligibility are covered by deterministic trace tests.
 
 Revision (2026-09-07): implemented node recovery and both bootstrap consumers, verified 81 optimizer tests, and documented compatibility and ADR-3. Final workspace validation is in progress.
+
+Revision (2026-09-07): completed final build/test integration, recorded exact acceptance results and remaining limits, distilled ADR-2/ADR-3, and marked plan 51 complete.

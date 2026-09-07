@@ -3,8 +3,8 @@ title: "Budgeted program optimization"
 type: Capability
 description: "Search a Program's instructions, demonstrations, neighbors, and ensembles with multiple optimizers that score typed datasets and stop with the best-so-far candidate at an LM-call budget."
 generated:
-  by: codex/gpt-5
-  at: "2026-08-30T20:48:38Z"
+  by: process:codex
+  at: "2026-09-07T02:26:32Z"
 capabilityId: CAP-16
 provider: mori://shinzui/shikumi
 status: shipped
@@ -28,6 +28,9 @@ requires:
   - CAP-14
   - CAP-15
 evidence:
+  - kind: test
+    resource: shikumi-optimize/test/NodeBootstrapSpec.hs
+    proves: Heterogeneous capture pipelines recover node-local demos, reject incompatible mappings before calls, and restore parameters onto their template.
   - kind: test
     resource: shikumi-optimize/test/AcceptanceSpec.hs
     proves: Multiple strategies improve held-out score and change only the intended prediction nodes.
@@ -55,8 +58,16 @@ It composes [evaluation](typed-evaluation.md), shape-safe
 [compilation](pure-program-compilation.md), and node-correlated
 [trace feedback](hierarchical-tracing.md).
 
+Bootstrap, RandomSearch, and MIPRO recover demonstrations per predictor. Composite
+programs require `predictCaptured` leaves; matching checks structure and schemas,
+or accepts an explicit compatible teacher-to-student path mapping. Captured demos
+must decode at the target node. Rejected attempts are excluded and seeded selection
+is independent per target. See the [user guide](../user/evaluation-and-optimization.md)
+for configuration and a city/country pipeline.
+
 ## Limits
 
+- `Embed` is opaque; hidden predictors cannot provide node demonstrations.
 - Optimizer quality depends on representative training/evaluation data and the
   chosen metric; held-out tests are still required.
 - Structure-changing artifacts such as KNN or ensembles must be loaded against
