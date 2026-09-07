@@ -16,7 +16,7 @@ This ExecPlan is a living document. Maintain the four living sections during imp
 ## Purpose / Big Picture
 
 
-A user can optimize using training feedback while selecting candidates on a separate validation set, inspect quality/cost tradeoffs, and stop at an enforced model-operation ceiling. The returned report explains which candidates completed, failed, or ran out of budget. A scripted example will deliberately reward a different candidate on validation than on training and demonstrate that validation determines the winner.
+A user can optimize using training feedback while selecting candidates on a separate validation set, inspect quality/cost tradeoffs, and stop at an enforced model-operation ceiling. The returned report explains which candidates completed, failed, or ran out of budget. The scripted example deliberately rewards a different candidate on validation than on training and demonstrates that validation determines the winner.
 
 
 ## Progress
@@ -27,7 +27,7 @@ A user can optimize using training feedback while selecting candidates on a sepa
 - [x] (2026-09-07) Milestone 2: atomic admission and failure-safe generic candidate lifecycle.
 - [x] (2026-09-07) Milestone 3: validation split and named objectives.
 - [x] (2026-09-07) Milestone 4: bounded generations and concurrency regressions.
-- [ ] Milestone 5: offline example, documentation, ADR, and full validation.
+- [x] (2026-09-07 04:06Z) Milestone 5: offline example, documentation, ADR-5, full build and all 16 test suites; Redis integration explicitly skipped because the service was unavailable.
 
 
 ## Surprises & Discoveries
@@ -45,7 +45,7 @@ On 2026-09-06, add a configured execution/report API while retaining optimize an
 
 On 2026-09-06, define the hard budget unit as an admitted Shikumi LLM Complete or Stream operation. This counts calls inside program retries, voting, and Embed bodies visible at that effect boundary. Provider-internal transport retries and dollars are different measurements and are not guaranteed by this cap. Keep estimates separate from actual operation counts.
 
-On 2026-09-06, define a finite declared objective set with direction and missing-value policy. A Pareto frontier is the set of candidates not worse in all objectives and strictly worse in at least one than another. It does not choose a unique winner; an explicit primary-objective/tie policy does that. Training and validation examples are separate from any protected final holdout, which this optimizer never receives.
+On 2026-09-06, define a finite declared objective set with direction and missing-value policy. A Pareto frontier contains candidates for which no other eligible candidate is at least as good in every objective and strictly better in one. It does not choose a unique winner; an explicit primary-objective/tie policy does that. Training and validation examples are separate from any protected final holdout, which this optimizer never receives.
 
 
 On 2026-09-07, use serial examples inside bounded candidate batches and an independent dispatch semaphore. Keep serializable RunLimits separate from the executable observer. The generic runSearchSession returns the original typed error alongside its diagnostic report; optimizeWith propagates non-session errors, while its lifecycle sink retains terminal metadata. Candidate status and event constructors use CandidateEnded carrying the explicit terminal status to avoid conflicting Haskell constructor names.
@@ -57,7 +57,7 @@ On 2026-09-07, refine the deterministic contract to candidate reservation IDs, g
 ## Outcomes & Retrospective
 
 
-The shared driver, objective policy, split-aware GEPA path, and lifecycle implementation are in place. All 119 optimizer tests pass, including baseline retention, zero-budget empty-validation rejection, nested concurrent admission counts, and one-use reservations. The full `cabal build all -j1` completed successfully. The offline example prints:
+The shared driver, objective policy, split-aware GEPA path, and lifecycle implementation are in place. All 120 optimizer tests pass, including baseline retention, zero-budget empty-validation rejection, nested concurrent admission counts, and one-use reservations. The full `cabal build all -j1` completed successfully. The documented `nix develop .#ghc9124 -c cabal run shikumi-jitsurei:exe:jitsurei-gepa-objectives` command exits successfully and prints:
 
 ```text
 Validation-selected candidate: B
@@ -66,19 +66,21 @@ Admitted operations: 5/20
 Termination: BudgetStopped
 ```
 
-The example reaches its two-candidate ceiling, hence BudgetStopped despite unused operation capacity. Final full-suite validation remains in progress.
+The example reaches its two-candidate ceiling, hence BudgetStopped despite unused operation capacity. `nix develop .#ghc9124 -c cabal test all -j1 --test-show-details=direct` passed all 16 suites. Focused results were 120 optimizer, 47 evaluation, and 31 trace tests; all 677 Baikai tests also passed. PostgreSQL integration executed its two tests. The Redis suite explicitly skipped integration because its local socket was unavailable; this does not affect the provider-free optimizer acceptance tests. `nix fmt`, `git diff --check`, and `just check-adr` pass (five ADR concepts).
+
+The final design keeps physical concurrent dispatch races outside the deterministic seed guarantee, as recorded in the Decision Log and ADR-5. Candidate scheduling IDs, objective ties and result folds are deterministic; width one remains the reproducible scheduling option for deterministic providers. Reports are diagnostic and do not implement protected-holdout promotion or provider-dollar admission. The evidence and execution foundations needed by plan 57 are implemented without a dependency on GEPA mutation logic.
 
 
 ## Context and Orientation
 
 
-shikumi-optimize/src/Shikumi/Optimize/Types.hs defines Optimizer as a rank-2 function receiving one Dataset, Metric, and Program and returning CompiledProgram under LLM, Concurrent, Error ShikumiError, Time, and Prim. shikumi-optimize/src/Shikumi/Optimize.hs exposes optimize as a thin driver. GEPA.hs uses the same training set for capture and scoring, sequentially evolves one child at a time, and discards its internal frontier when returning. Pareto.hs compares per-example scores; these are distinct from named quality/cost objectives.
+Before implementation, shikumi-optimize/src/Shikumi/Optimize/Types.hs defined Optimizer as a rank-2 function receiving one Dataset, Metric, and Program and returning CompiledProgram under LLM, Concurrent, Error ShikumiError, Time, and Prim. shikumi-optimize/src/Shikumi/Optimize.hs exposes optimize as a thin driver. The prior GEPA.hs used the same training set for capture and scoring, evolved one child at a time, and discarded its internal frontier when returning. Pareto.hs compares per-example scores; these are distinct from named quality/cost objectives.
 
-shikumi-optimize/src/Shikumi/Optimize/Search.hs reserves predicted costs and provides withLmCallCount, which counts Complete and Stream but cannot stop them before dispatch. shikumi-eval/src/Shikumi/Eval/Evaluate.hs already evaluates examples with bounded concurrency and preserves order. This plan must not claim ordinary evaluation is currently sequential. GEPA feedback capture is sequential, candidate evolution is serial, and concurrency limits are not caller-controlled through GEPA. shikumi-eval/src/Shikumi/Eval/Usage.hs collects model usage; measure summaries per example in isolated collectors before aggregating rather than attaching a shared batch total to every result.
+shikumi-optimize/src/Shikumi/Optimize/Search.hs reserves predicted costs and provides withLmCallCount, which counts Complete and Stream but cannot stop them before dispatch. shikumi-eval/src/Shikumi/Eval/Evaluate.hs already evaluates examples with bounded concurrency and preserves order. This plan must not claim ordinary evaluation is currently sequential. The prior GEPA feedback capture and candidate evolution were serial, and callers could not control its concurrency. shikumi-eval/src/Shikumi/Eval/Usage.hs collects model usage; measure summaries per example in isolated collectors before aggregating rather than attaching a shared batch total to every result.
 
 Hard prerequisite docs/plans/52-capture-failure-aware-node-feedback-for-gepa.md supplies typed root evidence, node observations, explicit failure classification, and bounded node feedback. Its own prerequisite plan 51 supplies capture codecs. docs/plans/57-search-and-persist-typed-program-structures.md consumes this plan's generic execution session, candidate evaluation, hard admission, objective selection, events, and OptimizationReport; those mechanisms must not depend on GEPA's mutation algorithm.
 
-[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. docs/improvement-requests/production-evidence-optimization.md requires sealed datasets, protected holdouts, provenance, and promotion comparison reports. This plan supports separate validation and diagnostic reporting only; it must not mark that request complete or emit deployment/promotion authority. docs/improvement-requests/expose-acknowledged-evidence-for-resilient-llm-attempts.md covers provider-attempt evidence separately from our LLM-operation ceiling.
+[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. The initial planning review found no earlier feature-specific ADR; implementation now follows [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) for evidence and [ADR-5](../adr/0005-own-optimizer-admission-and-diagnostic-reports-in-search-sessions.md) for shared execution and report contracts. docs/improvement-requests/production-evidence-optimization.md requires sealed datasets, protected holdouts, provenance, and promotion comparison reports. This plan supports separate validation and diagnostic reporting only; it must not mark that request complete or emit deployment/promotion authority. docs/improvement-requests/expose-acknowledged-evidence-for-resilient-llm-attempts.md covers provider-attempt evidence separately from our LLM-operation ceiling.
 
 Upstream reference is mori://stanfordnlp/dspy, commits 822f39319 (2026-08-18, parallel candidate evaluation), 638e155cf (2026-08-21, named objective scores), and 80553206b (2026-08-10, optimizer lifecycle callbacks). The unregistered project's artifact-level commit URI is pending. PyPI and upstream tags were checked on 2026-09-06: release 3.3.1 contains the first two changes. No dependency on Python DSPy is introduced.
 
@@ -166,3 +168,5 @@ Use existing Effectful Prim atomic references (as in Search.hs), Concurrent, Tim
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
 Revision (2026-09-07): implemented shared execution and objective contracts; clarified concurrent dispatch determinism, introduced session-owned one-use candidate reservations, and recorded test evidence and ADR-5.
+
+Completion (2026-09-07 04:06Z): all five milestones are delivered and validated, with the documented physical-dispatch determinism qualification and Redis integration skip. ADR-5 preserves the durable contracts.

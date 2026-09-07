@@ -56,6 +56,16 @@ tests =
         check r $ \(_, report) -> do
           admittedOperations report @?= 0
           resultStatus report @?= Just Unscored,
+      testCase "opaque optimizer interrupted mid-run returns explicitly unscored baseline" $ do
+        let legacy = Optimizer $ \_ _ p -> do
+              _ <- runProgram p (Sentence "good")
+              _ <- runProgram p (Sentence "bad")
+              pure (freezeProgram p)
+        r <- run $ optimizeWith (cfg 1 1) (fromLegacyOptimizer legacy) ds exactMatch sentimentProg
+        check r $ \(_, report) -> do
+          admittedOperations report @?= 1
+          candidateDetailAvailable report @?= False
+          resultStatus report @?= Just Unscored,
       testCase "mid candidate stop is incomplete" $ do
         r <- run $ runSearchSession (cfg 1 1) $ \s ->
           evaluateFresh

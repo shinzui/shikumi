@@ -51,7 +51,7 @@ import Shikumi.Optimize.LabeledFewShot
 import Shikumi.Optimize.MIPRO
 import Shikumi.Optimize.Pareto
 import Shikumi.Optimize.RandomSearch
-import Shikumi.Optimize.Report (OptimizationReport, RunStatus (BudgetStopped), runStatus)
+import Shikumi.Optimize.Report (CandidateStatus (Unscored), OptimizationReport (..), RunStatus (BudgetStopped))
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Types
 import Shikumi.Program (Program)
@@ -82,5 +82,5 @@ optimizeWith cfg opt ds metric prog = do
   case result of
     Right compiled -> pure (compiled, report)
     Left e
-      | runStatus report == BudgetStopped -> pure (freezeProgram prog, report)
+      | runStatus report == BudgetStopped -> pure (freezeProgram prog, report {selectedCandidate = Nothing, resultStatus = Just Unscored, selectionReason = "Unscored baseline: strategy stopped before returning a result"})
       | otherwise -> throwError e

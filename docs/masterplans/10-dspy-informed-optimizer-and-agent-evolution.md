@@ -40,8 +40,8 @@ The initial review found no ADR corpus. The user subsequently requested explicit
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 51 | Recover node-local bootstrap demonstrations | [Plan 51](../plans/51-recover-node-local-bootstrap-demonstrations.md) | None | None | Complete |
-| 52 | Capture failure-aware node feedback for GEPA | [Plan 52](../plans/52-capture-failure-aware-node-feedback-for-gepa.md) | EP-51 | None | Not Started |
-| 53 | Add validated multi-objective GEPA execution and lifecycle events | [Plan 53](../plans/53-add-validated-multi-objective-gepa-execution-and-lifecycle-events.md) | EP-52 | None | Not Started |
+| 52 | Capture failure-aware node feedback for GEPA | [Plan 52](../plans/52-capture-failure-aware-node-feedback-for-gepa.md) | EP-51 | None | Complete |
+| 53 | Add validated multi-objective GEPA execution and lifecycle events | [Plan 53](../plans/53-add-validated-multi-objective-gepa-execution-and-lifecycle-events.md) | EP-52 | None | Complete |
 | 54 | Add structured resumable ReAct history | [Plan 54](../plans/54-add-structured-resumable-react-history.md) | None | None | Not Started |
 | 30 | MCP-to-Tool adapter (externally owned) | [Plan 30](../plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry.md) | EP-54; external MCP C1/C2 release | None | Not Started |
 | 55 | Decode nested XML output fields | [Plan 55](../plans/55-decode-nested-xml-output-fields.md) | None | None | Not Started |
@@ -82,7 +82,9 @@ Every child updates its affected Cabal/test registration, changelogs and maintai
 
 - [x] (2026-09-07) Plan 51 implementation and child validation: typed capture, observations, node bootstrap and consumers; 81 optimizer tests pass.
 - [x] (2026-09-07) Plan 51 complete: build all and test all pass (16 suites); ADR-2/ADR-3 and maintained documentation delivered.
-- [ ] Remaining children 52–57 and the linked MCP adapter.
+- [x] (2026-09-07) Plan 52 completed: failure-aware node feedback and ADR-4; its recorded full test validation passes.
+- [x] (2026-09-07 04:06Z) Plan 53 complete: shared execution, validation objectives, lifecycle reports and ADR-5; 120 optimizer tests and all 16 suites pass (Redis integration skipped), and the documented example selects B using 5/20 operations.
+- [ ] Remaining children 54–57 and the linked MCP adapter.
 
 
 ## Surprises & Discoveries
@@ -106,7 +108,7 @@ On 2026-09-06, distinguish current behavior from DSPy marketing and historical p
 ## Outcomes & Retrospective
 
 
-Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 can now consume the delivered observation types; the rest of this initiative is unimplemented. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
+Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 has consumed the observation types and delivered failure-aware node feedback. Plan 53 implements shared admission, validation objectives and lifecycle reporting under ADR-5, with 120 optimizer tests, a passing full suite (Redis integration skipped), and the documented offline example selecting B at 5/20 admitted operations. Phase A is complete; plan 57 can consume the shared session without importing GEPA. The remaining children and linked MCP adapter are unimplemented. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
 
 Final integration runs from the repository root:
 
@@ -126,3 +128,5 @@ Revision (2026-09-06): bootstrapped and linked the ADR OKF bundle at the user's 
 Revision (2026-09-07): record plan 51 implementation and the observation interface delivered for plan 52; other children remain unstarted.
 
 Revision (2026-09-07): mark plan 51 complete after full workspace validation; this satisfies plan 52's capture prerequisite without changing other child statuses.
+
+Revision (2026-09-07): reconcile completed plan 52 and record plan 53 completion and validation evidence; the remaining initiative stays open.
