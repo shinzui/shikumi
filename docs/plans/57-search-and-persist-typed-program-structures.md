@@ -26,7 +26,7 @@ Users will compare a finite collection of typechecked language-model program str
 - [x] (2026-09-07) Milestone 2: shared bounded structure selection, deterministic ties, exact-cap queued-work guard and nested stream/ensemble coverage; 131 optimizer tests pass.
 - [x] (2026-09-07) Milestone 3: pure restore checks, compatible demo/request round-trip (22 compiler tests), and winning search output/request round-trip all pass.
 - [x] (2026-09-07) Milestone 4: example selects cot at 4/8 operations and restores identical output/requests; workflow docs, changelogs and ADR-8 written; strict ADR check passes.
-- [ ] Final formatted-tree validation and workspace build.
+- [x] (2026-09-07) Final formatted-tree validation: 22 compiler tests, 131 optimizer tests, hermetic example, full workspace build (`cabal build all -j1`), `nix fmt`, `git diff --check`, and strict ADR validation pass. The additional capability-catalog audit has the preexisting metadata failure recorded below.
 
 ## Surprises & Discoveries
 
@@ -34,6 +34,8 @@ Users will compare a finite collection of typechecked language-model program str
 Plan 53 already provides the generic session, objective selection and observed runner required here. No GEPA extraction was needed. Its report lacked caller identity metadata; an optional candidate-metadata map and lifecycle event now carry registry/recipe/revision identity while older version-1 JSON without that map still decodes.
 
 Final review found that queued work could begin after the previous candidate consumed the exact operation cap. The shared `canStartCandidate` guard leaves those reservations unexecuted and reports budget stop without invalidating a candidate that already completed. A regression checks a two-operation baseline followed by an untouched reservation; the nested stream/ensemble regression separately proves interruption within an executing recipe.
+
+An additional strict capability-catalog audit (`okf validate docs/capabilities --strict --profile docs/capabilities/profile.dhall --profile-enforce`) exits 1 because 22 existing capability documents lack the profile-recommended `reviews` field, including the preexisting optimization capability. This is a catalog-wide metadata issue; this plan does not fabricate independent review provenance or migrate unrelated capability records. The required strict ADR validation passes with eight concepts.
 
 ## Decision Log
 
@@ -51,7 +53,16 @@ Final review found that queued work could begin after the previous candidate con
 ## Outcomes & Retrospective
 
 
-All four feature milestones are implemented. The example has printed the configured CoT winner at 4/8 admitted operations and `True` for restored output/request equality. The compiler suite passes 22 tests and the optimizer suite passes 131 tests. Final formatted-tree validation remains before completion; no release or production promotion is performed.
+All four milestones are complete. The compiler suite passes 22 tests and the optimizer suite passes 131 tests, including legacy optimizer behavior. `nix develop .#ghc9124 -c cabal build all -j1` exits zero across the workspace. The final example run exits zero and prints:
+
+```text
+Selected recipe: "cot"
+Admitted operations: 4/8
+Restored output equality: True
+Restored request equality: True
+```
+
+`nix fmt`, `git diff --check`, and `just check-adr` pass (eight ADR concepts). The optional capability-catalog strict audit exits 1 for existing missing review metadata across 22 entries; that broader documentation migration remains outside this feature. No release or production promotion was performed. ADR-8 preserves the trusted-code, revision and distinct-artifact contract; ADR-5 continues to own admission and concurrent dispatch limitations. The shared execution seam avoided a second optimizer driver, and exact-cap queued work now remains visibly unexecuted rather than pretending it was evaluated.
 
 ## Context and Orientation
 
@@ -129,6 +140,10 @@ Tests and examples use in-memory artifacts or temporary files and can be repeate
 
 `Shikumi.Compile.Structure` owns `StructureRecipe i o`, `StructureRegistry i o`, smart construction/lookup and recipe identity. `Shikumi.Compile.Structure.Serialize` owns a versioned `StructureArtifact` and `StructureArtifactError`, with pure encoding/decoding against the registry. `Shikumi.Optimize.Structure` owns `StructureSearchResult i o` containing selected recipe ID/revision, `CompiledProgram i o` and plan 53's `OptimizationReport`, plus `structureSearchWith`. Its effect row follows plan 53's execution driver instead of introducing IO into framework logic. The new API may use the shared request record rather than duplicating its fields; preserve the requirements stated above when choosing the final concrete signature.
 
+The delivered call is `structureSearchWith runConfig training validation metric failureClassifier objectivePolicy objectiveMetric registry`. It returns a `StructureSearchResult` with `selectedRecipeId`, `selectedRecipeRevision`, `selectedStructure` and `structureReport`. The failure classifier uses the shared `FailurePolicy`; `candidateFailurePolicy scoreZero` is the example default, and `scalarObjectives exactMatch` adapts its scalar metric. `structureRecipe` accepts textual identity, positive integer revision, description and typed program; `structureRegistry` accepts textual registry identity and a list, rejecting an empty list. `directCotRegistry` supplies ordered `direct`/`cot` revision-1 entries. `encodeStructureArtifact registry selectedRecipeId compiledProgram` and `decodeStructureArtifact registry bytes` are pure typed-error computations.
+
+Shared `annotateCandidate` attaches identity before execution. Shared `canStartCandidate` leaves queued reservations unexecuted when operation capacity is gone; it marks run budget stop without setting the denial latch that would invalidate an already executing candidate's completed evidence. The actual dispatch interposer remains the only hard-admission authority, including races between concurrently starting jobs. Shared `scoringCost` supplies the approximate predicted-work diagnostic; the ceiling uses admitted operations.
+
 The input/output schema values, recipe revision and `ProgramShape` are separate compatibility checks; none replaces the others. Existing Aeson, text, containers, effectful and compile/eval/optimize package dependencies suffice. Locate dependency source/docs through Mori before relying on unfamiliar APIs; no new third-party package or version bound is selected by this plan. Other master-plan children may consume this API after completion, but this plan requires only plan 53 and existing compiler/program functionality.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
@@ -136,3 +151,5 @@ Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authorin
 Revision (2026-09-07): implemented registry and versioned artifacts, recorded compiler test evidence, and linked the user-requested intention. Shared search integration is in progress.
 
 Revision (2026-09-07): record shared finite search, restore integration, exact-cap guard, executable example and ADR-8. Final validation is pending.
+
+Completion (2026-09-07): all milestones and required validations pass, including the full workspace build. Recorded the additional catalog-metadata audit limitation and distilled durable context into ADR-8.

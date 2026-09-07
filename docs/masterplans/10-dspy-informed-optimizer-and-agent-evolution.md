@@ -46,7 +46,7 @@ The initial review found no ADR corpus. The user subsequently requested explicit
 | 30 | MCP-to-Tool adapter (externally owned) | [Plan 30](../plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry.md) | EP-54; external MCP C1/C2 release | None | Not Started |
 | 55 | Decode nested XML output fields | [Plan 55](../plans/55-decode-nested-xml-output-fields.md) | None | None | Not Started |
 | 56 | Add bounded recursive language-model sessions | [Plan 56](../plans/56-add-bounded-recursive-language-model-sessions.md) | None | EP-54 | Complete |
-| 57 | Search and persist typed program structures | [Plan 57](../plans/57-search-and-persist-typed-program-structures.md) | EP-53 | None | Not Started |
+| 57 | Search and persist typed program structures | [Plan 57](../plans/57-search-and-persist-typed-program-structures.md) | EP-53 | None | Complete |
 
 Status values are Not Started, In Progress, Complete, and Cancelled. Plan 30 retains its existing intention and parent mori://shinzui/baikai/masterplans/6-mcp-support-across-the-agent-stack. External C1/C2 are mori://shinzui/baikai/plans/30-mcp-transport-and-json-rpc-client-core and mori://shinzui/baikai/plans/31-mcp-tool-discovery-and-invocation. Confirm actual released symbols and bounds from source, Hackage, and upstream tags before starting that adapter. A missing upstream implementation is an explicit prerequisite, not a reason to fabricate a local shim. During planning, mori path returned artifact-not-found for the external MCP master, both C1/C2 plan handles, and the declaration-layer consumer cited in plan 30. These are intended canonical references retained from the existing plan; registry resolution is not verified and must be revisited during prerequisite discovery.
 
@@ -85,7 +85,8 @@ Every child updates its affected Cabal/test registration, changelogs and maintai
 - [x] (2026-09-07) Plan 52 completed: failure-aware node feedback and ADR-4; its recorded full test validation passes.
 - [x] (2026-09-07 04:06Z) Plan 53 complete: shared execution, validation objectives, lifecycle reports and ADR-5; 120 optimizer tests and all 16 suites pass (Redis integration skipped), and the documented example selects B using 5/20 operations.
 - [x] (2026-09-07) Plan 56 completed: experimental bounded sessions, exact subquery admission, concurrent large-context acceptance, 118 package tests and a passing full workspace build; ADR-7 records ownership and budget semantics.
-- [ ] Remaining children 54, 55, 57 and the linked MCP adapter.
+- [x] (2026-09-07) Plan 57 complete: typed registry, shared finite search, versioned restoration and ADR-8; 22 compiler/131 optimizer tests and full workspace build pass. The example selects cot at 4/8 operations and restores identical requests/output.
+- [ ] Remaining children 54, 55 and the linked MCP adapter.
 
 
 ## Surprises & Discoveries
@@ -109,7 +110,7 @@ On 2026-09-06, distinguish current behavior from DSPy marketing and historical p
 ## Outcomes & Retrospective
 
 
-Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 has consumed the observation types and delivered failure-aware node feedback. Plan 53 implements shared admission, validation objectives and lifecycle reporting under ADR-5, with 120 optimizer tests, a passing full suite (Redis integration skipped), and the documented offline example selecting B at 5/20 admitted operations. Phase A is complete; plan 57 can consume the shared session without importing GEPA. Plan 56 is also complete, delivering experimental bounded document sessions with a compiled example, private invocation state and exact logical subquery admission. Other outstanding children and the linked MCP adapter remain separately tracked. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
+Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 has consumed the observation types and delivered failure-aware node feedback. Plan 53 implements shared admission, validation objectives and lifecycle reporting under ADR-5, with 120 optimizer tests, a passing full suite (Redis integration skipped), and the documented offline example selecting B at 5/20 admitted operations. Phase A is complete; plan 57 can consume the shared session without importing GEPA. Plan 56 is also complete, delivering experimental bounded document sessions with a compiled example, private invocation state and exact logical subquery admission. Plan 57 is complete as well: finite typed recipe selection uses the shared session, and its distinct versioned artifact restores through trusted registry identity under ADR-8. Its focused tests, full workspace build and offline example pass. The additional strict capability-catalog audit found preexisting missing review metadata across 22 entries; plan 57 records that documentation limitation. Other outstanding children and the linked MCP adapter remain separately tracked. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
 
 Final integration runs from the repository root:
 
@@ -133,3 +134,5 @@ Revision (2026-09-07): mark plan 51 complete after full workspace validation; th
 Revision (2026-09-07): reconcile completed plan 52 and record plan 53 completion and validation evidence; the remaining initiative stays open.
 
 Revision (2026-09-07): record plan 56 completion and its package/full-build validation; the overall initiative remains incomplete.
+
+Revision (2026-09-07): mark plan 57 complete with compiler/optimizer tests, full build and select/save/restore evidence; the overall initiative remains open for its other children.
