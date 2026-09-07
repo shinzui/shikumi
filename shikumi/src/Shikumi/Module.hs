@@ -21,6 +21,7 @@
 -- lives here. See the plan's Decision Log.
 module Shikumi.Module
   ( predict,
+    predictCaptured,
     chainOfThought,
     chainOfThoughtRaw,
     twoStep,
@@ -30,7 +31,7 @@ where
 
 import Baikai (emptyContext, emptyModel, emptyOptions, user)
 import Control.Lens ((&), (.~))
-import Data.Aeson (Object, Value (Object))
+import Data.Aeson (Object, ToJSON (..), Value (Object))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
@@ -43,8 +44,8 @@ import GHC.Generics (Generic)
 import Shikumi.Adapter (Adapter (..), ToPrompt (..), fallbackAdapter, responseText)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (complete)
-import Shikumi.Program (Program (FMap, Predict), embed, emptyParams)
-import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable (..))
+import Shikumi.Program (CaptureCodec (..), Program (FMap, Predict, PredictCaptured), embed, emptyParams)
+import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable (..), deriveSchema)
 import Shikumi.Schema.Types
   ( FieldMeta (..),
     FieldPath,
@@ -64,6 +65,22 @@ predict ::
   Signature i o ->
   Program i o
 predict sig = Predict sig emptyParams
+
+-- | Opt in to typed observation and node-local demonstration recovery.
+predictCaptured ::
+  forall i o.
+  ( FromModel i,
+    FromModel o,
+    ToSchema i,
+    ToSchema o,
+    ToJSON i,
+    ToJSON o,
+    Validatable o,
+    ToPrompt i,
+    ToPrompt o
+  ) =>
+  Signature i o -> Program i o
+predictCaptured sig = PredictCaptured (CaptureCodec toJSON toJSON (deriveSchema @i) (deriveSchema @o)) sig emptyParams
 
 -- ---------------------------------------------------------------------------
 -- Chain of thought

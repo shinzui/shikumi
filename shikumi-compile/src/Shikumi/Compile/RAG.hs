@@ -48,6 +48,7 @@ import Shikumi.Program
         Map,
         Parallel,
         Predict,
+        PredictCaptured,
         Retry,
         RetryWhen,
         Validate
@@ -80,6 +81,9 @@ install ctx
   | otherwise = go
   where
     go :: forall i o. Program i o -> Program i o
+    go (PredictCaptured codec sig ps) =
+      let base = fromMaybe (getInstruction sig) (instructionOverride ps)
+       in PredictCaptured codec sig ps {instructionOverride = Just (base <> "\n\n" <> ctx)}
     go (Predict sig ps) =
       let base = fromMaybe (getInstruction sig) (instructionOverride ps)
        in Predict sig ps {instructionOverride = Just (base <> "\n\n" <> ctx)}

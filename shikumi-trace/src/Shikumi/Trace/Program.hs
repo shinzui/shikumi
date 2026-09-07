@@ -62,6 +62,7 @@ import Shikumi.Program
         Map,
         Parallel,
         Predict,
+        PredictCaptured,
         Retry,
         RetryWhen,
         Validate
@@ -164,6 +165,8 @@ runProgramTraced ::
 runProgramTraced = go []
   where
     go :: forall x y. [NodeStep] -> Program x y -> x -> Eff es y
+    go prefix node@(PredictCaptured _ _ _) i =
+      withSpan ModuleSpan "Predict" (localNode (NodePath (reverse prefix)) (runProgram node i))
     go prefix node@(Predict _ _) i =
       withSpan ModuleSpan "Predict" (localNode (NodePath (reverse prefix)) (runProgram node i))
     go prefix (Compose f g) i =

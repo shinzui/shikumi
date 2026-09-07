@@ -22,13 +22,16 @@ A user can bootstrap a two-stage program whose intermediate records differ from 
 ## Progress
 
 
-Implementation has not started. Populate timestamped milestone checkboxes when implementation begins.
+- [x] (2026-09-07) Milestone 1: typed capture and traversal compatibility; core (142), compile (17), trace (27), and OKF suites pass.
+- [ ] Milestone 2: isolated execution observations and retry eligibility.
+- [ ] Milestone 3: validated node-local recovery and matching.
+- [ ] Milestone 4: consumers, persistence, documentation, ADR and integration checks.
 
 
 ## Surprises & Discoveries
 
 
-None yet.
+The chain-of-thought compiler changes the internal output type. Its capture codec now encodes reasoning plus the original codec output under value, and adapts the schema accordingly; ordinary and captured leaves retain the same serialized execution shape.
 
 
 ## Decision Log
@@ -123,3 +126,5 @@ The implementation owns CaptureCodec, the capture-capable prediction constructor
 Use existing Aeson, Effectful Prim references, and tracing mechanisms. Discover dependency APIs via mori registry search/show/docs and inspect source before implementation; no new dependency bounds are selected by this plan. Changes to constructors must be reflected throughout the monorepo. Record codec lifetime and observation identity as durable ADR context once proven.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
+
+Revision (2026-09-07): implemented and validated milestone 1; captured codecs remain template-owned and the chain-of-thought rewrite adapts their wire output.

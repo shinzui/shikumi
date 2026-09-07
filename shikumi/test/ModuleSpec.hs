@@ -6,7 +6,7 @@ module ModuleSpec (tests) where
 
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
-import Data.IORef (newIORef)
+import Data.IORef (newIORef, readIORef)
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import ProgramFixtures
@@ -14,12 +14,14 @@ import ProgramFixtures
     Topic (..),
     markerBody,
     mkResponse,
+    outlineResponse,
+    runRecordingLLM,
     runScriptedLLM,
     topicToOutline,
     topicToVerdict,
   )
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Module (WithReasoning (..), chainOfThought, chainOfThoughtRaw, predict)
+import Shikumi.Module (WithReasoning (..), chainOfThought, chainOfThoughtRaw, predict, predictCaptured)
 import Shikumi.Program (emptyParams, foldParams, mapParamsAt, runProgram)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
@@ -28,7 +30,17 @@ tests :: TestTree
 tests =
   testGroup
     "ModuleSpec"
-    [ testCase "predict builds a single default-parameter node" $
+    [ testCase "captured prediction preserves requests and decoded output" $ do
+        let run p = do
+              replies <- newIORef [outlineResponse]
+              requests <- newIORef []
+              result <- runEff . runErrorNoCallStack @ShikumiError . runRecordingLLM requests replies $ runProgram p (Topic "haskell")
+              sent <- readIORef requests
+              pure (result, sent)
+        ordinary <- run (predict topicToOutline)
+        captured <- run (predictCaptured topicToOutline)
+        captured @?= ordinary,
+      testCase "predict builds a single default-parameter node" $
         foldParams (predict topicToOutline) @?= [emptyParams],
       testCase "chainOfThoughtRaw yields a WithReasoning value through the stub" $ do
         ref <-

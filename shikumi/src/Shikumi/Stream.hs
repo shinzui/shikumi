@@ -67,7 +67,7 @@ import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM, stream)
 import Shikumi.Program
   ( Params,
-    Program (Compose, Embed, FMap, MajorityVote, Map, Parallel, Predict, Retry, RetryWhen, Validate),
+    Program (Compose, Embed, FMap, MajorityVote, Map, Parallel, Predict, PredictCaptured, Retry, RetryWhen, Validate),
     acceptOrReject,
     effectiveSignature,
     parseResponse,
@@ -219,6 +219,7 @@ streamProgram ::
   (StreamEvent -> Eff es ()) ->
   Eff es o
 streamProgram prog i cb = case prog of
+  PredictCaptured _ sig ps -> streamPredict sig ps i cb
   Predict sig ps -> streamPredict sig ps i cb
   Compose f g -> bracketNode cb $ do
     b <- streamProgram f i cb

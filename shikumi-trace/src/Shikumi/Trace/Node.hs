@@ -34,6 +34,7 @@ import Shikumi.Program
         Map,
         Parallel,
         Predict,
+        PredictCaptured,
         Retry,
         RetryWhen,
         Validate
@@ -86,6 +87,7 @@ programNodePaths = go []
   where
     -- @prefix@ is the reversed list of steps taken so far; we reverse on emit.
     go :: forall x y. [NodeStep] -> Program x y -> [NodePath]
+    go prefix (PredictCaptured _ _ _) = [NodePath (reverse prefix)]
     go prefix (Predict _ _) = [NodePath (reverse prefix)]
     go prefix (Compose a b) = go (StepComposeL : prefix) a ++ go (StepComposeR : prefix) b
     go prefix (FMap _ p) = go (StepFMap : prefix) p

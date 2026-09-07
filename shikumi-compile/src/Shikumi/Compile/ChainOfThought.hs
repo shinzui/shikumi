@@ -41,10 +41,12 @@ module Shikumi.Compile.ChainOfThought
   )
 where
 
+import Data.Aeson (object, (.=))
 import Shikumi.Compile.Types (Compiler (..))
-import Shikumi.Module (chainOfThoughtRaw, value)
+import Shikumi.Module (WithReasoning (..), chainOfThoughtRaw)
 import Shikumi.Program
-  ( Program
+  ( CaptureCodec (..),
+    Program
       ( Compose,
         Embed,
         Ensemble,
@@ -53,12 +55,14 @@ import Shikumi.Program
         Map,
         Parallel,
         Predict,
+        PredictCaptured,
         Retry,
         RetryWhen,
         Validate
       ),
     mapParams,
   )
+import Shikumi.Schema.Types (objectSchema, stringSchema)
 
 -- | Rewrite every 'Predict' node into its chain-of-thought form, recursing through
 -- every composite/combinator node so nodes nested arbitrarily deep are reached.
@@ -72,6 +76,22 @@ chainOfThoughtCompiler = Compiler cot
 -- ('Shikumi.Schema.FromModel' @i@/@o@, 'Shikumi.Schema.ToSchema' @o@, the
 -- 'Shikumi.Adapter.ToPrompt's) are exactly what 'chainOfThoughtRaw' needs.
 cot :: Program i o -> Program i o
+cot (PredictCaptured codec sig ps) =
+  case chainOfThoughtRaw sig of
+    Predict augmented _ ->
+      FMap
+        value
+        ( PredictCaptured
+            ( CaptureCodec
+                (encodeCaptureInput codec)
+                (\o -> object ["reasoning" .= reasoning o, "value" .= encodeCaptureOutput codec (value o)])
+                (captureInputSchema codec)
+                (objectSchema [("reasoning", stringSchema), ("value", captureOutputSchema codec)] ["reasoning", "value"])
+            )
+            augmented
+            ps
+        )
+    other -> FMap value other
 cot (Predict sig ps) = FMap value (mapParams (const ps) (chainOfThoughtRaw sig))
 cot (Compose a b) = Compose (cot a) (cot b)
 cot (FMap k p) = FMap k (cot p)

@@ -40,6 +40,7 @@ import Baikai
     emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
+import Data.Aeson (ToJSON)
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef')
 import Data.Maybe (fromMaybe)
@@ -61,6 +62,8 @@ import Shikumi.Signature (Signature, mkSignature)
 newtype Topic = Topic {subject :: Text}
   deriving stock (Generic, Show, Eq)
 
+instance ToJSON Topic
+
 instance ToSchema Topic
 
 instance FromModel Topic
@@ -71,6 +74,8 @@ instance Validatable Topic
 
 newtype Outline = Outline {points :: [Text]}
   deriving stock (Generic, Show, Eq)
+
+instance ToJSON Outline
 
 instance ToSchema Outline
 

@@ -31,6 +31,7 @@ module Shikumi.Program
   ( -- * The representation
     Program
       ( Predict,
+        PredictCaptured,
         Compose,
         FMap,
         Map,
@@ -42,6 +43,7 @@ module Shikumi.Program
         Ensemble,
         Embed
       ),
+    CaptureCodec (..),
     Params (..),
     Demo (..),
     emptyParams,
@@ -186,7 +188,19 @@ instance FromJSON TempSchedule
 -- 'Predict' captures the adapter/decode dictionaries existentially so that
 -- 'runProgram' can recover them by pattern-matching — this is what lets a program
 -- be rewritten as data while staying type-checked.
+-- | Explicit wire encoders and schema evidence. Functions stay in the template;
+-- parameter artifacts never serialize them.
+data CaptureCodec i o = CaptureCodec
+  { encodeCaptureInput :: i -> Value,
+    encodeCaptureOutput :: o -> Value,
+    captureInputSchema :: Value,
+    captureOutputSchema :: Value
+  }
+
 data Program i o where
+  PredictCaptured ::
+    (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
+    CaptureCodec i o -> Signature i o -> Params -> Program i o
   Predict ::
     (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
     Signature i o ->
@@ -271,6 +285,7 @@ runProgram ::
   i ->
   Eff es o
 runProgram (Predict sig ps) i = runPredict sig ps i
+runProgram (PredictCaptured _ sig ps) i = runPredict sig ps i
 runProgram (Compose f g) i = runProgram f i >>= runProgram g
 runProgram (FMap k p) i = k <$> runProgram p i
 runProgram (Map _ p) xs = traverse (runProgram p) xs
@@ -295,6 +310,7 @@ runProgramConc ::
   i ->
   Eff es o
 runProgramConc (Predict sig ps) i = runPredict sig ps i
+runProgramConc (PredictCaptured _ sig ps) i = runPredict sig ps i
 runProgramConc (Compose f g) i = runProgramConc f i >>= runProgramConc g
 runProgramConc (FMap k p) i = k <$> runProgramConc p i
 runProgramConc (Map w p) xs = pooledMapConcurrentlyN (max 1 w) (runProgramConc p) xs
@@ -477,6 +493,7 @@ effectiveSignature sig ps = do
 -- @lens@ @Traversal'@ laws; use it directly with @toListOf@/@over@/@set@.
 paramsTraversal :: (Applicative f) => (Params -> f Params) -> Program i o -> f (Program i o)
 paramsTraversal h (Predict sig ps) = Predict sig <$> h ps
+paramsTraversal h (PredictCaptured codec sig ps) = PredictCaptured codec sig <$> h ps
 paramsTraversal h (Compose f g) = Compose <$> paramsTraversal h f <*> paramsTraversal h g
 paramsTraversal h (FMap k p) = FMap k <$> paramsTraversal h p
 paramsTraversal h (Map w p) = Map w <$> paramsTraversal h p
@@ -513,6 +530,7 @@ nodeFieldsIndexed :: Program i o -> [NodeFields]
 nodeFieldsIndexed = go
   where
     go :: forall x y. Program x y -> [NodeFields]
+    go (PredictCaptured _ sig ps) = go (Predict sig ps)
     go (Predict sig _) =
       [NodeFields (map fieldName (inputFields sig)) (map fieldName (outputFields sig))]
     go (Compose a b) = go a ++ go b
@@ -538,6 +556,7 @@ nodeInstructionsIndexed = go
   where
     go :: forall x y. Program x y -> [Text]
     go (Predict sig _) = [getInstruction sig]
+    go (PredictCaptured _ sig _) = [getInstruction sig]
     go (Compose a b) = go a ++ go b
     go (FMap _ p) = go p
     go (Map _ p) = go p
@@ -562,6 +581,7 @@ mapParamsAt n f = fst . go 0
   where
     go :: forall x y. Int -> Program x y -> (Program x y, Int)
     go idx (Predict sig ps) = (Predict sig (if idx == n then f ps else ps), idx + 1)
+    go idx (PredictCaptured codec sig ps) = (PredictCaptured codec sig (if idx == n then f ps else ps), idx + 1)
     go idx (Compose a b) =
       let (a', idx') = go idx a
           (b', idx'') = go idx' b
@@ -647,6 +667,7 @@ instance FromJSON ProgramShapeError
 -- changes (parameters do not affect shape).
 programShape :: Program i o -> ProgramShape
 programShape (Predict sig _) = ShapePredict (sigLabel sig)
+programShape (PredictCaptured _ sig _) = ShapePredict (sigLabel sig)
 programShape (Compose a b) = ShapeCompose (programShape a) (programShape b)
 programShape (FMap _ p) = ShapeFMap (programShape p)
 programShape (Map w p) = ShapeMap w (programShape p)
@@ -682,7 +703,9 @@ setProgramParams ps prog
     n = length (foldParams prog)
     go :: forall x y. [Params] -> Program x y -> (Program x y, [Params])
     go (q : qs) (Predict sig _) = (Predict sig q, qs)
+    go (q : qs) (PredictCaptured codec sig _) = (PredictCaptured codec sig q, qs)
     go qs (Predict sig old) = (Predict sig old, qs) -- unreachable after the length guard
+    go qs (PredictCaptured codec sig old) = (PredictCaptured codec sig old, qs) -- unreachable after the length guard
     go qs (Compose a b) =
       let (a', qs') = go qs a
           (b', qs'') = go qs' b
