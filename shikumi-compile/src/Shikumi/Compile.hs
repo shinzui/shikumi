@@ -19,7 +19,10 @@
 -- This module re-exports the full public surface; see the per-strategy modules for
 -- detail and caveats.
 module Shikumi.Compile
-  ( -- * Types
+  ( module Shikumi.Compile.Structure.Serialize,
+    module Shikumi.Compile.Structure,
+
+    -- * Types
     Compiler (..),
     CompiledProgram (..),
     compile,
@@ -51,5 +54,7 @@ import Shikumi.Compile.FewShot (fewShot, fewShotTyped)
 import Shikumi.Compile.RAG (formatPassages, rag)
 import Shikumi.Compile.Retriever (Passage (..), Retriever (..), inMemoryRetriever)
 import Shikumi.Compile.Serialize (decodeCompiledOnto, encodeCompiled)
+import Shikumi.Compile.Structure
+import Shikumi.Compile.Structure.Serialize
 import Shikumi.Compile.Types (CompiledProgram (..), Compiler (..), compile, identity, runCompiled)
 import Shikumi.Compile.ZeroShot (zeroShot, zeroShotClear)

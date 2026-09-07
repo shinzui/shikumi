@@ -22,6 +22,7 @@ import Shikumi.Compile
   )
 import Shikumi.Compile.Retriever (Passage (..))
 import Shikumi.Program (Params (..), foldParams)
+import StructureSpec qualified
 import Test.Capture (runWithCapture)
 import Test.Fixtures
   ( Question (..),
@@ -43,7 +44,8 @@ tests :: TestTree
 tests =
   testGroup
     "shikumi-compile (EP-9)"
-    [ m0_identity,
+    [ StructureSpec.tests,
+      m0_identity,
       m1_baseline,
       m2_zeroShot,
       m3_fewShot,

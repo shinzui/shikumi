@@ -44,6 +44,8 @@ library
     Shikumi.Compile.RAG
     Shikumi.Compile.Retriever
     Shikumi.Compile.Serialize
+    Shikumi.Compile.Structure
+    Shikumi.Compile.Structure.Serialize
     Shikumi.Compile.Types
     Shikumi.Compile.ZeroShot
 
@@ -64,6 +66,7 @@ test-suite shikumi-compile-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
+    StructureSpec
     Test.Capture
     Test.Fixtures
 
