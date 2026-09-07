@@ -5,10 +5,10 @@ description: Decode a bounded XML vocabulary through the existing typed decoder 
 docId: ADR-10
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-09-07T23:34:15Z
+timestamp: 2026-09-07T23:37:49Z
 generated:
   by: process:codex
-  at: 2026-09-07T23:34:15Z
+  at: 2026-09-07T23:37:49Z
 ---
 
 # Use bounded schema-guided XML fragments
@@ -62,7 +62,10 @@ The codec is intentionally a model-output fragment format, not a general XML
 implementation. More XML features require an explicit format decision. Nested
 rendering round-trips supported values subject to outer whitespace trimming,
 valid XML characters and the input/depth limits. A manually defined `ToJSON`
-instance must agree with its `ToSchema` and `FromModel` instances.
+instance must agree with its `ToSchema` and `FromModel` instances. `Field` has no
+`ToJSON` instance; output records using it supply an explicit serializer over
+`unField`, as the `Memo` example does. This keeps wrapper instance policy outside
+the codec change.
 
 Hermetic adapter tests cover legacy and nested replies, typed demonstration
 round-trips, scalar and constraint errors, malformed input and exact resource

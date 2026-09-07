@@ -198,10 +198,14 @@ executable jitsurei-adapters
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
+    , baikai            >=0.6  && <0.7
     , base              >=4.20 && <5
+    , generic-lens
+    , lens
     , shikumi
     , shikumi-jitsurei
     , text
+    , vector
 
 -- (12) Code execution: programOfThought and codeAct over a hermetic sandbox.
 executable jitsurei-codeexec

@@ -25,12 +25,15 @@ Users will decode records and lists expressed as nested XML, such as `<author><n
 - [x] (2026-09-07) Validate all 38 XML cases, including rendered demonstrations, nested error paths and exact depth/Unicode size boundaries.
 - [x] (2026-09-07) Update user documentation and changelogs; allocate ADR-10 and pass strict validation (10 concepts). Example changes are written; build/run remains below.
 - [x] (2026-09-07) Full core suite passes all 177 tests, including native and fallback regressions.
-- [ ] Validate the final two renderer-specific tests and build/run the example, record results and commit.
+- [x] (2026-09-07) All 40 XML tests pass after adding custom-schema fallback and exact renderer spelling/order checks; core implementation committed as `802f4cd`.
+- [x] (2026-09-07) Example build/run passes with both `Right` results and round-trip `True`; formatting and strict ADR validation pass. Final evidence and wrapper serialization guidance recorded for the completion commit.
 
 ## Surprises & Discoveries
 
 
 The compiler identified `ToPrompt o` as redundant on `nestedXmlAdapter`; structured output rendering uses only `ToJSON o`. The existing XML tests passed unchanged after replacing extraction. Expanded tests found that the shared decoder formats indices with a preceding dot (`people.[0].count`); preserve that existing diagnostic convention. A missing-field test initially mixed JSON text and nested elements, correctly triggering the mixed-content rejection; the fixture now uses nested elements consistently.
+
+The example build exposed that `Field` has no `ToJSON` instance. `Memo` now explicitly serializes its `unField` values rather than adding new global wrapper instances. The user guide records this requirement.
 
 ## Decision Log
 
@@ -41,17 +44,23 @@ The compiler identified `ToPrompt o` as redundant on `nestedXmlAdapter`; structu
 
 2026-09-07: Omit the redundant `ToPrompt o` constraint from the additive adapter. This accepts more output types without changing existing adapter constraints. The round-trip fixture deliberately has no `ToPrompt` instance. No intention was supplied after the optional prompt; proceed without an Intention trailer.
 
+2026-09-07: Preserve the shared decoder’s existing dotted array paths and provide an explicit `Memo` serializer for `Field` values. These are existing schema/serialization conventions; changing them globally would exceed the XML codec scope. ADR-10 records both.
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation.)
+All three milestones are complete. Both XML adapters now decode nested structures through the existing checked decoder; the additive renderer produces schema-guided demonstrations using `ToJSON` without requiring `ToPrompt` on outputs. Legacy XML rendering and marker/native behavior remain compatible. The library adds no dependencies or version-bound changes; the example declares direct dependencies already used elsewhere in its package to inspect assistant demo turns.
+
+Validation passed: the complete core suite (177 tests), followed by the expanded XML group (40 tests, including two subsequently added renderer assertions), the adapters executable build and offline run, `nix fmt`, `git diff --check`, and `just check-adr` (10 concepts). The example package has no test suite. ADR-10 distills the bounded vocabulary, compatibility constraints, checked decoding boundary and explicit `Field` serialization requirement. No implementation work remains.
+
+The main lessons were to preserve nullable literal-string provenance with CDATA, keep missing keys absent until typed decoding, and obtain structured output data from serialization rather than presentation text. Outer whitespace trimming, the supported XML vocabulary, and resource limits are documented format constraints.
 
 ## Context and Orientation
 
 
-`shikumi/src/Shikumi/Adapter.hs` defines `Adapter i o`, whose `render` produces a request and whose `parse` decodes a response. `xmlAdapter` currently extracts each output field with `extractTag`, which takes the text between the first opening tag and the next closing tag. It cannot balance repeated nested tag names. `sectionsToObject` interprets non-string contents as JSON, so current nested records work only when supplied as JSON inside their outer XML tag. `renderOutputXml` uses `toPromptFields`; list and nested-record formatting is therefore presentation text rather than structured serialization.
+`shikumi/src/Shikumi/Adapter.hs` defines `Adapter i o`, whose `render` produces a request and whose `parse` decodes a response. At the start of this plan, `xmlAdapter` extracted each output field with `extractTag`, which takes the text between the first opening tag and the next closing tag. That implementation could not balance repeated nested tag names. `sectionsToObject` interprets non-string contents as JSON, so records previously worked only when supplied as JSON inside their outer XML tag. `renderOutputXml` uses `toPromptFields`; list and nested-record formatting is therefore presentation text rather than structured serialization.
 
-`shikumi/src/Shikumi/Schema.hs` supplies `deriveSchema`, `fromModelChecked`, nullable `anyOf` schemas, and path-carrying errors. Convert XML into an Aeson `Value`, then retain this decoding and validation seam. `shikumi/test/XmlAdapterSpec.hs` currently tests rendering, flat JSON-in-tag decoding, and a missing required field. `shikumi-jitsurei/app/Adapters.hs` is the user-facing executable example. `shikumi/shikumi.cabal` registers production modules and test modules; `shikumi/test/Main.hs` includes the existing XML test group. [ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Implementation added [ADR-10](../adr/0010-use-bounded-schema-guided-xml-fragments.md), preserving legacy rendering, the bounded fragment vocabulary and shared typed decoding. Existing scope is documented in `docs/plans/26-adapter-completeness-and-declarative-field-constraints.md`.
+`shikumi/src/Shikumi/Schema.hs` supplies `deriveSchema`, `fromModelChecked`, nullable `anyOf` schemas, and path-carrying errors. Convert XML into an Aeson `Value`, then retain this decoding and validation seam. `shikumi/test/XmlAdapterSpec.hs` retains the initial rendering, flat JSON-in-tag decoding and missing-field tests alongside the nested acceptance suite. `shikumi-jitsurei/app/Adapters.hs` is the user-facing executable example. `shikumi/shikumi.cabal` registers production modules and test modules; `shikumi/test/Main.hs` includes the existing XML test group. [ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Implementation added [ADR-10](../adr/0010-use-bounded-schema-guided-xml-fragments.md), preserving legacy rendering, the bounded fragment vocabulary and shared typed decoding. Existing scope is documented in `docs/plans/26-adapter-completeness-and-declarative-field-constraints.md`.
 
 Upstream provenance is `mori://stanfordnlp/dspy`, commit `33aaa19e0`, which added nested XML adapter data. The project is currently unregistered locally and the artifact-level commit URI is pending. This is behavioral inspiration, not a Python dependency or a promise of complete XML parity.
 
@@ -92,7 +101,15 @@ nix develop .#ghc9124 -c cabal run shikumi-jitsurei:exe:jitsurei-adapters
 nix fmt
 ```
 
-The tests must exit zero with all cases passing. The example must display `Right` results for both legacy and nested replies and `True` for the nested demonstration round-trip; record its actual short output here during implementation. Formatting must leave no unrelated edits.
+The tests must exit zero with all cases passing. The example must display `Right` results for both legacy and nested replies and `True` for the nested demonstration round-trip; the actual XML output is recorded below. Formatting must leave no unrelated edits.
+
+The example produced:
+
+```text
+  parse a tagged reply           -> Right (Memo {headline = Field {unField = "Shikumi types LM programs"}, bullets = Field {unField = ["records in","records out"]}})
+  parse a nested reply           -> Right (Memo {headline = Field {unField = "Shikumi types LM programs"}, bullets = Field {unField = ["records in","records out"]}})
+  nested demo round-trip         -> True
+```
 
 ## Validation and Acceptance
 
@@ -112,3 +129,5 @@ The internal `Shikumi.Adapter.Xml` module provides pure helpers conceptually nam
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
 Revision (2026-09-07): implemented codec and renderer; recorded initial validation and the smaller output constraint. Expanded acceptance checks and documentation remain in progress.
+
+Revision (2026-09-07, completion): all milestones validated; recorded the final example transcript, serializer requirement, ADR-10 distillation and successful checks.

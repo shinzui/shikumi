@@ -8,10 +8,10 @@
 -- @render@ builds a baikai @Context@+@Options@; @parse@ decodes a baikai
 -- @Response@ into the typed output via "Shikumi.Schema".
 --
--- Two adapters ship. The native-schema adapter is the reliable path (the provider
--- enforces the JSON schema); the prompt-based fallback renders @[[ ## field ## ]]@
--- sections and re-parses them, for models without native structured output.
--- 'capabilityFor' selects per model.
+-- The native-schema adapter uses provider-enforced JSON; the prompt-based fallback
+-- renders @[[ ## field ## ]]@ sections for models without native structured output.
+-- 'capabilityFor' selects between them per model. Two opt-in XML adapters share
+-- bounded nested decoding and offer legacy or structured demonstration rendering.
 --
 -- Native structured output is wired through a private /metadata channel/ (EP-14).
 -- Because a 'Program' renders before the ambient model is known (the model is

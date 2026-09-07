@@ -13,19 +13,23 @@
 --     schema keywords and the post-decode validator from one type-level declaration.
 module Main (main) where
 
-import Data.Aeson (Value (..), object, (.=))
+import Baikai (AssistantContent (..), Message (..), TextContent (..))
+import Control.Lens ((^.))
+import Data.Aeson (ToJSON (..), Value (..), object, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
+import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Vector qualified as V
 import GHC.Generics (Generic)
-import Shikumi.Adapter (Adapter (..), ToPrompt, xmlAdapter)
+import Shikumi.Adapter (Adapter (..), ToPrompt, nestedXmlAdapter, xmlAdapter)
 import Shikumi.Jitsurei.Stub (markerResponse, mkTextResponse, runAgent, systemContains)
 import Shikumi.Module (twoStep)
 import Shikumi.Program (Program)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
-import Shikumi.Schema.Types (Constrained, Constraint (..), Field)
-import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Schema.Types (Constrained, Constraint (..), Field, field, unField)
+import Shikumi.Signature (Demo (..), Signature, mkSignature, setDemos)
 
 -- ---------------------------------------------------------------------------
 -- Shared records for the XML and two-step demos.
@@ -41,6 +45,10 @@ data Memo = Memo
   }
   deriving stock (Generic, Show, Eq)
   deriving anyclass (ToSchema, FromModel, ToPrompt)
+
+-- Field wrappers are prompt/schema metadata; serialize their underlying values.
+instance ToJSON Memo where
+  toJSON (Memo h bs) = object ["headline" .= unField h, "bullets" .= unField bs]
 
 instance Validatable Memo
 
@@ -88,6 +96,14 @@ main = do
             "</bullets>"
           ]
   putStrLn $ "  parse a tagged reply           -> " <> show (parse xmlAdapter memoSig (mkTextResponse xmlReply))
+
+  let nestedReply = "<headline>Shikumi types LM programs</headline><bullets><item>records in</item><item>records out</item></bullets>"
+  putStrLn $ "  parse a nested reply           -> " <> show (parse nestedXmlAdapter memoSig (mkTextResponse nestedReply))
+  let demo = Memo (field "Shikumi & typed <outputs>") (field ["records in", "records out"])
+      withDemo = setDemos [Demo (Ask "What is shikumi?") demo] memoSig
+      (nestedCtx, _) = render nestedXmlAdapter withDemo (Ask "What is shikumi?")
+      demoBodies = [T.concat [t | AssistantText (TextContent t) <- V.toList (p ^. #content)] | AssistantMessage p <- V.toList (nestedCtx ^. #messages)]
+  putStrLn $ "  nested demo round-trip         -> " <> show (map (parse nestedXmlAdapter memoSig . mkTextResponse) demoBodies == [Right demo])
 
   -- (b) twoStep: a free-form answer, then a structured extraction call.
   putStrLn "\n[twoStep]"

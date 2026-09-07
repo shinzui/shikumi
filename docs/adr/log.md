@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Update**: ADR-10: record explicit output serialization for Field wrappers, verified by the adapters example build.
 * **Added**: ADR-10: bounded schema-guided XML fragments and structured demonstration compatibility.
 * **Update**: Added ADR-9: centralize the internal offline harness and diverse fixture ownership.
 * **Decision**: Record ADR-8: trusted typed recipe registries, shared finite search and exact experimental artifact restoration.

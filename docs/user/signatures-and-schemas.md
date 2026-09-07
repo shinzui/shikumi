@@ -256,7 +256,9 @@ sort object properties lexically below it.
 
 Generated record, array, scalar and nullable schemas are supported. Other manually supplied
 schema forms render escaped JSON fallback values; typed decoding still decides validity.
-Custom `ToJSON`, `ToSchema`, and `FromModel` instances must agree. The parser accepts at
+Custom `ToJSON`, `ToSchema`, and `FromModel` instances must agree. `Field` wrappers have
+no `ToJSON` instance: define the output serializer explicitly using `unField`, as the
+`Memo` record in `shikumi-jitsurei/app/Adapters.hs` demonstrates. The parser accepts at
 most 64 element levels and 1,048,576 Unicode code points, and rejects invalid XML characters.
 Syntax and limit failures are `SchemaMismatch "XML: offset …"` with zero-based code-point
 offsets. Typed errors retain full paths such as `people.[0].count`; field and record
