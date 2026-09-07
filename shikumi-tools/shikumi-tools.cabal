@@ -43,6 +43,7 @@ library
   import:          common-options
   hs-source-dirs:  src
   exposed-modules:
+    Shikumi.Agent.History
     Shikumi.Agent.ReAct
     Shikumi.CodeExec.CodeAct
     Shikumi.CodeExec.Interpreter
@@ -54,6 +55,7 @@ library
     Shikumi.Tool.Builtin.Shell
     Shikumi.Tool.Builtin.Web
     Shikumi.Tool.Env
+    Shikumi.Tool.Output
     Shikumi.Tool.Web
 
   build-depends:
@@ -84,6 +86,7 @@ test-suite shikumi-tools-test
   ghc-options:    -threaded -with-rtsopts=-N
   other-modules:
     AcceptanceSpec
+    AgentHistorySpec
     BuiltinAcceptanceSpec
     CodeActSpec
     CompactionSpec
@@ -93,10 +96,12 @@ test-suite shikumi-tools-test
     MockLLM
     ProgramOfThoughtSpec
     ProtocolSpec
+    ReActSessionExample
     ReActSpec
     RestrictedSpec
     SchemaSpec
     ShellSpec
+    ToolOutputSpec
     ToolSpec
     WebSpec
 

@@ -357,3 +357,9 @@ scripted offline stub, no network.
 The built-in work-tool catalog is exercised by the `shikumi-tools` test suite, including
 filesystem edits, `grep`/`glob` fallback behavior, shell command capture, `web_fetch`, and the
 configured/unconfigured `web_search` paths.
+
+## Resumable sessions
+
+For rich results, native message history, checkpoint persistence, and typed final
+submission without extraction, see [Resumable ReAct sessions](resumable-react-sessions.md).
+The legacy APIs described above retain their existing behavior.

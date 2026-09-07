@@ -3,6 +3,7 @@
 module Main (main) where
 
 import AcceptanceSpec qualified
+import AgentHistorySpec qualified
 import BuiltinAcceptanceSpec qualified
 import CodeActSpec qualified
 import CompactionSpec qualified
@@ -15,6 +16,7 @@ import RestrictedSpec qualified
 import SchemaSpec qualified
 import ShellSpec qualified
 import Test.Tasty (defaultMain, testGroup)
+import ToolOutputSpec qualified
 import ToolSpec qualified
 import WebSpec qualified
 
@@ -23,8 +25,10 @@ main =
   defaultMain $
     testGroup
       "shikumi-tools"
-      [ SchemaSpec.tests,
+      [ AgentHistorySpec.tests,
+        SchemaSpec.tests,
         ToolSpec.tests,
+        ToolOutputSpec.tests,
         EnvSpec.tests,
         WebSpec.tests,
         FsSpec.tests,

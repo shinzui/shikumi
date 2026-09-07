@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Rich `ToolOutput` results and runtime-schema dynamic tool registration, with
+  compatibility text projections.
+- Completed-turn ReAct sessions with original native call IDs, validated final
+  submission, versioned checkpoints, continuation, and whole-exchange compaction.
+  Legacy ReAct extraction and CodeAct trajectory APIs remain unchanged.
+
 ### Changed
 
 - Widened the `http-client-tls` upper bound to admit 0.4. The web tool uses

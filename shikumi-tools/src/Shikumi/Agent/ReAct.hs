@@ -36,6 +36,12 @@ module Shikumi.Agent.ReAct
     -- * Building agents
     react,
     reactWithTrajectory,
+    SessionResult (..),
+    finalToolName,
+    startSession,
+    advanceSession,
+    continueSession,
+    runSession,
 
     -- * The protocol seam
     Proposal (..),
@@ -69,9 +75,11 @@ import Baikai
     flattenAssistantBlocks,
     user,
   )
+import Baikai qualified as B
 import Control.Lens ((&), (.~), (^.))
-import Data.Aeson (Value (..), eitherDecodeStrict, encode)
+import Data.Aeson (Value (..), eitherDecodeStrict, encode, object, toJSON, withObject, (.:), (.=))
 import Data.Aeson.KeyMap qualified as KM
+import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
@@ -86,13 +94,16 @@ import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ModelCapability (..), ToPrompt (toPrompt), attachSchema, capabilityFor)
+import Shikumi.Agent.History (ReActSession)
+import Shikumi.Agent.History qualified as H
 import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Program (Program (FMap), embed)
-import Shikumi.Schema (FromModel, ToSchema, Validatable, parseOutput, toSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, parseOutput, toSchema)
 import Shikumi.Signature (Signature, getInstruction)
-import Shikumi.Tool (ToolRegistry, registryBaikai, registryTools, renderToolError, runToolCall, someToolDescription, someToolName, someToolSchema)
+import Shikumi.Tool (ToolRegistry, registryBaikai, registryNames, registryTools, renderToolError, runToolCall, runToolCallOutput, someToolDescription, someToolName, someToolSchema)
+import Shikumi.Tool.Output (ToolOutput (..), textToolOutput)
 
 -- ---------------------------------------------------------------------------
 -- The trajectory data model
@@ -574,3 +585,155 @@ stripFences t =
 -- | Compact-encode a JSON value to text.
 encodeText :: Value -> Text
 encodeText = decodeUtf8 . LBS.toStrict . encode
+
+-- ---------------------------------------------------------------------------
+-- Completed-turn sessions (the legacy loop above retains its extraction call)
+-- ---------------------------------------------------------------------------
+
+-- | A pause always contains complete exchanges, including all dispatched results.
+data SessionResult o = SessionPaused ReActSession | SessionFinished o ReActSession
+  deriving stock (Eq, Show)
+
+finalToolName :: Text
+finalToolName = "shikumi_submit_final"
+
+-- | The fingerprint stores exact schema and instruction values (no lossy hash).
+sessionIdentity :: forall i o. (ToSchema o) => Signature i o -> Value
+sessionIdentity sig =
+  object
+    [ "instruction" .= getInstruction sig,
+      "inputFields" .= show (sig ^. #inputFields),
+      "outputSchema" .= toSchema (Proxy @o)
+    ]
+
+sessionToolSchemas :: ToolRegistry -> Value
+sessionToolSchemas reg =
+  object
+    [ "tools" .= [object ["name" .= someToolName t, "schema" .= someToolSchema t, "description" .= someToolDescription t] | t <- registryTools reg]
+    ]
+
+historyOrThrow :: (Error ShikumiError :> es) => Either H.HistoryError a -> Eff es a
+historyOrThrow = either (\(H.HistoryError t) -> throwError (ValidationFailure ("ReAct history: " <> t))) pure
+
+protocolText :: ReActConfig -> Text
+protocolText cfg = case resolveProtocolKind (protocol cfg) emptyModel of
+  ProtocolNative -> "native"
+  _ -> "prompt"
+
+checkSession :: (ToSchema o, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> ReActSession -> Eff es ()
+checkSession sig reg cfg s = do
+  historyOrThrow (H.validateSession s)
+  if finalToolName `elem` registryNames reg
+    then throwError (ValidationFailure "Registry collides with shikumi_submit_final")
+    else pure ()
+  if H.sessionFingerprint s == sessionIdentity sig && H.sessionTools s == sessionToolSchemas reg && H.sessionProtocol s == protocolText cfg
+    then pure ()
+    else throwError (ValidationFailure "Incompatible ReAct checkpoint signature, tool registry, or protocol; explicitly start a new session")
+
+-- | Start without making a model call. Auto resolves as in the legacy API.
+startSession :: (ToPrompt i, ToSchema o, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> i -> Eff es ReActSession
+startSession sig reg cfg input = do
+  s <- historyOrThrow (H.newSession (protocolText cfg) (sessionIdentity sig) (sessionToolSchemas reg) (toPrompt input))
+  checkSession sig reg cfg s
+  pure s
+
+-- | Append a new user turn to a validated checkpoint, resetting its iteration budget.
+-- This never dispatches old exchanges. Use 'runSession' or 'advanceSession' next.
+continueSession :: (ToPrompt i, ToSchema o, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> i -> ReActSession -> Eff es ReActSession
+continueSession sig reg cfg input s = do
+  checkSession sig reg cfg s
+  historyOrThrow (H.appendUser (toPrompt input) s)
+
+-- | Make at most one proposal (plus one bounded context retry and summaries).
+-- All calls in an accepted proposal are completed sequentially before returning.
+advanceSession :: forall i o es. (ToSchema o, FromModel o, Validatable o, LLM :> es, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> ReActSession -> Eff es (SessionResult o)
+advanceSession sig reg cfg original = do
+  checkSession sig reg cfg original
+  if H.sessionFinished original
+    then throwError (ValidationFailure "Finished session requires a new user turn before advancing")
+    else
+      if H.sessionIterations original >= max 0 (maxIters cfg)
+        then pure (SessionPaused original)
+        else do
+          (s, resp) <- requestRecover original
+          let payload = resp ^. #message
+              reject reason = SessionPaused <$> historyOrThrow (H.appendExchange payload [] (Just reason) False s)
+          if payload ^. #stopReason == B.ErrorReason
+            then throwError (ProviderFailure (maybe "Model response failed" id (payload ^. #errorMessage)))
+            else pure ()
+          case parseCalls s resp of
+            Left reason -> reject reason
+            Right calls -> case H.validateCalls (priorIds s) calls of
+              Left (H.HistoryError reason) -> reject reason
+              Right ()
+                | null calls -> reject "Submit a tool call or shikumi_submit_final with the answer arguments."
+                | any ((== finalToolName) . (^. #name)) calls -> case calls of
+                    [call] -> case fromModelChecked (call ^. #arguments) of
+                      Left err -> reject ("Invalid final submission: " <> T.pack (show err))
+                      Right answer -> do
+                        finished <- historyOrThrow (H.appendExchange payload [(call, textToolOutput "Final submission accepted.")] Nothing True s)
+                        pure (SessionFinished answer finished)
+                    _ -> reject "Final submission cannot be mixed with other calls."
+                | otherwise -> do
+                    outputs <-
+                      traverse
+                        ( \call -> do
+                            output <- runToolCallOutput reg call
+                            pure (call, either (\err -> ToolOutput (B.toolResultErrorText (renderToolError err)) Nothing []) id output)
+                        )
+                        calls
+                    next <- historyOrThrow (H.appendExchange payload outputs Nothing False s)
+                    compacted <-
+                      if usageExceedsWindow (compaction cfg) (resp ^. #model) (payload ^. #usage)
+                        then forceCompact next
+                        else pure next
+                    pure (SessionPaused compacted)
+  where
+    priorIds s = [c ^. #id_ | H.Exchange _ results Nothing <- H.auditHistory s, (c, _) <- results]
+    parseCalls s resp
+      | H.sessionProtocol s == "native" = Right (toolCallsOf resp)
+      | not (null (toolCallsOf resp)) = Left "Prompt protocol requires JSON text, not native tool calls."
+      | otherwise = do
+          value <- either (Left . T.pack) Right (eitherDecodeStrict (encodeUtf8 (stripFences (responseText resp))))
+          actions <- either (Left . T.pack) Right (parseEither (withObject "proposal" (\o -> o .: "calls" >>= traverse (withObject "call" (\c -> (,) <$> c .: "tool" <*> c .: "args")))) value)
+          pure [B.ToolCall ("prompt-" <> T.pack (show (H.sessionTurns s + 1)) <> "-" <> T.pack (show n)) name args | (n, (name, args)) <- zip [1 :: Int ..] actions]
+    request s = do
+      let native = H.sessionProtocol s == "native"
+          finalTool = B.emptyTool & #name .~ finalToolName & #description .~ "Submit the final validated answer, alone." & #parameters .~ toSchema (Proxy @o)
+          sys =
+            getInstruction sig
+              <> "\nSubmit your final answer using shikumi_submit_final alone. Its arguments must match: "
+              <> encodeText (toSchema (Proxy @o))
+              <> if native then "" else "\n" <> toolMenu reg <> "\nReply with JSON {\"calls\":[{\"tool\":\"<name>\",\"args\":{...}}]}. Use the same form for shikumi_submit_final."
+          ctx = buildCtx sys (H.promptMessages s) (if native then registryBaikai reg <> V.singleton finalTool else V.empty) Nothing
+          opts = emptyOptions & #toolChoice .~ (if native then Just ToolChoiceAuto else Nothing)
+      complete emptyModel ctx opts
+    requestRecover s =
+      catchError
+        ((s,) <$> request s)
+        ( \_cs -> \case
+            ContextWindowExceeded {} | enabled (compaction cfg) -> do
+              compacted <- forceCompact s
+              (compacted,) <$> request compacted
+            err -> throwError err
+        )
+    forceCompact s = do
+      let entries = H.promptEntries s
+          keep = max 0 (keepRecent (compaction cfg))
+          through = length (H.auditHistory s) - keep
+          render entry = encodeText (toJSON (H.entryMessages (H.sessionProtocol s) entry))
+      if length entries <= keep || through <= H.sessionCompactedThrough s
+        then pure s
+        else do
+          texts <- compactTail (compaction cfg) emptyModel id id (map render entries)
+          case texts of
+            t : _ -> historyOrThrow (H.compactSession through t s)
+            [] -> pure s
+
+-- | Advance until validated final submission or the per-user-turn iteration limit.
+runSession :: (ToSchema o, FromModel o, Validatable o, LLM :> es, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> ReActSession -> Eff es (SessionResult o)
+runSession sig reg cfg s = do
+  result <- advanceSession sig reg cfg s
+  case result of
+    SessionPaused next | H.sessionIterations next < max 0 (maxIters cfg) -> runSession sig reg cfg next
+    _ -> pure result

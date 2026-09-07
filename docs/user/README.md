@@ -30,6 +30,7 @@ you want, jump straight to the relevant reference.
 | 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the nine optimizers (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN) — with serialization. |
 | 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, built-in work tools (`read`, `write`, `edit`, `grep`, `glob`, `bash`, `web_fetch`, `web_search`), and agent/code-execution loops that are themselves `Program`s. |
 | 10 | [Agent working-context compaction](./agent-context-compaction.md) | How long ReAct and CodeAct runs compact older steps, preserve recent context, and recover from classified context-window overflow errors. |
+| 12 | [Resumable ReAct sessions](./resumable-react-sessions.md) | Completed-turn checkpoints, rich outputs, validated final submissions, and an offline continuation example. |
 | 11 | [The CLI](./cli.md) | `eval` / `record` / `trace` / `optimize` / `replay`, all runnable offline. |
 
 ---

@@ -33,6 +33,9 @@ module Shikumi.Tool
     someToolSchema,
     lowerSomeTool,
     runErased,
+    mkDynTool,
+    runErasedOutput,
+    runToolCallOutput,
     ToolRegistry,
     mkRegistry,
     registryLookup,
@@ -66,6 +69,7 @@ import Effectful.Error.Static (Error, catchError, throwError)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, toSchema)
+import Shikumi.Tool.Output (ToolOutput, renderToolOutput, textToolOutput)
 
 -- ---------------------------------------------------------------------------
 -- The typed tool
@@ -117,22 +121,41 @@ data SomeTool where
     (ToSchema i, FromModel i, Validatable i, ToJSON o) =>
     Tool i o ->
     SomeTool
+  DynTool ::
+    Text ->
+    Text ->
+    Value ->
+    (forall es. (LLM :> es, Error ShikumiError :> es) => Value -> Eff es (Either ToolError ToolOutput)) ->
+    SomeTool
+
+-- | Register a runtime schema and rich-result body without an input Haskell type.
+mkDynTool ::
+  Text ->
+  Text ->
+  Value ->
+  (forall es. (LLM :> es, Error ShikumiError :> es) => Value -> Eff es (Either ToolError ToolOutput)) ->
+  SomeTool
+mkDynTool = DynTool
 
 -- | The name of an erased tool.
 someToolName :: SomeTool -> Text
 someToolName (SomeTool t) = name t
+someToolName (DynTool n _ _ _) = n
 
 -- | The description of an erased tool.
 someToolDescription :: SomeTool -> Text
 someToolDescription (SomeTool t) = description t
+someToolDescription (DynTool _ d _ _) = d
 
 -- | The derived input JSON Schema of an erased tool.
 someToolSchema :: SomeTool -> Value
 someToolSchema (SomeTool t) = toolSchemaOf t
+someToolSchema (DynTool _ _ s _) = s
 
 -- | Lower an erased tool to baikai's wire tool.
 lowerSomeTool :: SomeTool -> B.Tool
 lowerSomeTool (SomeTool t) = lowerTool t
+lowerSomeTool (DynTool n d s _) = emptyTool & #name .~ n & #description .~ d & #parameters .~ s
 
 -- | Run an erased tool against a raw JSON arguments object: decode to the hidden
 -- @i@, run the body, encode the @o@ to text. A decode failure becomes
@@ -144,11 +167,20 @@ runErased ::
   SomeTool ->
   Value ->
   Eff es (Either ToolError Text)
-runErased (SomeTool t) args =
+runErased st args = fmap (fmap renderToolOutput) (runErasedOutput st args)
+
+-- | Rich dispatch; dynamic bodies share typed tools' infrastructure error policy.
+runErasedOutput :: (LLM :> es, Error ShikumiError :> es) => SomeTool -> Value -> Eff es (Either ToolError ToolOutput)
+runErasedOutput (DynTool n _ _ body) args =
+  body args `catchError` \_cs e ->
+    if isInfraToolError e
+      then throwError e
+      else pure (Left (ToolRunFailed n (shikumiErrorText e)))
+runErasedOutput (SomeTool t) args =
   case fromModelChecked args of
     Left err -> pure (Left (ToolArgsInvalid (name t) (shikumiErrorText err)))
     Right i ->
-      (Right . encodeText <$> run t i)
+      (Right . textToolOutput . encodeText <$> run t i)
         `catchError` \_cs e ->
           if isInfraToolError e
             then throwError e
@@ -211,6 +243,12 @@ runToolCall reg tc =
   case registryLookup (tc ^. #name) reg of
     Nothing -> pure (Left (ToolNotFound (tc ^. #name)))
     Just st -> runErased st (tc ^. #arguments)
+
+-- | Dispatch without projecting away structured result fields.
+runToolCallOutput :: (LLM :> es, Error ShikumiError :> es) => ToolRegistry -> ToolCall -> Eff es (Either ToolError ToolOutput)
+runToolCallOutput reg tc = case registryLookup (tc ^. #name) reg of
+  Nothing -> pure (Left (ToolNotFound (tc ^. #name)))
+  Just st -> runErasedOutput st (tc ^. #arguments)
 
 -- ---------------------------------------------------------------------------
 -- Helpers

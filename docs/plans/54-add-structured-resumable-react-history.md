@@ -3,6 +3,7 @@ id: 54
 slug: add-structured-resumable-react-history
 title: "Add structured resumable ReAct history"
 kind: exec-plan
+intention: intention_01m1x0z53kebvb6q0s5kvzhm7r
 created_at: 2026-09-07T01:50:18Z
 master_plan: "docs/masterplans/10-dspy-informed-optimizer-and-agent-evolution.md"
 ---
@@ -20,12 +21,23 @@ A caller will run a tool-using agent, save a completed-turn checkpoint, and cont
 ## Progress
 
 
-Implementation has not started.
+- [x] (2026-09-07) Read plan, skill specifications, and Mori-located Baikai message/content sources.
+- [x] (2026-09-07) Milestone 1: rich output, dynamic dispatch, and compatibility tests.
+- [x] (2026-09-07) Milestone 2: completed-turn sessions and validated final submission.
+- [x] (2026-09-07) Milestone 3: checkpoint persistence, compaction, and recovery.
+- [ ] Milestone 4: documentation, ADR distillation, and workspace validation.
 
 ## Surprises & Discoveries
 
 
-No implementation discoveries recorded.
+Baikai also lacks decoders for usage and cost records. The local transfer format parses usage fields explicitly and stores cost as numerator/denominator pairs so non-terminating rational values remain exact. Supported content-block decoders are available and reused. No dependency bounds changed.
+
+The first rich-output package run passed 74 tests. The session/persistence run passed 86 tests, including native and prompt continuation, exact request equivalence, malformed whole-proposal rejection, and bounded context-window retries. Legacy ReAct and CodeAct regressions remained green.
+
+```text
+All 86 tests passed (0.23s)
+Test suite shikumi-tools-test: PASS
+```
 
 ## Decision Log
 
@@ -36,10 +48,16 @@ Decision (2026-09-06): add explicit session APIs while retaining the existing `r
 
 Decision (2026-09-06): checkpoints represent completed exchanges only. They are resumable conversations, not a guarantee of exactly-once external side effects across a crash during a tool call.
 
+Decision (2026-09-07): compatibility fingerprints store exact JSON values rather than a hash: instruction, input-field metadata, output schema, resolved protocol, and tool name/schema/description snapshots. This avoids hash collisions and additional dependencies. Like legacy ReAct, sessions do not consume signature demonstrations. Registry bodies cannot be fingerprinted and remain caller-owned.
+
+Decision (2026-09-07): start and continuation are model-free effectful validation operations; continuation appends input and resets the per-user iteration limit. `advanceSession` completes one exchange, and `runSession` is the bounded convenience loop. Finished checkpoints require continuation before another advance. Prompt JSON uses an ordered `calls` array and synthetic `prompt-<turn>-<index>` IDs.
+
+Decision (2026-09-07): keep a namespaced `shikumi_submit_final` tool name compatible with native provider tool-name syntax. Rejected final arguments are audit-only corrective exchanges, so no invalid provider-facing call/result pair is manufactured.
+
 ## Outcomes & Retrospective
 
 
-Implementation results and ADR distillation are pending.
+Milestones 1–3 are implemented and tested. The session audit retains original assistant metadata and rich results; continuation dispatches only new proposals. Native final submission decodes and validates directly without extraction. Documentation/example integration and final workspace checks remain. [ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) records output ownership, checkpoint compatibility, and the completed-turn crash boundary; strict ADR validation passes.
 
 ## Context and Orientation
 
@@ -121,3 +139,5 @@ Builds and tests are repeatable. Checkpoint serialization does not execute tools
 This plan has no hard dependency on MCP or other new optimizer plans. Plan 30 consumes its generic output/dynamic tool seam. Use existing `aeson`, `text`, `vector`, `containers`, `effectful` and Baikai capabilities. No provider transport code or unrelated CodeAct behavior is owned here.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
+
+Revision (2026-09-07): implemented rich dispatch and session persistence, linked the user-created intention and ADR-6, and recorded 86 passing tests. Documentation integration and full workspace validation remain.
