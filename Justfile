@@ -17,6 +17,10 @@ build:
 test:
     cabal test all
 
+# Validate architecture decisions, their shared profile, and change-log coverage.
+check-adr:
+    okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+
 # Run a single package's tests, e.g. `just test-one shikumi-cache`.
 test-one pkg:
     cabal test {{pkg}}

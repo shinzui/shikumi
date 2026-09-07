@@ -210,6 +210,10 @@ The [capability catalog](docs/capabilities/index.md) provides stable `CAP-N`
 handles, package and interface ownership, release provenance, openable evidence,
 dependencies, and explicit limits for everything the repository ships today.
 
+Durable architecture decisions live in the [ADR bundle](docs/adr/index.md).
+Validate ADR changes with `just check-adr`; allocate handles with `okf id next`
+and update the bundle index and log when adding or revising a decision.
+
 The implementation history lives under [docs/plans](docs/plans) and
 [docs/masterplans](docs/masterplans). Those files are useful for design context, but the
 user guide is the maintained usage documentation.

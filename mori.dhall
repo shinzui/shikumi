@@ -280,6 +280,14 @@ in  Schema.Project::{
         , description = Some "Shikumi-owned improvement requests"
         }
       , Schema.OkfBundle::{
+        , name = "adrs"
+        , path = "docs/adr"
+        , profile = Some "docs/adr/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some
+            "Durable architecture decisions with stable ADR handles"
+        }
+      , Schema.OkfBundle::{
         , name = "capabilities"
         , path = "docs/capabilities"
         , profile = Some "docs/capabilities/profile.dhall"
