@@ -190,8 +190,8 @@ data Adapter i o = Adapter
   }
 ```
 
-**Three adapters ship.** Two are auto-selected per model by `adapterFor` / `capabilityFor`;
-the third (`xmlAdapter`) is opt-in — a caller picks it explicitly.
+**Four adapters ship.** Two are auto-selected per model by `adapterFor` / `capabilityFor`;
+`xmlAdapter` and `nestedXmlAdapter` are opt-in caller choices.
 
 ```haskell
 data ModelCapability = NativeSchema | PromptFallback
@@ -214,29 +214,72 @@ adapterFor    :: Model -> Adapter i o        -- auto-selects native vs. fallback
   tags back. Some models follow an XML shape more reliably than JSON or the `[[ ## … ## ]]`
   markers. It is not a *capability* the framework can detect from a `Model`, so `adapterFor`
   never auto-selects it — you pass it deliberately (e.g. to a custom `runPredict`-style driver,
-  or any code that takes an `Adapter i o`). Under the covers it reuses the very same
-  `sectionsToObject` + `fromModelChecked` decode path as the fallback adapter, so nested
-  records and lists in tags coerce identically, and a missing `<bullets>` tag yields the same
-  located `MissingField "bullets"`.
+  or any code that takes an `Adapter i o`). Its balanced XML parser accepts nested
+  records and arrays as well as legacy JSON-in-tag containers, then calls
+  `fromModelChecked`. A missing `<bullets>` yields `MissingField "bullets"`.
+- **`nestedXmlAdapter` (structured XML demos).** Uses the same decoder with schema-guided
+  nested instructions and demonstrations serialized through `ToJSON o`. Its constraints
+  are `ToSchema o`, `FromModel o`, `Validatable o`, `ToJSON o`, and `ToPrompt i`.
+  Output types do not need `ToPrompt`. Automatic routing never selects either XML adapter.
+
+### Nested XML vocabulary
+
+For a record with `author` and `bullets`, both XML adapters accept:
+
+```xml
+<author><name>Ada</name></author>
+<bullets><item>records in</item><item>records out</item></bullets>
+```
+
+Object properties recurse into named elements; arrays use repeated `<item>` children,
+including records or further arrays. Elements with no children may instead contain legacy
+JSON (`<author>{"name":"Ada"}</author>`). Empty or self-closing elements produce empty
+strings, arrays or objects according to the schema. Missing nullable fields decode as
+`Nothing`; required missing fields produce located errors. The first duplicate property
+wins. Unknown elements are ignored, but must still be well-formed. Nested occurrences do
+not satisfy missing outer fields. Ordinary explanatory text outside field elements is ignored.
+
+The fragment vocabulary supports comments, CDATA, self-closing tags, the five predefined
+entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`) and numeric character references
+(`&#65;`, `&#x41;`). Names start with a letter or underscore and continue with letters,
+digits, underscores, hyphens or dots. Attributes, namespaces, declarations, processing
+instructions and external entities are rejected. Non-whitespace text mixed with child
+elements is rejected. Text must escape `&`, `<` and `>`; the nested renderer does this,
+including tag-like strings and CDATA terminators. Scalar outer whitespace is trimmed;
+inner whitespace is preserved. JSON-in-tag text must obey the same XML escaping rules.
+
+Only nullable fields interpret plain `null` as JSON null. A required string containing
+`null` remains a string. A nullable literal string uses `<note><![CDATA[null]]></note>`;
+`<note>null</note>` means `Nothing`. Numbers use JSON numeric literals and booleans use
+`true` or `false`. Nested demonstrations preserve signature order at the top level and
+sort object properties lexically below it.
+
+Generated record, array, scalar and nullable schemas are supported. Other manually supplied
+schema forms render escaped JSON fallback values; typed decoding still decides validity.
+Custom `ToJSON`, `ToSchema`, and `FromModel` instances must agree. The parser accepts at
+most 64 element levels and 1,048,576 Unicode code points, and rejects invalid XML characters.
+Syntax and limit failures are `SchemaMismatch "XML: offset …"` with zero-based code-point
+offsets. Typed errors retain full paths such as `people.[0].count`; field and record
+constraints still run. Round-trips are subject to outer whitespace trimming and these limits.
+
+Run `cabal run jitsurei-adapters` for offline legacy/nested decoding and a nested demo
+round-trip. The compatibility decision is recorded in
+[ADR-10](../adr/0010-use-bounded-schema-guided-xml-fragments.md).
 
 The crucial property: **the program code is identical under every adapter** — only the wire
 format differs. A field missing from the model's reply yields the same `MissingField`
 downstream regardless of which adapter parsed it.
 
-### Demos render the same way under both adapters
+### Demonstrations follow the selected wire format
 
-When a signature carries few-shot demos, both adapters render them as user/assistant message
-pairs, the assistant side written as `[[ ## field ## ]]` sections. So an optimizer's
-bootstrapped demos look consistent to the model whichever path is active.
+Signatures render demos as user/assistant pairs. Native demonstrations use JSON;
+fallback demonstrations use field-marker sections. `xmlAdapter` preserves its historical
+`ToPrompt` text inside tags, which flattens lists and shows nested records as presentation
+text. Use `nestedXmlAdapter` for faithful structured XML demonstrations.
 
-### A note on the current native path
-
-baikai's `Options` is gaining a native `response_format` / `output_config` field (delivered
-as a separate extension). Until that lands in the local checkout, the native adapter's
-`attachSchema` is a no-op and the native path reads the JSON from the assistant text — there
-is exactly one place (`attachSchema`) that will set the field when it arrives. In practice the
-prompt-fallback path is the exercised one today; the native path is wired and verified for
-OpenAI. This does not change any of your code.
+The runtime attaches schema and native-render alternatives through reserved request metadata.
+For a native-capable model, the router selects the native prompt and demos and supplies the
+provider response format. XML remains an explicit caller choice.
 
 ---
 

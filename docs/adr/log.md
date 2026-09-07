@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Added**: ADR-10: bounded schema-guided XML fragments and structured demonstration compatibility.
 * **Update**: Added ADR-9: centralize the internal offline harness and diverse fixture ownership.
 * **Decision**: Record ADR-8: trusted typed recipe registries, shared finite search and exact experimental artifact restoration.
 * **Decision**: Record ADR-7: invocation-local recursive sessions, bounded observations and exact logical subquery admission.

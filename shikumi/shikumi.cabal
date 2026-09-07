@@ -51,6 +51,7 @@ library
     Shikumi.Signature
     Shikumi.Stream
 
+  other-modules:   Shikumi.Adapter.Xml
   build-depends:
     , aeson              >=2.2  && <2.3
     , baikai             >=0.6  && <0.7

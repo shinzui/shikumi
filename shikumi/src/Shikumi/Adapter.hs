@@ -44,6 +44,7 @@ module Shikumi.Adapter
     nativeAdapter,
     fallbackAdapter,
     xmlAdapter,
+    nestedXmlAdapter,
     adapterFor,
     attachSchema,
     responseText,
@@ -92,6 +93,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Vector qualified as V
 import GHC.Generics
+import Shikumi.Adapter.Xml (decodeXmlFields, renderXmlFields, xmlSchemaGuide)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Multimodal (GImageFieldNames (..), GImageFields (..), Image, imageToContent)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModelChecked)
@@ -307,9 +309,9 @@ fallbackAdapter =
 -- | The XML adapter (EP-26). A third wire format on the same typed seam: @render@
 -- asks the model to wrap each output field in @\<field\>…\</field\>@ tags, and
 -- @parse@ reads those tags back. Some models follow an XML shape more reliably than
--- JSON or the @[[ ## … ## ]]@ markers. Reuses the same 'sectionsToObject' +
--- 'fromModelChecked' decode path as 'fallbackAdapter', so nested records and lists
--- in tags coerce the same way.
+-- JSON or the @[[ ## … ## ]]@ markers. Both XML adapters decode nested elements
+-- and legacy JSON-in-tag containers through 'fromModelChecked'. This adapter
+-- retains its historical flattened demonstration rendering.
 --
 -- Reachability: 'xmlAdapter' is /not/ selectable by the runtime router. The router
 -- ("Shikumi.Routing".@routeLLM@) picks between the native and fallback wire shapes
@@ -330,11 +332,26 @@ xmlAdapter =
         let sys = systemHeader sig <> xmlOutputGuide sig
             ctx = buildContext sys (xmlDemoMessages sig ++ [userTurn i])
          in (ctx, emptyOptions),
-      parse = \sig resp ->
+      parse = \_sig resp -> decodeXmlFields (deriveSchema @o) (responseText resp) >>= fromModelChecked
+    }
+
+-- | Nested XML guides and faithful structured demonstrations (EP-55). Requires
+-- 'Aeson.ToJSON' for outputs; inputs still use 'ToPrompt'. Supports generated
+-- records, arrays, scalars and nullable schemas; other schema forms render an
+-- escaped JSON fallback. Parsing is shared with 'xmlAdapter'. Opt-in only.
+nestedXmlAdapter ::
+  forall i o.
+  (ToSchema o, FromModel o, Validatable o, ToPrompt i, Aeson.ToJSON o) =>
+  Adapter i o
+nestedXmlAdapter =
+  Adapter
+    { render = \sig i ->
         let names = map fieldName (outputFields sig)
-            sections = parseXmlTags names (responseText resp)
-            obj = sectionsToObject (deriveSchema @o) sections
-         in fromModelChecked obj
+            schema = deriveSchema @o
+            sys = systemHeader sig <> xmlSchemaGuide names schema
+            demos = concat [[userTurn di, assistant (renderXmlFields names schema (toJSON o))] | Demo di o <- getDemos sig]
+         in (buildContext sys (demos ++ [userTurn i]), emptyOptions),
+      parse = \_sig resp -> decodeXmlFields (deriveSchema @o) (responseText resp) >>= fromModelChecked
     }
 
 -- ---------------------------------------------------------------------------
@@ -484,29 +501,6 @@ parseMarkers body = go (T.lines body) Nothing Map.empty
     flush (Just (name, buf)) acc
       | name == "completed" = acc
       | otherwise = Map.insert name (T.strip (T.unlines buf)) acc
-
--- | Extract @\<name\>…\</name\>@ sections into a name->text map. Only names that
--- appear as output fields are kept (so stray tags are ignored, DSPy parity), and
--- the first match per name wins. The content is whatever lies between the first
--- @\<name\>@ and its next @\</name\>@ — a non-greedy match, the same as DSPy's
--- @\<(?P\<name\>\\w+)\>(?P\<content\>.*?)\</\\1\>@ with DOTALL.
-parseXmlTags :: [Text] -> Text -> Map Text Text
-parseXmlTags names body =
-  Map.fromList [(nm, inner) | nm <- names, Just inner <- [extractTag nm body]]
-
--- | The text between the first @\<name\>@ and its next @\</name\>@, trimmed;
--- 'Nothing' if either tag is absent.
-extractTag :: Text -> Text -> Maybe Text
-extractTag nm body =
-  let open = openTag nm
-      close = closeTag nm
-      (_, afterOpen) = T.breakOn open body
-   in if T.null afterOpen
-        then Nothing
-        else
-          let rest = T.drop (T.length open) afterOpen
-              (inner, afterClose) = T.breakOn close rest
-           in if T.null afterClose then Nothing else Just (T.strip inner)
 
 -- | Recognize a @[[ ## name ## ]]@ marker line.
 markerName :: Text -> Maybe Text

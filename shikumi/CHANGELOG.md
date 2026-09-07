@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Decode nested XML records and arrays with bounded, balanced parsing. Add `nestedXmlAdapter` with `ToJSON` output demonstrations and schema guides; preserve legacy XML rendering and JSON-in-tag container decoding. XML required strings now retain literal `null`.
+
 - Add `CaptureCodec`, `PredictCaptured`, and `predictCaptured` for opt-in typed node capture. Ordinary prediction constraints and parameter serialization are unchanged. Public GADT matches must handle the new constructor; all core traversals preserve codecs.
 
 ## 0.3.0.3 — 2026-08-29
