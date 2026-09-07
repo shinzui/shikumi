@@ -24,8 +24,10 @@ A user can bootstrap a two-stage program whose intermediate records differ from 
 
 - [x] (2026-09-07) Milestone 1: typed capture and traversal compatibility; core (142), compile (17), trace (27), and OKF suites pass.
 - [x] (2026-09-07 02:26Z) Milestone 2: isolated execution observations, retry rejection lineage, and concurrent outer isolation; all 31 trace tests pass. ADR-2 recorded and strict ADR validation passes.
-- [ ] Milestone 3: validated node-local recovery and matching.
-- [ ] Milestone 4: consumers, persistence, documentation, ADR and integration checks.
+- [x] (2026-09-07 02:31Z) Node-local recovery, schema/path preflight and target decoding implemented; initial optimizer suite passes all 78 tests.
+- [x] (2026-09-07 02:33Z) Milestone 3: explicit mapping, merge, independent subset, random-search selection and retry recovery checks pass (82 optimizer tests).
+- [x] (2026-09-07 02:33Z) Milestone 4 implementation: RandomSearch/MIPRO use node pools; heterogeneous execution and serialization tests, user guide, capability documentation, changelogs, and ADR-3 are written.
+- [ ] Milestone 4 final verification: build all, test all (including final retry integration and full-request equivalence), format, strict ADR check and final commits.
 
 
 ## Surprises & Discoveries
@@ -42,13 +44,15 @@ On 2026-09-06, choose explicit typed capture codecs rather than deriving JSON fr
 On 2026-09-06, limit automatic teacher/student matching to equal structural paths and equal input/output schema evidence plus successful target decoding. Expose an explicit mapping for different teacher structures; never broadcast outer demos across internal nodes. Default selection is deterministic, with seeded independent sampling configurable per node.
 
 
+On 2026-09-07, preserve the old outer-demo meaning of bootstrapKeptDemos only for bare single predictions, including captured predictions. For ordinary single-node teacher/student programs, static equality of their outer Haskell types plus signature field metadata supplies the legacy input codec evidence; composite recovery never uses that exception. Adapt the previous two-node budget fixture to a captured two-node student rather than implicitly broadcasting onto a structurally different single-node student.
+
 On 2026-09-07, use a shared sequential walker with scope and leaf callbacks. Observation-only execution needs Prim but no Time, Trace, CurrentNode, or IOE. Record rejection scope labels and starting invocation ordinals; keep Embed boundaries explicitly opaque. See [ADR-2](../adr/0002-keep-capture-codecs-in-templates-and-isolate-observations.md).
 
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record demonstrated results and remaining limits here at completion.
+Milestones 1 and 2 are committed and validated. The first optimizer integration run passed all 78 tests, including the heterogeneous demo and serialization regression. Expanded mapping/merge/seed tests also pass (81 optimizer tests); final all-package validation remains in progress.
 
 
 ## Context and Orientation
@@ -58,7 +62,7 @@ The core package defines Program i o, a typed representation of an LM computatio
 
 shikumi-trace/src/Shikumi/Trace/Program.hs already supplies runProgramTraced and tags prediction spans with NodePath, but delegates each prediction to runProgram without recording its structured input/output. shikumi-optimize/src/Shikumi/Optimize/Bootstrap.hs currently recovers outer Demo pairs and calls withDemos from shikumi-optimize/src/Shikumi/Optimize/LabeledFewShot.hs, which attaches them everywhere. shikumi-optimize/src/Shikumi/Optimize/RandomSearch.hs also consumes bootstrapKeptDemos. shikumi-optimize/src/Shikumi/Optimize/MIPRO.hs must be audited for the same assumption. The existing BootstrapSpec.hs and RandomSearchSpec.hs under shikumi-optimize/test use the local StubLM.hs fixture.
 
-[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Existing plans 16, 23, 37, 38, and 42 under docs/plans explain tracing, bootstrap consumers, budget limits, persistence, and trace isolation; the constraints needed here are restated in this document. The follow-on docs/plans/52-capture-failure-aware-node-feedback-for-gepa.md consumes the observation representation owned here. This plan has no hard prerequisite among the new plans.
+[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Implementation records [ADR-2](../adr/0002-keep-capture-codecs-in-templates-and-isolate-observations.md) for codec lifetime and observation identity and [ADR-3](../adr/0003-validate-bootstrap-demonstrations-at-student-nodes.md) for validated matching and compatibility. Existing plans 16, 23, 37, 38, and 42 under docs/plans explain tracing, bootstrap consumers, budget limits, persistence, and trace isolation; the constraints needed here are restated in this document. The follow-on docs/plans/52-capture-failure-aware-node-feedback-for-gepa.md consumes the observation representation owned here. This plan has no hard prerequisite among the new plans.
 
 Upstream motivation is mori://stanfordnlp/dspy, commit 1bc87de15 (2026-08-27), independently sampling labeled demonstrations per predictor. DSPy is not locally registered; an artifact-level commit URI is pending. This plan repairs a pre-existing local recovery gap in addition to adopting sampling independence.
 
@@ -124,7 +128,7 @@ All validation is offline and repeatable. Saved parameter formats remain unchang
 ## Interfaces and Dependencies
 
 
-The implementation owns CaptureCodec, the capture-capable prediction constructor and predictCaptured in core, and NodeObservation/runProgramObserved in shikumi-trace. The observable runner returns (Either ShikumiError o, [NodeObservation]) under LLM, Error ShikumiError, Time, and Prim, with Concurrent only for an explicitly concurrent variant. Factor the walker so the public runner installs private CurrentNode and Trace handlers internally (or uses an observation-only callback without those effects). Existing Optimizer cannot supply Trace or CurrentNode in its public row; do not accidentally require them or add IOE to ordinary Program execution. The bootstrap map is Map NodePath [Demo], with typed validation performed at the student leaf before Params installation. NodePath remains defined in shikumi-trace to avoid a reverse dependency from core.
+The implementation owns CaptureCodec, the capture-capable prediction constructor and predictCaptured in core, and NodeObservation/runProgramObserved in shikumi-trace. The observable runner returns (Either ShikumiError o, [NodeObservation]) under LLM, Error ShikumiError, and Prim (no clock is needed for structured observations), with Concurrent only for an explicitly concurrent variant. Factor the walker so the public runner installs private CurrentNode and Trace handlers internally (or uses an observation-only callback without those effects). Existing Optimizer cannot supply Trace or CurrentNode in its public row; do not accidentally require them or add IOE to ordinary Program execution. The bootstrap map is Map NodePath [Demo], with typed validation performed at the student leaf before Params installation. NodePath remains defined in shikumi-trace to avoid a reverse dependency from core.
 
 Use existing Aeson, Effectful Prim references, and tracing mechanisms. Discover dependency APIs via mori registry search/show/docs and inspect source before implementation; no new dependency bounds are selected by this plan. Changes to constructors must be reflected throughout the monorepo. Record codec lifetime and observation identity as durable ADR context once proven.
 
@@ -133,3 +137,5 @@ Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authorin
 Revision (2026-09-07): implemented and validated milestone 1; captured codecs remain template-owned and the chain-of-thought rewrite adapts their wire output.
 
 Revision (2026-09-07): completed milestone 2 and recorded ADR-2; observation identity and failed-scope eligibility are covered by deterministic trace tests.
+
+Revision (2026-09-07): implemented node recovery and both bootstrap consumers, verified 81 optimizer tests, and documented compatibility and ADR-3. Final workspace validation is in progress.

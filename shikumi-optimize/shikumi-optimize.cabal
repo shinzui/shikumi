@@ -89,6 +89,7 @@ test-suite shikumi-optimize-test
     KNNSpec
     LabeledFewShotSpec
     Miprov2Spec
+    NodeBootstrapSpec
     OptimizeSpec
     ProposeSpec
     RandomSearchSpec

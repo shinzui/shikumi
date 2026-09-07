@@ -88,7 +88,7 @@ import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Combinator ((>>>))
 import Shikumi.LLM (LLM (..))
-import Shikumi.Module (predict)
+import Shikumi.Module (predict, predictCaptured)
 import Shikumi.Program (Program)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
@@ -148,7 +148,7 @@ echoSig = mkSignature "Echo the sentiment label unchanged."
 
 -- | A two-node sentiment pipeline: classify a sentence, then echo the label.
 sentimentPipeline :: Program Sentence Label
-sentimentPipeline = sentimentProg >>> predict echoSig
+sentimentPipeline = predictCaptured sentimentSig >>> predictCaptured echoSig
 
 -- ---------------------------------------------------------------------------
 -- Ground truth and helpers

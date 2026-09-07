@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | MIPROv2 (EP-20): the joint instruction-and-demonstration optimizer. Where
@@ -45,11 +46,12 @@ where
 import Control.Monad (forM)
 import Data.Aeson (ToJSON)
 import Data.Aeson.Text (encodeToLazyText)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text.Lazy qualified as TL
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
-import Effectful.Error.Static (Error, catchError)
+import Effectful.Error.Static (Error)
 import Effectful.Prim (Prim)
 import GHC.Generics (Generic)
 import Shikumi.Effect.Time (Time)
@@ -61,11 +63,9 @@ import Shikumi.Eval
     dataset,
     datasetExamples,
     datasetSize,
-    prediction,
-    unScore,
   )
 import Shikumi.LLM (LLM)
-import Shikumi.Optimize.Bootstrap (recoverDemo)
+import Shikumi.Optimize.Bootstrap (BootstrapConfig (BootstrapConfig), NodeBootstrapConfig (..), bootstrapDemosFor, defaultNodeBootstrapConfig, recoverDemo)
 import Shikumi.Optimize.Propose
   ( ProposeRequest (..),
     ProposeResult (..),
@@ -76,11 +76,11 @@ import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program
   ( Demo (..),
     Params (..),
-    Program,
+    Program (..),
     foldParams,
     mapParamsAt,
-    runProgram,
   )
+import Shikumi.Trace.Node (programNodePaths)
 
 -- ---------------------------------------------------------------------------
 -- Configuration and presets
@@ -147,8 +147,8 @@ miprov2With cfg teacher = Optimizer $ \train metric student -> do
 -- | For each node (in @foldParams@ order), a list of candidate demo sets. Candidate
 -- 0 is the node's current demos, making the baseline vector an identity. The empty
 -- set remains reachable after that, followed by teacher metric-passing runs
--- (bootstrapped) and labelled training pairs (DSPy's @max_labeled_demos@) recovered at
--- the program-I/O level and attached to every node.
+-- (bootstrapped). Labelled outer pairs are candidates only for a bare single
+-- prediction; composite nodes receive only their own recovered invocations.
 bootstrapDemoCandidates ::
   (ToJSON i, ToJSON o, LLM :> es, Error ShikumiError :> es, Prim :> es) =>
   Miprov2Config ->
@@ -175,32 +175,18 @@ bootstrapDemoCandidatesWith ::
   Program i o ->
   Eff es [[[Demo]]]
 bootstrapDemoCandidatesWith meter cfg teacher train metric student = do
-  let exs = datasetExamples train
-      teacherCost = max 1 (length (foldParams teacher))
-      keepIfPassing (Example inp expd) =
-        ( do
-            out <- runProgram teacher inp
-            let s = unScore (metric expd (prediction out))
-            pure [recoverDemo inp out | s >= bootstrapThreshold cfg]
-        )
-          `catchError` \_ (_ :: ShikumiError) -> pure []
-      collect [] = pure []
-      collect (ex : rest) = do
-        fits <- tryCharge meter teacherCost
-        if not fits
-          then pure []
-          else do
-            kept <- keepIfPassing ex
-            (kept ++) <$> collect rest
-  bootstrapped <- collect exs
   let cap = max 1 (maxBootstrappedDemos cfg)
-      labeledSet = take cap (map (\(Example i o) -> recoverDemo i o) exs)
-      bootSet = take cap bootstrapped
-      nodeSets ps =
+      bootCfg = defaultNodeBootstrapConfig {nodeBootstrapConfig = BootstrapConfig (bootstrapThreshold cfg) cap}
+  (pools, _) <- bootstrapDemosFor bootCfg meter teacher train metric student
+  let labeledSet = case student of
+        Predict {} -> take cap [recoverDemo i o | Example i o <- datasetExamples train]
+        PredictCaptured {} -> take cap [recoverDemo i o | Example i o <- datasetExamples train]
+        _ -> []
+      nodeSets path ps =
         take
           (max 1 (numDemoCandidates cfg))
-          (dedup (demos ps : [] : filter (not . null) [labeledSet, bootSet]))
-  pure (map nodeSets (foldParams student))
+          (dedup (demos ps : [] : filter (not . null) [labeledSet, Map.findWithDefault [] path pools]))
+  pure (zipWith nodeSets (programNodePaths student) (foldParams student))
 
 -- ---------------------------------------------------------------------------
 -- Phase 2 — propose instruction candidates

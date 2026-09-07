@@ -21,8 +21,7 @@ import Data.Generics.Labels ()
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Shikumi.Eval (Dataset, dataset, datasetExamples)
-import Shikumi.Optimize.Bootstrap (bootstrapKeptDemos, defaultBootstrapConfig)
-import Shikumi.Optimize.LabeledFewShot (withDemos)
+import Shikumi.Optimize.Bootstrap (NodeBootstrapConfig (..), bootstrapDemosFor, defaultBootstrapConfig, defaultNodeBootstrapConfig, withNodeDemos)
 import Shikumi.Optimize.Search (freezeProgram, meteredScore, newBudgetMeter, selectBestMetered)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), Scored (..))
 import Shikumi.Program (Program)
@@ -84,8 +83,8 @@ bootstrapRandomSearchWith cfg teacher numCandidates budget = Optimizer $ \train 
   let seeds = [1 .. max 1 numCandidates]
       candidateFor seed = do
         let cfg' = defaultBootstrapConfig & #maxBootstrappedDemos .~ sizeFor cfg seed
-        demos <- bootstrapKeptDemos cfg' meter teacher (shuffle seed train) metric
-        pure (withDemos demos student)
+        (demos, _) <- bootstrapDemosFor (defaultNodeBootstrapConfig {nodeBootstrapConfig = cfg', nodeSeed = Just seed}) meter teacher (shuffle seed train) metric student
+        pure (withNodeDemos demos student)
   seeded <- mapM candidateFor seeds
   let cands = student : seeded -- zero-shot baseline first
   best <- selectBestMetered meter (\p -> meteredScore meter train metric p) cands

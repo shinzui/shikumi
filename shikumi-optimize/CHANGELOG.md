@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recover validated node-local bootstrap pools with explicit mapping, per-node caps, seeded independent selection and diagnostics. RandomSearch and MIPRO use node pools. Composite bootstrap requires captured leaves; `bootstrapKeptDemos` is now single-node only. Existing BootstrapConfig construction and legacy single-predictor bootstrap remain supported.
+
 ## 0.2.1.3 — 2026-08-29
 
 ### Changed

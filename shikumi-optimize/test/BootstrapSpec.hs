@@ -14,6 +14,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Concurrent (Concurrent, runConcurrent)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Effectful.Prim (Prim, runPrim)
+import NodeBootstrapSpec qualified
 import Shikumi.Compile.Types (CompiledProgram, Compiler (runCompiler), compiledProgram)
 import Shikumi.Compile.ZeroShot (zeroShot)
 import Shikumi.Effect.Time (Time, runTime)
@@ -64,7 +65,8 @@ tests :: TestTree
 tests =
   testGroup
     "M2 bootstrap"
-    [ testCase "recoverDemo produces a round-trippable typed demo" $ do
+    [ NodeBootstrapSpec.tests,
+      testCase "recoverDemo produces a round-trippable typed demo" $ do
         let d = recoverDemo (Sentence "good film") (Label "positive")
         (fromModel (input d) :: Either ShikumiError Sentence) @?= Right (Sentence "good film")
         (fromModel (output d) :: Either ShikumiError Label) @?= Right (Label "positive"),
@@ -84,7 +86,7 @@ tests =
         let budget = Budget {maxLmCalls = 6, maxCandidates = 32}
         res <-
           runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $
-            runStubLMCounting ref (optimize (bootstrapFewShot sentimentPipeline budget) budgetTrainset exactMatch sentimentProg)
+            runStubLMCounting ref (optimize (bootstrapFewShot sentimentPipeline budget) budgetTrainset exactMatch sentimentPipeline)
         case res of
           Left e -> assertFailure ("unexpected error: " <> show e)
           Right _ -> pure ()
