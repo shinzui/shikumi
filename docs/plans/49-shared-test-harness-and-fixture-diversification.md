@@ -46,12 +46,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: create `shikumi-testing/` (cabal file, `src/Shikumi/Testing/Response.hs`, `src/Shikumi/Testing/StubLLM.hs`, `src/Shikumi/Testing/Fixtures.hs`, `src/Shikumi/Testing.hs`).
-- [ ] M1: add `shikumi-testing` to `cabal.project`; `cabal build shikumi-testing` succeeds.
-- [ ] M1: write `shikumi-testing/test/Main.hs`; `cabal test shikumi-testing` passes.
-- [ ] M1: add `shikumi-testing` to the internal-packages table in `agents/skills/release/SKILL.md`.
-- [ ] M1: commit with the required trailers.
-- [ ] M2: turn `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` into a re-export shim; run all 12 examples.
+- [x] (2026-09-07) M1: create `shikumi-testing/` (cabal file, `src/Shikumi/Testing/Response.hs`, `src/Shikumi/Testing/StubLLM.hs`, `src/Shikumi/Testing/Fixtures.hs`, `src/Shikumi/Testing.hs`).
+- [x] (2026-09-07) M1: add `shikumi-testing` to `cabal.project`; `cabal build shikumi-testing` succeeds.
+- [x] (2026-09-07) M1: write `shikumi-testing/test/Main.hs`; `cabal test shikumi-testing` passes.
+- [x] (2026-09-07) M1: add `shikumi-testing` to the internal-packages table in `agents/skills/release/SKILL.md`.
+- [x] (2026-09-07) M1: commit with the required trailers.
+- [ ] M2: turn `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` into a re-export shim; run all 14 current examples.
 - [ ] M2: commit.
 - [ ] M3: migrate `shikumi-cli/src/Shikumi/Cli/Runtime.hs`; `cabal test shikumi-cli` passes.
 - [ ] M3: commit.
@@ -64,7 +64,7 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+The checkout now uses shikumi 0.3 and baikai 0.6. Hackage preferred.json and upstream tags confirm baikai 0.6.0.1; the new package follows the existing >=0.6 && <0.7 bound. The tools harness now exports `mkToolCallsResponse`, which must also move to preserve current tests.
 
 
 ## Decision Log
@@ -129,10 +129,14 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Milestone 1: shared package compiles warning-free; all six fixture tests pass. `cabal build all` succeeds. ADR-9 passes strict profile and log enforcement. Baseline tools suite: 118 passing tests.
 
 
 ## Context and Orientation
+
+ADR discovery found no existing record about shared harness ownership. The new
+[ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) records the
+internal dependency boundary, compatibility behavior and publication caveat.
 
 shikumi is a thirteen-package cabal project (packages listed in `cabal.project` at the
 repo root). Everything builds inside the Nix dev shell — enter it with
@@ -265,12 +269,12 @@ library
 
   build-depends:
     , aeson
-    , baikai        >=0.2  && <0.3
+    , baikai        >=0.6  && <0.7
     , base          >=4.20 && <5
     , effectful
     , generic-lens
     , lens          ^>=5.3
-    , shikumi       ^>=0.2.0.0
+    , shikumi       ^>=0.3.0.0
     , text          ^>=2.1
     , vector
 
@@ -282,7 +286,7 @@ test-suite shikumi-testing-test
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
     , base
-    , shikumi          ^>=0.2.0.0
+    , shikumi          ^>=0.3.0.0
     , shikumi-testing  ^>=0.1.0.0
     , tasty
     , tasty-hunit
@@ -603,7 +607,7 @@ import Shikumi.Testing
   )
 ```
 
-Acceptance: `cabal build shikumi-jitsurei` succeeds and all twelve executables run and
+Acceptance: `cabal build shikumi-jitsurei` succeeds and all fourteen current executables run and
 exit 0 (loop below in Concrete Steps) with output identical to before the migration —
 the examples are deterministic, so you can capture `cabal run -v0 jitsurei-predict`
 before and after and `diff` the transcripts.
@@ -699,14 +703,14 @@ cabal run -v0 jitsurei-predict > /tmp/predict.before 2>&1 || true
 nix fmt && cabal build shikumi-jitsurei
 for exe in shikumi-jitsurei jitsurei-predict jitsurei-compose jitsurei-combinators \
            jitsurei-evaluate jitsurei-optimize jitsurei-react jitsurei-trace-replay \
-           jitsurei-multimodal jitsurei-streaming jitsurei-adapters jitsurei-codeexec; do
-  echo "=== $exe"; cabal run -v0 "$exe" || exit 1
+           jitsurei-multimodal jitsurei-streaming jitsurei-adapters jitsurei-codeexec jitsurei-gepa-objectives jitsurei-structure-search; do
+  echo "=== $exe"; cabal run -v0 "exe:$exe" || exit 1
 done
 cabal run -v0 jitsurei-predict > /tmp/predict.after 2>&1
 diff /tmp/predict.before /tmp/predict.after && echo "identical"
 ```
 
-Expected: twelve `=== …` sections each followed by the example's deterministic output,
+Expected: fourteen `=== …` sections each followed by the example's deterministic output,
 and `identical`. Commit as `refactor(jitsurei): re-export the stub harness from
 shikumi-testing` with the three trailers.
 
@@ -791,6 +795,7 @@ re-exported by the umbrella module):
 markerResponse :: [(Text, Text)] -> Response
 mkTextResponse :: Text -> Response
 mkUsageResponse :: Model -> Natural -> Text -> Response
+mkToolCallsResponse :: [(Text, Text, Value)] -> Response
 mkToolCallResponse :: Text -> Text -> Value -> Response
 
 runStubLLM :: (Context -> Response) -> Eff (LLM : es) a -> Eff es a
@@ -831,3 +836,5 @@ plans need a differently-shaped fixture, they should extend
 `shikumi-testing/src/Shikumi/Testing/Fixtures.hs` (and this plan's Decision Log) rather
 than duplicating shapes locally; neither plan blocks on this one, and this one does not
 block on them.
+
+Revision 2026-09-07: use current dependency bounds and preserve the multi-tool-call response builder added since drafting; record durable ownership in ADR-9.

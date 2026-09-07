@@ -1,0 +1,69 @@
+cabal-version: 3.4
+name:          shikumi-testing
+version:       0.1.0.0
+synopsis:
+  Shared offline test harness and fixtures for shikumi (internal)
+
+category:      AI
+description:
+  The single home for shikumi's deterministic, network-free stub LM — a
+  responder-driven interpreter, a script-replay interpreter, counting and
+  error-injecting wrappers, and the marker-format response builders — plus
+  deliberately non-trivial shared fixtures (a non-empty-instruction signature,
+  an output type whose @Validatable@ rule can fail, a two-stage program) that
+  every package's tests can regression-test against.
+  .
+  Internal to the repository: not published to Hackage.
+
+license:       BSD-3-Clause
+author:        Nadeem Bitar
+maintainer:    nadeem@gmail.com
+build-type:    Simple
+
+common common-options
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
+    -Wincomplete-record-updates -Wredundant-constraints
+    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wmissing-deriving-strategies
+
+  default-language:   GHC2024
+  default-extensions:
+    DeriveAnyClass
+    DuplicateRecordFields
+    OverloadedLabels
+    OverloadedStrings
+
+library
+  import:          common-options
+  hs-source-dirs:  src
+  exposed-modules:
+    Shikumi.Testing
+    Shikumi.Testing.Fixtures
+    Shikumi.Testing.Response
+    Shikumi.Testing.StubLLM
+
+  build-depends:
+    , aeson
+    , baikai        >=0.6      && <0.7
+    , base          >=4.20     && <5
+    , effectful
+    , generic-lens
+    , lens          ^>=5.3
+    , shikumi       ^>=0.3.0.0
+    , text          ^>=2.1
+    , vector
+
+test-suite shikumi-testing-test
+  import:         common-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  ghc-options:    -threaded -with-rtsopts=-N
+  build-depends:
+    , base
+    , shikumi          ^>=0.3.0.0
+    , shikumi-testing  ^>=0.1.0.0
+    , tasty
+    , tasty-hunit
+    , text

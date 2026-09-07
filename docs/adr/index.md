@@ -16,4 +16,4 @@ okf_version: "0.2"
 - [Preserve completed ReAct exchanges in versioned sessions](0006-preserve-completed-react-exchanges-in-versioned-sessions.md) - Keep rich tool results and full assistant exchanges in validated checkpoints while compacting only the provider-facing history.
 - [Bound recursive sessions at the LLM operation boundary](0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) - Keep documents and variables private to an invocation and distinguish exact logical subquery admission from optimistic model spending.
 - [Restore typed structures through trusted recipe registries](0008-restore-typed-structures-through-trusted-recipe-registries.md) - Select finite typed implementations with shared validation and restore experimental artifacts through caller-owned registry identity and revisions.
-
+- [Centralize offline harness and diverse fixtures](0009-centralize-offline-harness-and-diverse-fixtures.md) - Own reusable offline interpreters and nontrivial fixtures in an internal package.

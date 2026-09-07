@@ -21,6 +21,7 @@ packages:
   shikumi-jitsurei
   shikumi-okf
   shikumi-optimize
+  shikumi-testing
   shikumi-tools
   shikumi-trace
   shikumi-trace-otel

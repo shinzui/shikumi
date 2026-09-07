@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Update**: Added ADR-9: centralize the internal offline harness and diverse fixture ownership.
 * **Decision**: Record ADR-8: trusted typed recipe registries, shared finite search and exact experimental artifact restoration.
 * **Decision**: Record ADR-7: invocation-local recursive sessions, bounded observations and exact logical subquery admission.
 * **Update**: ADR-6: Share proposal and checkpoint parsing and preserve error flags in text projections.

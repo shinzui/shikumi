@@ -76,6 +76,9 @@ still available from Hackage and that no local-path or `source-repository-packag
 |---------|-----------|--------------|
 | `shikumi-cli` | `shikumi-cli/` | Internal: the command-line application (EP-12), not distributed via Hackage. |
 | `shikumi-jitsurei` | `shikumi-jitsurei/` | Internal: worked examples (実例) — runnable demos, not a library. |
+| `shikumi-testing` | `shikumi-testing/` | Internal: shared offline test harness and fixtures. |
+
+Published packages may depend on this internal package in test suites; Hackage tarball builds with `--enable-tests` require a local copy of `shikumi-testing`.
 
 > If a future release should publish `shikumi-cli` too, that is a deliberate decision — confirm
 > with the operator and append it after `shikumi-optimize` / `shikumi-trace-otel` in the order.
@@ -283,7 +286,7 @@ Verify each release page renders, then report the Hackage URLs
 - **`--publish` is irreversible.** Prefer a candidate dry-run first; double-check the version and
   package before publishing.
 - **Build only inside the dev shell** (GHC 9.12.4). The system `ghc` is the wrong compiler.
-- **Never publish the internal packages** (`shikumi-cli`, `shikumi-jitsurei`) without an explicit
+- **Never publish the internal packages** (`shikumi-cli`, `shikumi-jitsurei`, `shikumi-testing`) without an explicit
   decision to change the published set.
 - **Before uploading `shikumi-okf`**, verify `okf-core` resolves from Hackage and no local-path or
   `source-repository-package` override for it is active. Hackage will reject dependencies that are
