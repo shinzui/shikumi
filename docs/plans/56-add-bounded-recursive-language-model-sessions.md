@@ -24,8 +24,8 @@ A recursive language-model session lets an agent inspect a large document held o
 - [x] (2026-09-07) Read plan and skill contracts; created intention with `mina ci --json`.
 - [x] (2026-09-07 04:43Z) Implemented and validated bounded context operations, including Unicode offsets, atomic variable rejection, search continuation and serialized observation limits.
 - [x] (2026-09-07 04:43Z) Implemented exact whole-batch subquery admission and typed Program loop. All 117 shikumi-tools tests pass, including concurrent two-megabyte acceptance and failed subquery propagation.
-- [x] (2026-09-07 04:47Z) Added the complete compiled offline usage example and user guide; package suite passes all 118 tests. Allocated and validated ADR-7 (`just check-adr`: 7 concepts).
-- [ ] Run final workspace integration build and complete the retrospective.
+- [x] (2026-09-07 04:44Z) Added the complete compiled offline usage example and user guide; package suite passes all 118 tests. Allocated and validated ADR-7 (`just check-adr`: 7 concepts).
+- [x] (2026-09-07 04:47Z) Full workspace `cabal build all` passed; `just check-adr` validates all 7 ADRs and `git diff --check` passes. Completed the retrospective and linked the plan to its Rei intention.
 
 ## Surprises & Discoveries
 
@@ -52,7 +52,9 @@ Decision (2026-09-07): count document names against context capacity and variabl
 ## Outcomes & Retrospective
 
 
-The experimental session and RLM modules now implement all four feature milestones. The scripted two-megabyte fixture locates and slices facts at offsets 0 and 1,500,000, persists an intermediate value, asks one subquery and submits a typed combined answer in nine outer operations (ten total LLM calls). Two concurrent invocations return different expected facts and begin without each other's variables. All 118 package tests pass, including the compiled documentation example. Final workspace integration validation remains.
+The experimental session and RLM modules now implement all four feature milestones. The scripted two-megabyte fixture locates and slices facts at offsets 0 and 1,500,000, persists an intermediate value, asks one subquery and submits a typed combined answer in nine outer operations (ten total LLM calls). Two concurrent invocations return different expected facts and begin without each other's variables. All 118 package tests pass, including the compiled documentation example. The full workspace build also passes. `just check-adr` validates all 7 records, and `git diff --check` is clean. The intended prototype is complete and remains explicitly experimental; no live-provider quality claim is made.
+
+The main lesson is that character limits must cover serialized envelopes, escaping and metadata rather than only visible payloads. Keeping state pure and subqueries sequential made invocation isolation and exact batch admission straightforward to test without host execution or cleanup machinery. Logical call limits remain distinct from transport retries and dollars. These durable lessons are recorded in ADR-7; there is no remaining work within this plan's scope.
 
 ## Context and Orientation
 
@@ -106,7 +108,15 @@ nix develop .#ghc9124 -c cabal test shikumi-tools
 nix develop .#ghc9124 -c cabal build all
 ```
 
-These commands should report successful compilation and a passing shikumi-tools test suite, including SessionSpec and RLMSpec. Record actual test output during implementation. Locate every new dependency API through Mori first; if introducing a dependency or bound, verify the released version on its authoritative registry and upstream tags. This design requires no new interpreter dependency.
+These commands should report successful compilation and a passing shikumi-tools test suite, including SessionSpec and RLMSpec. Implementation validation on 2026-09-07 completed all three commands successfully. The final package suite reported:
+
+```text
+All 118 tests passed (0.19s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+```
+
+The workspace build exited 0, and `just check-adr` reported `OK: 7 concepts (okf_version 0.2)`. Locate every new dependency API through Mori first; if introducing a dependency or bound, verify the released version on its authoritative registry and upstream tags. This design requires no new interpreter dependency.
 
 ## Validation and Acceptance
 
@@ -134,3 +144,5 @@ Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authorin
 Revision (2026-09-07): implemented milestones 1–3 and large-context acceptance with 117 passing package tests; clarified serialized bounds, logical dispatch accounting and existing typed exhaustion mapping. Packaging documentation and final integration checks remain.
 
 Revision (2026-09-07): completed packaging, compiled documentation example and ADR distillation; package suite now has 118 passing tests. Final workspace build remains.
+
+Revision (2026-09-07): completed full workspace build and final checks, recorded acceptance evidence and retrospective, and clarified the core `BudgetExceeded` documentation to include resource allowances. All plan work is complete.

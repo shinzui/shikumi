@@ -45,7 +45,7 @@ The initial review found no ADR corpus. The user subsequently requested explicit
 | 54 | Add structured resumable ReAct history | [Plan 54](../plans/54-add-structured-resumable-react-history.md) | None | None | Not Started |
 | 30 | MCP-to-Tool adapter (externally owned) | [Plan 30](../plans/30-mcp-to-tool-adapter-surfacing-mcp-tools-into-the-registry.md) | EP-54; external MCP C1/C2 release | None | Not Started |
 | 55 | Decode nested XML output fields | [Plan 55](../plans/55-decode-nested-xml-output-fields.md) | None | None | Not Started |
-| 56 | Add bounded recursive language-model sessions | [Plan 56](../plans/56-add-bounded-recursive-language-model-sessions.md) | None | EP-54 | Not Started |
+| 56 | Add bounded recursive language-model sessions | [Plan 56](../plans/56-add-bounded-recursive-language-model-sessions.md) | None | EP-54 | Complete |
 | 57 | Search and persist typed program structures | [Plan 57](../plans/57-search-and-persist-typed-program-structures.md) | EP-53 | None | Not Started |
 
 Status values are Not Started, In Progress, Complete, and Cancelled. Plan 30 retains its existing intention and parent mori://shinzui/baikai/masterplans/6-mcp-support-across-the-agent-stack. External C1/C2 are mori://shinzui/baikai/plans/30-mcp-transport-and-json-rpc-client-core and mori://shinzui/baikai/plans/31-mcp-tool-discovery-and-invocation. Confirm actual released symbols and bounds from source, Hackage, and upstream tags before starting that adapter. A missing upstream implementation is an explicit prerequisite, not a reason to fabricate a local shim. During planning, mori path returned artifact-not-found for the external MCP master, both C1/C2 plan handles, and the declaration-layer consumer cited in plan 30. These are intended canonical references retained from the existing plan; registry resolution is not verified and must be revisited during prerequisite discovery.
@@ -84,7 +84,8 @@ Every child updates its affected Cabal/test registration, changelogs and maintai
 - [x] (2026-09-07) Plan 51 complete: build all and test all pass (16 suites); ADR-2/ADR-3 and maintained documentation delivered.
 - [x] (2026-09-07) Plan 52 completed: failure-aware node feedback and ADR-4; its recorded full test validation passes.
 - [x] (2026-09-07 04:06Z) Plan 53 complete: shared execution, validation objectives, lifecycle reports and ADR-5; 120 optimizer tests and all 16 suites pass (Redis integration skipped), and the documented example selects B using 5/20 operations.
-- [ ] Remaining children 54–57 and the linked MCP adapter.
+- [x] (2026-09-07) Plan 56 completed: experimental bounded sessions, exact subquery admission, concurrent large-context acceptance, 118 package tests and a passing full workspace build; ADR-7 records ownership and budget semantics.
+- [ ] Remaining children 54, 55, 57 and the linked MCP adapter.
 
 
 ## Surprises & Discoveries
@@ -108,7 +109,7 @@ On 2026-09-06, distinguish current behavior from DSPy marketing and historical p
 ## Outcomes & Retrospective
 
 
-Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 has consumed the observation types and delivered failure-aware node feedback. Plan 53 implements shared admission, validation objectives and lifecycle reporting under ADR-5, with 120 optimizer tests, a passing full suite (Redis integration skipped), and the documented offline example selecting B at 5/20 admitted operations. Phase A is complete; plan 57 can consume the shared session without importing GEPA. The remaining children and linked MCP adapter are unimplemented. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
+Plan 51 is complete: heterogeneous demos run and round-trip, with node-local consumer pools and isolated observation evidence. The full workspace build and all 16 test suites pass. Plan 52 has consumed the observation types and delivered failure-aware node feedback. Plan 53 implements shared admission, validation objectives and lifecycle reporting under ADR-5, with 120 optimizer tests, a passing full suite (Redis integration skipped), and the documented offline example selecting B at 5/20 admitted operations. Phase A is complete; plan 57 can consume the shared session without importing GEPA. Plan 56 is also complete, delivering experimental bounded document sessions with a compiled example, private invocation state and exact logical subquery admission. Other outstanding children and the linked MCP adapter remain separately tracked. Completion requires all seven new plans plus the linked MCP adapter to pass their behavior tests, or an explicit registry scope revision if external MCP work remains unavailable. Independent completed children may be delivered while MCP is pending; do not mark the whole initiative complete prematurely.
 
 Final integration runs from the repository root:
 
@@ -130,3 +131,5 @@ Revision (2026-09-07): record plan 51 implementation and the observation interfa
 Revision (2026-09-07): mark plan 51 complete after full workspace validation; this satisfies plan 52's capture prerequisite without changing other child statuses.
 
 Revision (2026-09-07): reconcile completed plan 52 and record plan 53 completion and validation evidence; the remaining initiative stays open.
+
+Revision (2026-09-07): record plan 56 completion and its package/full-build validation; the overall initiative remains incomplete.

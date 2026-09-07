@@ -34,7 +34,7 @@ data ShikumiError
     ContextWindowExceeded !Text
   | -- | the call exceeded its time budget
     Timeout !Text
-  | -- | the running cost ceiling was reached; the call was refused
+  | -- | a configured resource allowance was exhausted (cost, calls or session size)
     BudgetExceeded !Text
   | -- | generated code failed after exhausting correction attempts
     CodeExecFailed !Text
