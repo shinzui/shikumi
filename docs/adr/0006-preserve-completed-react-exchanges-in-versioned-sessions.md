@@ -5,10 +5,10 @@ description: Keep rich tool results and full assistant exchanges in validated ch
 docId: ADR-6
 status: Accepted
 date: 2026-09-06
-timestamp: 2026-09-07T04:20:28Z
+timestamp: 2026-09-07T04:26:19Z
 generated:
   by: process:codex
-  at: 2026-09-07T04:20:28Z
+  at: 2026-09-07T04:26:19Z
 ---
 
 # Preserve completed ReAct exchanges in versioned sessions
@@ -26,7 +26,7 @@ implements these requirements alongside the legacy API.
 
 `Shikumi.Tool.Output` owns native text/image results, structured JSON, and raw
 extension blocks. Dynamic tools use the same `LLM`/`Error ShikumiError` effect row
-as typed tools. Text projections label JSON and preserve image data; provider
+as typed tools. Text projections label JSON, error flags, and image data; provider
 projections retain native image blocks. Local preservation does not imply image
 tool-result support in a provider. Dependencies and transport behavior remain
 unchanged.
@@ -37,7 +37,9 @@ including exact rational costs. Do not depend on a dependency's incidental JSON
 encoding as the checkpoint schema. Invalid proposals remain audit-only with a
 corrective user message in the request view. Validate the whole proposal before
 any dispatch, preserving valid native IDs and assigning synthetic IDs only to
-prompt-protocol actions. Compaction replaces whole entries in the request view;
+prompt-protocol actions. Share the prompt parser between proposal acceptance and
+checkpoint validation so validity cannot diverge after dispatch. Compaction
+replaces whole entries in the request view;
 the full audit remains available and serializable.
 
 Session operations in `Shikumi.Agent.ReAct` use a reserved final-submission tool,

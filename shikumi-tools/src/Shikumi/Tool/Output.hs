@@ -39,7 +39,7 @@ extraText o =
 
 -- | Text projection preserves image bytes as labeled JSON rather than dropping them.
 renderToolOutput :: ToolOutput -> Text
-renderToolOutput o = T.intercalate "\n" (map render (V.toList (result o ^. #content)) <> extraText o)
+renderToolOutput o = (if result o ^. #isError then "Tool error: " else "") <> T.intercalate "\n" (map render (V.toList (result o ^. #content)) <> extraText o)
   where
     render (B.ToolResultText (B.TextContent t)) = t
     render (B.ToolResultImage img) = "Image JSON: " <> jsonText (toJSON img)

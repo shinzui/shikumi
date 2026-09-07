@@ -3,6 +3,7 @@
 module AgentHistorySpec (tests) where
 
 import Baikai qualified as B
+import Baikai.Cost qualified as BC
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.Key qualified
@@ -16,6 +17,7 @@ import Effectful (Eff, IOE, liftIO, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
 import Fixtures
+import GHC.Generics (Generic)
 import MockLLM (mkTextResponse, mkToolCallResponse, mkToolCallsResponse)
 import ReActSessionExample qualified
 import Shikumi.Adapter qualified
@@ -24,11 +26,19 @@ import Shikumi.Agent.ReAct
 import Shikumi.Compaction (CompactionConfig (..))
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
-import Shikumi.Signature (setInstruction)
+import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
+import Shikumi.Signature (Signature, mkSignature, setInstruction)
 import Shikumi.Tool
 import Shikumi.Tool.Output
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
+
+newtype Positive = Positive {value :: Int}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToSchema, FromModel)
+
+instance Validatable Positive where
+  validate x@(Positive n) = if n > 0 then Right x else Left "must be positive"
 
 cfg :: ReActConfig
 cfg = defaultReActConfig {protocol = ProtocolNative, compaction = CompactionConfig 0 4 False}
@@ -250,6 +260,96 @@ tests =
             decodeSession (encodeSession s) @?= Right s
             length (auditHistory s) @?= 3
           _ -> pure (),
+      testCase "usage compaction retains complete exchanges across restore" $ do
+        let compactCfg = cfg {compaction = CompactionConfig 0 1 True}
+            large = firstTurn & #model . #contextWindow .~ 10 & #message . #usage . #inputTokens .~ 10
+        (result, requests, dispatched) <- recording (map Right [large, mkTextResponse "question summary", finalTurn]) $ do
+          s <- startSession weatherSignature registry compactCfg weatherQuestion >>= advanceSession weatherSignature registry compactCfg >>= paused >>= restored
+          advanceSession weatherSignature registry compactCfg s
+        assertFinished result
+        dispatched @?= ["A", "B"]
+        length requests @?= 3
+        case reverse requests of
+          ctx : _ -> do
+            length [() | B.AssistantMessage _ <- V.toList (ctx ^. #messages)] @?= 1
+            length [() | B.ToolResultMessage _ <- V.toList (ctx ^. #messages)] @?= 2
+          _ -> assertFailure "missing request",
+      testCase "tool infrastructure failure aborts remaining dispatch without retry" $ do
+        let failing = mkRegistry [mkDynTool "A" "" (object []) (\_ -> throwError (BudgetExceeded "tool budget")), mkDynTool "B" "" (object []) (\_ -> pure (Right rich))]
+        (result, requests, dispatched) <- recording [Right firstTurn] $ do
+          s <- startSession weatherSignature failing cfg weatherQuestion
+          advanceSession weatherSignature failing cfg s
+        result @?= Left (BudgetExceeded "tool budget")
+        length requests @?= 1
+        dispatched @?= [],
+      testCase "provider error payload is never dispatched" $ do
+        let failed = firstTurn & #message . #stopReason .~ B.ErrorReason & #message . #errorMessage .~ Just "transport failed"
+        (result, _, dispatched) <- recording [Right failed] (start >>= advanceSession weatherSignature registry cfg)
+        result @?= Left (ProviderFailure "transport failed")
+        dispatched @?= [],
+      testCase "ordinary tool failures are error-flagged model messages" $ do
+        let unknown = mkToolCallResponse "unknown-id" "unknown-tool" (object [])
+        (result, requests, _) <- recording (map Right [unknown, finalTurn]) $ do
+          s <- start >>= advanceSession weatherSignature registry cfg >>= paused
+          advanceSession weatherSignature registry cfg s
+        assertFinished result
+        case reverse requests of
+          ctx : _ -> [p ^. #isError | B.ToolResultMessage p <- V.toList (ctx ^. #messages)] @?= [True]
+          _ -> assertFailure "missing request",
+      testCase "checkpoint rejects altered result names and duplicate results" $ do
+        (result, _, _) <- recording [Right firstTurn] (start >>= advanceSession weatherSignature registry cfg >>= paused)
+        case result of
+          Right s -> case auditHistory s of
+            [_, Exchange payload results Nothing] -> do
+              let base = newSession "native" (sessionFingerprint s) (sessionTools s) "question"
+                  changed = case results of
+                    (call, output) : rest -> (call & #name .~ "different", output) : rest
+                    [] -> []
+              assertBool "name mismatch" (isLeft (base >>= appendExchange payload changed Nothing False))
+              assertBool "duplicate result" (isLeft (base >>= appendExchange payload (results <> results) Nothing False))
+            _ -> assertFailure "unexpected audit"
+          Left err -> assertFailure (show err),
+      testCase "schema changes under an existing tool name require restart" $ do
+        let changed = mkRegistry [mkDynTool "A" "test" (object ["type" .= String "string"]) (\_ -> pure (Right rich)), mkDynTool "B" "test" (object []) (\_ -> pure (Right rich))]
+        (result, requests, _) <- recording [] $ do
+          s <- start
+          continueSession weatherSignature changed cfg weatherQuestion s
+        assertBool "schema rejected" (isLeft result)
+        requests @?= [],
+      testCase "fenced prompt uses identical dispatch and persistence parsing" $ do
+        let promptCfg = cfg {protocol = ProtocolPrompt}
+            proposal = mkTextResponse "```json\n{\"calls\":[{\"tool\":\"A\",\"args\":{}}]}"
+        (result, _, dispatched) <- recording [Right proposal] $ do
+          s <- startSession weatherSignature registry promptCfg weatherQuestion
+          advanceSession weatherSignature registry promptCfg s >>= paused >>= restored
+        assertBool "checkpoint returned" (not (isLeft result))
+        dispatched @?= ["A"],
+      testCase "final submission runs custom semantic validation" $ do
+        let sig = mkSignature "Return a positive value" :: Signature AnswerWeatherQuestion Positive
+            bad = mkToolCallResponse "bad" finalToolName (object ["value" .= (-1 :: Int)])
+            good = mkToolCallResponse "good" finalToolName (object ["value" .= (2 :: Int)])
+        (result, requests, dispatched) <- recording (map Right [bad, good]) $ do
+          s <- startSession sig registry cfg weatherQuestion
+          runSession sig registry cfg s
+        case result of
+          Right (SessionFinished answer s) -> do
+            answer @?= Positive 2
+            sessionTurns s @?= 2
+          _ -> assertFailure (show result)
+        length requests @?= 2
+        dispatched @?= [],
+      testCase "exact rational costs and timestamps survive checkpoint encoding" $ do
+        let cost = BC.Cost (1 / 3) (BC.CostBreakdown (1 / 7) (2 / 9) (1 / 11) (1 / 13))
+            response =
+              firstTurn
+                & #message . #usage . #cost .~ cost
+                & #message . #usage . #reasoningTokens .~ Just 5
+                & #message . #timestamp .~ Just (read "2026-09-07 01:00:00 UTC")
+                & #message . #errorMessage .~ Just "nonfatal diagnostic"
+        (result, _, _) <- recording [Right response] (start >>= advanceSession weatherSignature registry cfg >>= paused)
+        case result of
+          Right s -> (eitherDecode (encode (encodeSession s)) >>= either (Left . show) Right . decodeSession) @?= Right s
+          Left err -> assertFailure (show err),
       testCase "context retry is bounded" $ do
         let compactCfg = cfg {compaction = CompactionConfig 0 1 True}
         (result, requests, dispatched) <- recording [Right firstTurn, Left (ContextWindowExceeded "full"), Right (mkTextResponse "summary"), Left (ContextWindowExceeded "again")] $ do

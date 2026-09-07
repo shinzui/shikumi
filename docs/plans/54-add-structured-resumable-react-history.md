@@ -25,12 +25,14 @@ A caller will run a tool-using agent, save a completed-turn checkpoint, and cont
 - [x] (2026-09-07) Milestone 1: rich output, dynamic dispatch, and compatibility tests.
 - [x] (2026-09-07) Milestone 2: completed-turn sessions and validated final submission.
 - [x] (2026-09-07) Milestone 3: checkpoint persistence, compaction, and recovery.
-- [ ] Milestone 4: documentation, ADR distillation, and workspace validation.
+- [x] (2026-09-07T04:27:01Z) Milestone 4: executable documentation example, ADR-6 distillation, formatting, 96 package tests, and full workspace build.
 
 ## Surprises & Discoveries
 
 
 Baikai also lacks decoders for usage and cost records. The local transfer format parses usage fields explicitly and stores cost as numerator/denominator pairs so non-terminating rational values remain exact. Supported content-block decoders are available and reused. No dependency bounds changed.
+
+Review found that separate prompt parsers could disagree on fenced JSON after dispatch. Both dispatch and checkpoint validation now use `parsePromptActions`; a regression proves an open fenced response accepted for dispatch also round-trips. Error-flagged rich results now explicitly label their text projection so prompt sessions retain failure semantics.
 
 The first rich-output package run passed 74 tests. The session/persistence run passed 86 tests, including native and prompt continuation, exact request equivalence, malformed whole-proposal rejection, and bounded context-window retries. Legacy ReAct and CodeAct regressions remained green.
 
@@ -57,7 +59,18 @@ Decision (2026-09-07): keep a namespaced `shikumi_submit_final` tool name compat
 ## Outcomes & Retrospective
 
 
-Milestones 1–3 are implemented and tested. The session audit retains original assistant metadata and rich results; continuation dispatches only new proposals. Native final submission decodes and validates directly without extraction. Documentation/example integration and final workspace checks remain. [ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) records output ownership, checkpoint compatibility, and the completed-turn crash boundary; strict ADR validation passes.
+All four milestones are complete. Rich typed/dynamic dispatch preserves native blocks, structured JSON, extension data, and error semantics. Session start, single-exchange advance, continuation, and bounded running preserve original native IDs and return validated final answers without extraction. Version-1 checkpoints retain assistant metadata, rational costs, full audit entries, and compacted request views; continuation checks signature and registry compatibility before execution.
+
+The complete offline example in `docs/user/resumable-react-sessions.md` is compiled and executed as `shikumi-tools/test/ReActSessionExample.hs`. The final combined validation ran `nix develop .#ghc9124 -c sh -c 'cabal test shikumi-tools && cabal build all'` successfully. `nix fmt`, `git diff --check`, and `just check-adr` also passed. The final package result was:
+
+```text
+All 96 tests passed (0.22s)
+Test suite shikumi-tools-test: PASS
+1 of 1 test suites (1 of 1 test cases) passed.
+OK: 6 concepts (okf_version 0.2)
+```
+
+[ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) distills output ownership, shared proposal/checkpoint parsing, exact compatibility values, the effect boundary, and completed-turn recovery. No dependency bounds or provider transports changed. Local image preservation remains distinct from provider support, and crashes before a checkpoint is returned/saved still require caller reconciliation. These are documented boundaries, not remaining implementation work.
 
 ## Context and Orientation
 
@@ -140,4 +153,8 @@ This plan has no hard dependency on MCP or other new optimizer plans. Plan 30 co
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
-Revision (2026-09-07): implemented rich dispatch and session persistence, linked the user-created intention and ADR-6, and recorded 86 passing tests. Documentation integration and full workspace validation remain.
+Revision (2026-09-07): implemented rich dispatch and session persistence, linked the user-created intention and ADR-6, and recorded 86 passing tests. Documentation and recovery coverage are integrated; the final combined package-test/workspace-build run passed after the text-error projection adjustment.
+
+Revision (2026-09-07): unified prompt parsing before dispatch and on restore, added custom final validation, exact cost/timestamp, infrastructure, schema-change, and proactive compaction tests, and made rich error flags visible in text projections.
+
+Revision (2026-09-07): completed final validation (96 tests and full workspace build), distilled the parser/error-projection lessons into ADR-6, and marked all four milestones complete.

@@ -46,6 +46,7 @@ tests =
             p ^. #content @?= blocks
             p ^. #isError @?= True
           _ -> assertFailure "expected tool message"
+        assertBool "error flag visible in prompt/text projection" ("Tool error:" `T.isPrefixOf` renderToolOutput output)
         assertBool "image not dropped in text projection" ("Image JSON:" `T.isInfixOf` renderToolOutput output),
       testCase "dynamic recoverable failure is model-visible" $ do
         let tool = mkDynTool "bad" "" (object []) (\_ -> throwError (ValidationFailure "bad result"))

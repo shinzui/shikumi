@@ -77,9 +77,8 @@ import Baikai
   )
 import Baikai qualified as B
 import Control.Lens ((&), (.~), (^.))
-import Data.Aeson (Value (..), eitherDecodeStrict, encode, object, toJSON, withObject, (.:), (.=))
+import Data.Aeson (Value (..), eitherDecodeStrict, encode, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KM
-import Data.Aeson.Types (parseEither)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.List.NonEmpty (NonEmpty (..))
@@ -694,8 +693,7 @@ advanceSession sig reg cfg original = do
       | H.sessionProtocol s == "native" = Right (toolCallsOf resp)
       | not (null (toolCallsOf resp)) = Left "Prompt protocol requires JSON text, not native tool calls."
       | otherwise = do
-          value <- either (Left . T.pack) Right (eitherDecodeStrict (encodeUtf8 (stripFences (responseText resp))))
-          actions <- either (Left . T.pack) Right (parseEither (withObject "proposal" (\o -> o .: "calls" >>= traverse (withObject "call" (\c -> (,) <$> c .: "tool" <*> c .: "args")))) value)
+          actions <- either (\(H.HistoryError t) -> Left t) Right (H.parsePromptActions (responseText resp))
           pure [B.ToolCall ("prompt-" <> T.pack (show (H.sessionTurns s + 1)) <> "-" <> T.pack (show n)) name args | (n, (name, args)) <- zip [1 :: Int ..] actions]
     request s = do
       let native = H.sessionProtocol s == "native"

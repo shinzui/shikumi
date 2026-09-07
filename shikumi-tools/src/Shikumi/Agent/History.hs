@@ -18,6 +18,7 @@ module Shikumi.Agent.History
     appendUser,
     appendExchange,
     validateCalls,
+    parsePromptActions,
     validateSession,
     compactSession,
     encodeSession,
@@ -137,16 +138,19 @@ validateSession s = do
           ensure (null (callsOf p)) "prompt exchange contains native calls"
           ensure (all (T.isPrefixOf "prompt-" . (^. #id_)) calls) "invalid synthetic prompt ID"
           let text = T.concat [t | B.AssistantText (B.TextContent t) <- V.toList (p ^. #content)]
-              stripped = if "```" `T.isPrefixOf` T.strip text then T.unlines (drop 1 (initSafe (T.lines (T.strip text)))) else text
-          actions <- first (HistoryError . T.pack) $ do
-            value <- eitherDecodeStrict (encodeUtf8 stripped)
-            parseEither (withObject "proposal" (\o -> o .: "calls" >>= traverse (withObject "call" (\c -> (,) <$> c .: "tool" <*> c .: "args")))) value
+          actions <- parsePromptActions text
           ensure (actions == map (\c -> (c ^. #name, c ^. #arguments)) calls) "prompt results do not match actions"
         pure (ids <> map (^. #id_) calls)
 
-initSafe :: [a] -> [a]
-initSafe [] = []
-initSafe xs = take (length xs - 1) xs
+-- | Shared proposal/checkpoint parser so acceptance cannot diverge after dispatch.
+parsePromptActions :: Text -> Either HistoryError [(Text, Value)]
+parsePromptActions text = first (HistoryError . T.pack) $ do
+  let trimmed = T.strip text
+      stripped = case T.stripPrefix "```" trimmed of
+        Nothing -> trimmed
+        Just rest -> T.strip (fst (T.breakOn "```" (T.drop 1 (T.dropWhile (/= '\n') rest))))
+  value <- eitherDecodeStrict (encodeUtf8 stripped)
+  parseEither (withObject "proposal" (\o -> o .: "calls" >>= traverse (withObject "call" (\c -> (,) <$> c .: "tool" <*> c .: "args")))) value
 
 ensure :: Bool -> Text -> Either HistoryError ()
 ensure ok message = unless ok (Left (HistoryError message))

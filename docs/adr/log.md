@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Update**: ADR-6: Share proposal and checkpoint parsing and preserve error flags in text projections.
 * **Added**: ADR-6: Preserve completed ReAct exchanges in versioned sessions.
 * **Update**: Refine ADR-5 with admission-time per-example collectors and executable training-screen semantics.
 * **Update**: Add ADR-5 for shared optimizer admission, validation objectives, and diagnostic reporting.

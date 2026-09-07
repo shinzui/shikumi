@@ -150,6 +150,7 @@ its runtime arguments. `ToolOutput` retains `result` (native blocks and error fl
 `structuredContent`, and raw `extensionBlocks`. `runToolCallOutput` preserves these
 fields; `runToolCall` projects to text for legacy callers. Structured JSON and
 extension blocks become explicitly labeled text blocks in model messages.
+Error flags become explicit `Tool error:` labels in text projections.
 Images remain native image blocks; text projection includes labeled image JSON.
 Current providers may reject image tool results: preservation is not transport
 support, and session code does not silently remove images.
