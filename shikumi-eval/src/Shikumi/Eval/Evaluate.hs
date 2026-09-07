@@ -15,6 +15,8 @@ module Shikumi.Eval.Evaluate
   ( evaluate,
     evaluatePure,
     evaluateWith,
+    scoreExecution,
+    tryShikumi,
   )
 where
 
@@ -119,16 +121,36 @@ scoreExample ::
   o ->
   Eff es (Score, Maybe FailureReason)
 scoreExample cfg metric prog inp expd = do
-  predOrErr <- tryShikumi (buildPrediction cfg prog inp)
-  case predOrErr of
+  (_, result) <-
+    scoreExecution
+      (const (failurePolicy cfg))
+      id
+      (tryShikumi (buildPrediction cfg prog inp))
+      (metric expd)
+  pure result
+
+-- | Shared typed execution boundary. The runner retains arbitrary evidence even
+-- on failure; the projection identifies its root result. Only checked errors are
+-- caught. Callers choose their error classification without losing evidence.
+scoreExecution ::
+  (Error ShikumiError :> es) =>
+  (ShikumiError -> FailurePolicy) ->
+  (a -> Either ShikumiError b) ->
+  Eff es a ->
+  (b -> Eff es Score) ->
+  Eff es (a, (Score, Maybe FailureReason))
+scoreExecution policy project runner metric = do
+  evidence <- runner
+  result <- case project evidence of
     Left e -> boundary (ProgramError (renderErr e)) e
-    Right pr -> do
-      scoreOrErr <- tryShikumi (metric expd pr)
-      case scoreOrErr of
+    Right value -> do
+      scored <- tryShikumi (metric value)
+      case scored of
         Left e -> boundary (MetricError (renderErr e)) e
         Right s -> pure (s, Nothing)
+  pure (evidence, result)
   where
-    boundary reason e = case failurePolicy cfg of
+    boundary reason e = case policy e of
       FailAbort -> throwError e
       FailScore s -> pure (s, Just reason)
 

@@ -44,6 +44,7 @@ library
     Shikumi.Optimize.Bootstrap
     Shikumi.Optimize.COPRO
     Shikumi.Optimize.Ensemble
+    Shikumi.Optimize.Feedback
     Shikumi.Optimize.GEPA
     Shikumi.Optimize.Instruction
     Shikumi.Optimize.KNN
@@ -84,6 +85,7 @@ test-suite shikumi-optimize-test
     BootstrapSpec
     CoproSpec
     EnsembleSpec
+    FeedbackSpec
     GepaSpec
     InstructionSpec
     KNNSpec

@@ -1,27 +1,8 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | GEPA (EP-22): a reflective, evolutionary instruction optimizer. Where greedy
--- coordinate ascent is blind, GEPA is /reflective/: it runs the program while
--- capturing, per node, a short natural-language critique ("feedback") of how that
--- node performed, then reflects on those critiques to propose a rewritten
--- instruction. Where greedy search keeps one best program, GEPA keeps a __Pareto
--- frontier__ (see "Shikumi.Optimize.Pareto") of candidates none strictly worse than
--- another across the per-example score vector, samples a parent from it, mutates one
--- node by reflection, scores the child, and folds it back in — until a 'Budget' is
--- spent.
---
--- GEPA consumes EP-16's per-node feedback channel ('attachFeedback'/'feedbackFor'
--- keyed by 'NodePath', with node identity from 'programNodePaths') and EP-19's
--- summaries (here via small in-package fallbacks). The 'Trace'/'Feedback' effects are
--- discharged /internally/ (via 'runFeedback' against the ambient 'Prim'), so the
--- public 'Optimizer' row is unchanged (MasterPlan integration point #4/#5). Feedback
--- is attached at the program level to every node (the DSPy default and the M1
--- baseline); node-specific critique from per-node sub-traces is a documented deferral.
---
--- Output is V1's 'Shikumi.Compile.Types.CompiledProgram' via 'freezeProgram'; the
--- frontier is internal bookkeeping, not part of the returned type. GEPA reuses V1's
--- @Metric@/@Score@ plus a critique @Text@ (its 'FeedbackMetric') rather than a
--- parallel reward type (MasterPlan integration point #1).
+-- | Reflective evolution with failure-aware, node-grounded evidence. Legacy
+-- callbacks produce explicitly program-scoped critiques, never node attribution.
 module Shikumi.Optimize.GEPA
   ( FeedbackMetric,
     ReflectIn (..),
@@ -30,33 +11,33 @@ module Shikumi.Optimize.GEPA
     captureFeedback,
     mutateNode,
     gepa,
+    gepaWithFeedback,
+    FeedbackCallback (..),
+    mutateFromEvidence,
   )
 where
 
-import Control.Monad (forM, forM_, when)
+import Control.Monad (forM_, when)
+import Data.Either (isRight)
+import Data.List (findIndex, sortOn)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, (:>))
-import Effectful.Error.Static (Error)
+import Effectful.Concurrent (Concurrent)
+import Effectful.Error.Static (Error, throwError)
 import Effectful.Prim (Prim)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
+import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval
   ( Dataset,
-    Example (..),
-    ExampleResult (..),
-    Prediction,
-    Report (..),
-    Score,
-    datasetExamples,
     datasetSize,
-    evaluatePure,
-    prediction,
     unScore,
   )
 import Shikumi.LLM (LLM)
 import Shikumi.Module (predict)
+import Shikumi.Optimize.Feedback
 import Shikumi.Optimize.Pareto (Candidate (..), paretoFrontier, sampleParent)
 import Shikumi.Optimize.Search (effectiveInstructionAt, freezeProgram, newBudgetMeter, scoringCost, setNodeInstrIfNew, tryCharge)
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..))
@@ -71,11 +52,8 @@ import Shikumi.Program
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (mkSignature)
 import Shikumi.Trace.Feedback (FeedbackLog, attachFeedback, feedbackFor, runFeedback)
-import Shikumi.Trace.Node (NodePath, programNodePaths)
-
--- | A feedback metric: like V1's @Metric@ but also emits a short critique. Reuses
--- @Score@ (EP-18's reward vocabulary reduces to this) plus a critique @Text@.
-type FeedbackMetric o = o -> Prediction o -> (Score, Text)
+import Shikumi.Trace.Node (NodePath (..), programNodePaths)
+import Shikumi.Trace.Observation (NodeObservation (..))
 
 -- ---------------------------------------------------------------------------
 -- The reflective proposer
@@ -124,25 +102,17 @@ reflectiveProposer =
 -- M1 — feedback capture
 -- ---------------------------------------------------------------------------
 
--- | Run the program over the whole dataset, attaching the feedback metric's critique
--- (when non-empty) to every node keyed by its 'NodePath', and returning the
--- 'FeedbackLog' alongside the per-example score vector (for the Pareto frontier).
+-- | Compatibility projection. Program critique is stored once at the root key,
+-- labeled with its provenance; use 'captureEvidence' to retain full attribution.
 captureFeedback ::
   (LLM :> es, Error ShikumiError :> es, Prim :> es) =>
-  Dataset i o ->
-  FeedbackMetric o ->
-  Program i o ->
-  Eff es (FeedbackLog, [Double])
+  Dataset i o -> FeedbackMetric o -> Program i o -> Eff es (FeedbackLog, [Double])
 captureFeedback ds fm prog = do
-  let paths = programNodePaths prog
-  (scores, fblog) <-
-    runFeedback $
-      forM (datasetExamples ds) $ \(Example inp expd) -> do
-        out <- runProgram prog inp
-        let (sc, crit) = fm expd (prediction out)
-        when (not (T.null crit)) (forM_ paths (\p -> attachFeedback p crit))
-        pure (unScore sc)
-  pure (fblog, scores)
+  captured <- captureEvidence defaultFeedbackConfig ds (legacyFeedback fm) prog
+  (_, logbook) <- runFeedback $ forM_ captured $ \(_, fb, _) ->
+    forM_ (programCritique fb) $ \(source, t) ->
+      when (not (T.null t)) (attachFeedback (NodePath []) ("program (" <> tshow source <> "): " <> t))
+  pure (logbook, [unScore (overallScore fb) | (_, fb, _) <- captured])
 
 -- ---------------------------------------------------------------------------
 -- M2 — reflective mutation
@@ -201,11 +171,25 @@ gepa ::
   FeedbackMetric o ->
   Budget ->
   Optimizer i o
-gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
+gepa proposer fbMetric =
+  gepaWithFeedback
+    (defaultFeedbackConfig {includeProgramCritique = True})
+    proposer
+    (FeedbackCallback (legacyFeedback fbMetric))
+
+-- | An effectful callback portable across the optimizer's existing effect row.
+newtype FeedbackCallback o = FeedbackCallback
+  { runFeedbackCallback ::
+      forall es.
+      (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
+      EvidenceMetric es o
+  }
+
+gepaWithFeedback :: FeedbackConfig -> Program ReflectIn ReflectOut -> FeedbackCallback o -> Budget -> Optimizer i o
+gepaWithFeedback cfg proposer callback budget = Optimizer $ \train metric student -> do
+  either throwError pure (validateFeedbackConfig cfg)
   meter <- newBudgetMeter budget
   let paths = programNodePaths student
-      fields = nodeFieldsIndexed student
-      nNodes = max 1 (length paths)
       progSummary = fallbackProgramSummary (length paths)
       dataSummary = fallbackDatasetSummary (datasetSize train)
       maxCands = maxCandidates budget
@@ -216,8 +200,11 @@ gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
   if not seedFits
     then pure (freezeProgram student)
     else do
-      seedRpt <- evaluatePure train metric student
-      let seedCand = Candidate (foldParams student) (perEx seedRpt) (aggregateScore seedRpt)
+      seedRows <- captureEvidence cfg train (legacyFeedback (\e p -> (metric e p, ""))) student
+      let candidateFrom prog rows =
+            let scores = [unScore (overallScore fb) | (_, fb, _) <- rows]
+             in Candidate (foldParams prog) scores (if null scores then 0 else sum scores / fromIntegral (length scores))
+          seedCand = candidateFrom student seedRows
 
           -- A full step costs: capture + child evaluation over the whole dataset,
           -- plus one reflective proposer call.
@@ -235,27 +222,94 @@ gepa proposer fbMetric budget = Optimizer $ \train metric student -> do
                     Nothing -> pure (bestOf seedCand frontier)
                     Just (parent, seed') -> do
                       let parentProg = rebuild parent
-                          idx = step `mod` nNodes
-                      (fblog, _) <- captureFeedback train fbMetric parentProg
-                      case drop idx paths of
-                        (path : _)
-                          | null (feedbackFor path fblog) ->
-                              -- nothing to reflect on at this node; the reserved
-                              -- full-step budget is a conservative upper bound.
-                              loop (step + 1) cands seed' frontier
-                        _ -> do
-                          child <- mutateNode proposer progSummary dataSummary fields fblog paths idx parentProg
-                          rpt <- evaluatePure train metric child
-                          let childCand = Candidate (foldParams child) (perEx rpt) (aggregateScore rpt)
+                      captured <- captureEvidence cfg train (runFeedbackCallback callback) parentProg
+                      child <- mutateFromEvidence cfg proposer progSummary dataSummary captured step parentProg
+                      if foldParams child == foldParams parentProg
+                        then loop (step + 1) cands seed' frontier
+                        else do
+                          rows <- captureEvidence cfg train (legacyFeedback (\e p -> (metric e p, ""))) child
+                          let childCand = candidateFrom child rows
                               frontier' = paretoFrontier (childCand : frontier)
                           loop (step + 1) (childCand : cands) seed' frontier'
 
       best <- loop 0 [seedCand] 1 [seedCand]
       pure (freezeProgram (rebuild best))
 
--- | The per-example score vector from a report, in dataset order.
-perEx :: Report -> [Double]
-perEx rpt = [unScore s | ExampleResult {score = s} <- results rpt]
+-- | Reflect only on executed nodes with attributed critiques (or explicitly
+-- enabled program fallback). Redaction covers all evidence, errors and critiques
+-- before it reaches the proposer. Rejected retries remain labeled evidence.
+mutateFromEvidence ::
+  (LLM :> es, Error ShikumiError :> es) =>
+  FeedbackConfig ->
+  Program ReflectIn ReflectOut ->
+  Text ->
+  Text ->
+  [(EvaluationEvidence o, FeedbackResult, a)] ->
+  Int ->
+  Program i o ->
+  Eff es (Program i o)
+mutateFromEvidence cfg proposer progSummary dataSummary rows step prog = do
+  either throwError pure (validateFeedbackConfig cfg)
+  validated <- mapM (\(ev, fb, _) -> (ev,) <$> either throwError pure (validateFeedback cfg paths ev fb)) rows
+  let relevant path ev fb =
+        [ obs
+        | obs <- observations ev,
+          observationPath obs == path,
+          not (observationOpaque obs),
+          any (\f -> feedbackPath f == path && not (T.null (critique f)) && maybe True (== observationInvocation obs) (feedbackInvocation f)) (nodeCritiques fb)
+            || (includeProgramCritique cfg && maybe False (not . T.null . snd) (programCritique fb))
+        ]
+      evidence path = [(ev, fb, obs) | (ev, fb) <- validated, obs <- relevant path ev fb]
+      eligible = [p | p <- paths, not (null (evidence p))]
+  case eligible of
+    [] -> pure prog
+    _ | reflectionExamples cfg == 0 || reflectionCharacters cfg == 0 -> pure prog
+    _ -> do
+      let path = eligible !! (max 0 step `mod` length eligible)
+          local = sortOn (\(_, _, obs) -> (isRight (observationStatus obs), null (observationRejectedBy obs))) (evidence path)
+          chosen = take (reflectionExamples cfg) local
+          render (ev, fb, obs) =
+            "example "
+              <> tshow (exampleIndex ev)
+              <> "; invocation "
+              <> tshow (observationInvocation obs)
+              <> "; status: "
+              <> tshow (observationStatus obs)
+              <> "; rejected scopes: "
+              <> tshow (observationRejectedBy obs)
+              <> "\nnode critiques: "
+              <> T.intercalate
+                "\n"
+                [ tshow (provenance f) <> ": " <> critique f
+                | f <- nodeCritiques fb,
+                  feedbackPath f == path,
+                  maybe True (== observationInvocation obs) (feedbackInvocation f)
+                ]
+              <> (if includeProgramCritique cfg then "\nprogram critique: " <> maybe "" tshow (programCritique fb) else "")
+              <> "\ninput: "
+              <> maybe (tshow (observationInputFields obs)) tshow (observationInput obs)
+              <> "\noutput: "
+              <> maybe (tshow (observationOutputFields obs)) tshow (observationOutput obs)
+          payload =
+            T.intercalate "\n\n" (map render chosen)
+              <> if length chosen < length local then "\n[examples truncated]" else ""
+          clean = boundText (reflectionCharacters cfg) . redactEvidence cfg
+      case findIndex (== path) paths of
+        Nothing -> pure prog
+        Just idx -> do
+          ReflectOut newInstruction <-
+            runProgram
+              proposer
+              ( ReflectIn
+                  (clean (effectiveInstructionAt idx prog))
+                  (clean payload)
+                  (clean progSummary)
+                  (clean dataSummary)
+                  (clean (renderFields (drop idx (nodeFieldsIndexed prog))))
+              )
+          pure (setNodeInstrIfNew idx newInstruction prog)
+  where
+    paths = programNodePaths prog
 
 -- | The frontier candidate with the highest aggregate (earliest on ties); falls back
 -- to the seed if the frontier is somehow empty.

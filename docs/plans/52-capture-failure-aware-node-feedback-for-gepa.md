@@ -22,13 +22,20 @@ GEPA should improve the predictor that actually needs correction and continue pa
 ## Progress
 
 
-Implementation has not started. Populate timestamped milestone checkboxes when implementation begins.
+- [x] (2026-09-07 02:48Z) Milestone 1: evidence contracts, bounded critiques, target validation, and legacy adapter.
+- [x] (2026-09-07 02:48Z) Milestone 2: shared typed failure boundary and ordered observed capture.
+- [x] (2026-09-07 02:48Z) Milestone 3: node-grounded reflection and compatibility wrapper.
+- [ ] Milestone 4: integration regressions, documentation, ADR, and full validation.
 
 
 ## Surprises & Discoveries
 
 
-None yet.
+The ordinary predictor fixture uses rendered-field decoding: malformed text produces `MissingField "sentiment"`, rather than InvalidJSON. The positional regression checks this exact original failure; explicit InvalidJSON injection verifies abort identity.
+
+The observed runner requires Prim but no Time or Concurrent effect. Capture retains its legacy effect signature by reporting per-example provider-acknowledged execution usage rather than introducing a mandatory clock. Ordinary evaluation retains its existing timing and concurrency.
+
+Focused validation passed 47 evaluation, 31 trace, and 94 optimizer tests before the final error-priority and sibling-isolation additions. The prior legacy test failed until its expected critique included the truthful program-scope label.
 
 
 ## Decision Log
@@ -39,22 +46,26 @@ On 2026-09-06, separate evidence capture from feedback attribution. An overall p
 On 2026-09-06, score configured candidate/output failures but propagate cancellation, exhausted execution budgets, and infrastructure failures. Preserve the original error and example position. Do not catch every host exception and call it a poor candidate.
 
 
+On 2026-09-07, keep the public ReflectIn fields and put labeled intermediate evidence in its feedback field. Add FeedbackCallback/gepaWithFeedback for effectful attributed feedback; retain gepa as an explicit program-fallback wrapper. Failed/rejected invocations sort before successful evidence and the sample limit counts invocation samples. These contracts are distilled in [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md).
+
+On 2026-09-07, share scoreExecution in shikumi-eval rather than add trace dependencies to evaluation. It accepts an evidence-preserving runner and root projection; ordinary evaluation keeps its prior classifier, while capture hard-aborts BudgetExceeded and exposes explicit infrastructure classification. Critic failures are MetricError. The legacy FeedbackLog projection stores program critique once at the root key with a label. No intention was supplied in the plan or master plan; the skill-required optional question was asked once and work proceeded without a trailer.
+
 ## Outcomes & Retrospective
 
 
-Not implemented. Record actual acceptance evidence and remaining limitations at completion.
+Implementation is complete and all 96 optimizer regressions pass, alongside 47 evaluation and 31 trace tests. Full integration encountered a Baikai fake-tool version-probe timeout during parallel package builds; rerunning the complete suite with `-j1` to establish the integration result. Documentation, changelogs, and ADR-4 are written and strict ADR validation passes.
 
 
 ## Context and Orientation
 
 
-GEPA means a reflective evolutionary optimizer: run candidates, inspect feedback, rewrite an instruction, and retain promising alternatives. shikumi-optimize/src/Shikumi/Optimize/GEPA.hs exports FeedbackMetric, captureFeedback, mutateNode, and gepa. FeedbackMetric currently receives expected and predicted outer outputs and returns a Score and Text. captureFeedback directly calls runProgram in a sequential loop, attaches the same critique to every programNodePaths entry, and aborts on an unhandled ShikumiError. mutateNode only receives instruction, concatenated critique, and superficial summaries. shikumi-optimize/src/Shikumi/Optimize/Pareto.hs stores scores across dataset examples, not named objectives.
+GEPA means a reflective evolutionary optimizer: run candidates, inspect feedback, rewrite an instruction, and retain promising alternatives. Before this implementation, shikumi-optimize/src/Shikumi/Optimize/GEPA.hs exported FeedbackMetric, captureFeedback, mutateNode, and gepa. FeedbackMetric received expected and predicted outer outputs and returned a Score and Text. captureFeedback directly called runProgram in a sequential loop, attached the same critique to every programNodePaths entry, and aborted on an unhandled ShikumiError. mutateNode only received instruction, concatenated critique, and superficial summaries. shikumi-optimize/src/Shikumi/Optimize/Pareto.hs stores scores across dataset examples, not named objectives.
 
 shikumi-eval/src/Shikumi/Eval/Evaluate.hs already catches typed errors per example, and shikumi-eval/src/Shikumi/Eval/Report.hs defines FailurePolicy and indexed ExampleResult. Ordinary evaluation must retain its documented behavior. This plan adds feedback-capable execution sharing those failure/accounting conventions instead of maintaining two inconsistent batch engines. shikumi-trace/src/Shikumi/Trace/Feedback.hs stores node-keyed critiques but lacks example-level attribution and provenance.
 
 Hard prerequisite docs/plans/51-recover-node-local-bootstrap-demonstrations.md adds capture-capable leaves, NodeObservation, and runProgramObserved returning a root Either plus ordered observations, including failed attempts. NodeObservation identifies a structural NodePath and invocation ordinal and may contain structured input/output only when a codec exists. Plain leaves still expose rendered fields, and Embed interiors remain opaque. This plan must not assume every observation contains JSON. The later docs/plans/53-add-validated-multi-objective-gepa-execution-and-lifecycle-events.md adds split-aware search, bounded execution, and reports on this foundation.
 
-[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. docs/improvement-requests/production-evidence-optimization.md requires bounded critiques, provenance, and separation of training feedback from validation/holdout evidence; this plan provides feedback primitives only, not that complete production workflow. Effectful checked errors differ from host exceptions; inspect mori://effectful/effectful/docs/error-guide for the established API before adding handlers.
+[ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. ADR-2 now governs capture codecs and observation isolation; [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) records the implemented feedback attribution and failure boundary. docs/improvement-requests/production-evidence-optimization.md requires bounded critiques, provenance, and separation of training feedback from validation/holdout evidence; this plan provides feedback primitives only, not that complete production workflow. Effectful checked errors differ from host exceptions; inspect mori://effectful/effectful/docs/error-guide for the established API before adding handlers.
 
 Upstream evidence is mori://stanfordnlp/dspy, commit 3f06959eb (2026-08-28), which repaired shortened result arrays when trace capture dropped failed examples. The project is not registered locally and an artifact-level commit URI is pending. Our implementation has a different failure mode, so the requirement is positional stability and explicit failure policy, not copying that Python patch.
 
@@ -65,9 +76,9 @@ Upstream evidence is mori://stanfordnlp/dspy, commit 3f06959eb (2026-08-28), whi
 ### Milestone 1 — Evidence and feedback contracts
 
 
-Create shikumi-optimize/src/Shikumi/Optimize/Feedback.hs with an example-indexed EvaluationEvidence o carrying Either ShikumiError o, observations, and per-example execution summaries. Add NodeFeedback with example index, NodePath, optional invocation ordinal, bounded critique, and provenance (Caller, Model, or LegacyProgram). Add a FeedbackResult containing overall Score, optional program critique, and a list of node critiques. The new callback receives expected output and EvaluationEvidence; an effectful callback can call a critic LM through the existing optimizer effect row. Numeric objectives remain owned by plan 53.
+Create shikumi-optimize/src/Shikumi/Optimize/Feedback.hs with an example-indexed EvaluationEvidence o carrying Either ShikumiError o, observations, and per-example provider-reported execution usage summaries (preserving the legacy effect row without a required clock). Add NodeFeedback with example index, NodePath, optional invocation ordinal, bounded critique, and provenance (Caller, Model, or LegacyProgram). Add a FeedbackResult containing overall Score, optional program critique, and a list of node critiques. The new callback receives expected output and EvaluationEvidence; an effectful callback can call a critic LM through the existing optimizer effect row. Numeric objectives remain owned by plan 53.
 
-Validate every feedback target against the observations for that example and the actual program's node paths. Reject a nonexistent path or negative bound before mutation. A node-specific callback is optional; absence of critique is valid. Keep the exported legacy FeedbackMetric alias and provide a documented adapter whose critique is program-scoped. Register the module in shikumi-optimize/shikumi-optimize.cabal and add FeedbackSpec.hs. A pure test must reject a critique aimed at an unexecuted Map invocation while accepting a real one.
+Validate every feedback target against the observations for that example and the actual program's node paths. Reject a nonexistent path or negative bound before mutation. A node-specific callback is optional; absence of critique is valid. Keep the exported legacy FeedbackMetric alias and provide a documented adapter whose critique is program-scoped. Register the module in shikumi-optimize/shikumi-optimize.cabal and add FeedbackSpec.hs. Pure validation assertions must reject a critique aimed at an unexecuted Map invocation while accepting a real one.
 
 ### Milestone 2 — One position per example under failure
 
@@ -104,7 +115,7 @@ nix fmt
 git diff --check
 ```
 
-Add focused regressions before implementing each milestone. The attribution regression must fail against the prior broadcast implementation; the positional failure regression must fail against the prior aborting capture loop. After the change all three suites report PASS. Store short actual test output in this plan as implementation proceeds; no tests have been run for this design document. Final integration uses nix develop .#ghc9124 -c cabal test all.
+Add focused regressions before implementing each milestone. The attribution regression must fail against the prior broadcast implementation; the positional failure regression must fail against the prior aborting capture loop. After the change all three suites report PASS. Store short actual test output in this plan as implementation proceeds; focused tests have passed, with final integration results recorded below. Final integration uses nix develop .#ghc9124 -c cabal test all.
 
 
 ## Validation and Acceptance
@@ -129,3 +140,7 @@ Feedback.hs owns EvaluationEvidence, NodeFeedback, FeedbackResult, bounded feedb
 Reuse ShikumiError, Score, FailurePolicy, FailureReason, Time, and the existing Effectful row. New effectful metric callbacks must be charged by the execution boundary added in plan 53. No dependency bounds are chosen here; locate APIs through Mori before using them. Do not add deployment, store access, or protected-holdout interfaces to this package.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
+
+Revision (2026-09-07): implemented the evidence contracts, shared checked-error execution boundary, node-grounded reflection, and compatibility adapters; recorded actual focused validation and ADR-4. Full integration validation is in progress.
+
+Validation update (2026-09-07): `nix develop .#ghc9124 -c cabal test all` passed every Shikumi suite, including all 96 optimizer tests, but one of 677 Baikai tests failed: the fake tool version probe expected `Just "faketool 9.9.9"` and returned Nothing after 5.01 seconds. The failure occurred during concurrent package builds; full-suite `-j1` confirmation is in progress. No dependency source changes or compatibility workarounds were introduced.

@@ -9,7 +9,7 @@ import Data.Generics.Labels ()
 import Data.List.NonEmpty qualified as NE
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
-import Effectful.Error.Static (runErrorNoCallStack)
+import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.Prim (runPrim)
 import EvalFixtures
   ( Answer (..),
@@ -23,7 +23,7 @@ import EvalFixtures
   )
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Eval.Evaluate (evaluatePure, evaluateWith)
+import Shikumi.Eval.Evaluate (evaluatePure, evaluateWith, scoreExecution)
 import Shikumi.Eval.Metric (exactMatch, liftMetric)
 import Shikumi.Eval.Report
   ( ExampleResult (..),
@@ -53,7 +53,27 @@ tests :: TestTree
 tests =
   testGroup
     "Evaluate"
-    [ testCase "four-of-five exact match -> aggregateScore 0.8" $ do
+    [ testCase "alternate runner retains typed failure evidence" $ do
+        let err = InvalidJSON "original"
+            envelope = (Left err :: Either ShikumiError Answer, ["attempt"] :: [String])
+        result <-
+          runEff . runErrorNoCallStack @ShikumiError $
+            scoreExecution (const (FailScore scoreZero)) fst (pure envelope) (const (pure (boolScore True)))
+        result @?= Right (envelope, (scoreZero, Just (ProgramError "InvalidJSON \"original\"")))
+        aborted <-
+          runEff . runErrorNoCallStack @ShikumiError $
+            scoreExecution (const FailAbort) fst (pure envelope) (const (pure scoreZero))
+        aborted @?= Left err,
+      testCase "alternate runner labels metric failures separately" $ do
+        result <-
+          runEff . runErrorNoCallStack @ShikumiError $
+            scoreExecution
+              (const (FailScore scoreZero))
+              id
+              (pure (Right ()))
+              (const (throwError (ValidationFailure "metric")))
+        result @?= Right (Right (), (scoreZero, Just (MetricError "ValidationFailure \"metric\""))),
+      testCase "four-of-five exact match -> aggregateScore 0.8" $ do
         let ds = dataset [example q a | (q, a) <- aggregateData]
         report <-
           runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError $

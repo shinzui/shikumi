@@ -9,6 +9,7 @@ import AcceptanceSpec qualified
 import BootstrapSpec qualified
 import CoproSpec qualified
 import EnsembleSpec qualified
+import FeedbackSpec qualified
 import GepaSpec qualified
 import InstructionSpec qualified
 import KNNSpec qualified
@@ -35,6 +36,7 @@ main =
         Miprov2Spec.tests,
         CoproSpec.tests,
         GepaSpec.tests,
+        FeedbackSpec.tests,
         KNNSpec.tests,
         RandomSearchSpec.tests,
         SearchSpec.tests,

@@ -107,7 +107,7 @@ feedbackCapture =
           (p0 : _) -> do
             let crits = feedbackFor p0 fblog
             assertBool "node 0 accumulated a critique" (not (null crits))
-            assertBool "the critique is the expected one" (any (== "be more specific") crits)
+            assertBool "the critique is the expected one" (any (== "program (LegacyProgram): be more specific") crits)
           [] -> assertFailure "expected at least one node"
 
 -- ---------------------------------------------------------------------------
