@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Decision**: Record ADR-7: invocation-local recursive sessions, bounded observations and exact logical subquery admission.
 * **Update**: ADR-6: Share proposal and checkpoint parsing and preserve error flags in text projections.
 * **Added**: ADR-6: Preserve completed ReAct exchanges in versioned sessions.
 * **Update**: Refine ADR-5 with admission-time per-example collectors and executable training-screen semantics.

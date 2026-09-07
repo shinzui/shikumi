@@ -11,9 +11,11 @@ import EnvSpec qualified
 import FsSpec qualified
 import ProgramOfThoughtSpec qualified
 import ProtocolSpec qualified
+import RLMSpec qualified
 import ReActSpec qualified
 import RestrictedSpec qualified
 import SchemaSpec qualified
+import SessionSpec qualified
 import ShellSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import ToolOutputSpec qualified
@@ -25,7 +27,9 @@ main =
   defaultMain $
     testGroup
       "shikumi-tools"
-      [ AgentHistorySpec.tests,
+      [ SessionSpec.tests,
+        RLMSpec.tests,
+        AgentHistorySpec.tests,
         SchemaSpec.tests,
         ToolSpec.tests,
         ToolOutputSpec.tests,

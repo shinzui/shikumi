@@ -22,14 +22,17 @@ A recursive language-model session lets an agent inspect a large document held o
 
 
 - [x] (2026-09-07) Read plan and skill contracts; created intention with `mina ci --json`.
-- [ ] Implement and validate bounded context operations.
-- [ ] Implement exact subquery admission and typed loop.
-- [ ] Validate large-context acceptance, document API, and distill ADR.
+- [x] (2026-09-07 04:43Z) Implemented and validated bounded context operations, including Unicode offsets, atomic variable rejection, search continuation and serialized observation limits.
+- [x] (2026-09-07 04:43Z) Implemented exact whole-batch subquery admission and typed Program loop. All 117 shikumi-tools tests pass, including concurrent two-megabyte acceptance and failed subquery propagation.
+- [x] (2026-09-07 04:47Z) Added the complete compiled offline usage example and user guide; package suite passes all 118 tests. Allocated and validated ADR-7 (`just check-adr`: 7 concepts).
+- [ ] Run final workspace integration build and complete the retrospective.
 
 ## Surprises & Discoveries
 
 
-No implementation discoveries recorded.
+Serialized observations need their JSON escaping and truncation metadata counted, not only the displayed value. The implementation bounds the rendered envelope, preserves source-relative slice continuation offsets, and stops if even metadata cannot fit. Tests include newline escaping and supplementary Unicode characters.
+
+The existing `Validatable` method returns the validated value, which can normalize output, rather than `()`. The loop uses `parseOutput` and retains that validated result. No new dependency or version bound was needed; Mori located the existing Baikai, Aeson and Effectful sources. Text and containers had no matching registered Haskell source, so their established working-tree usage was retained.
 
 ## Decision Log
 
@@ -40,17 +43,23 @@ Decision (2026-09-06): keep state explicit and private per invocation, and run s
 
 Decision (2026-09-06): this plan is independent of structured ReAct and MCP. It exposes its own typed action loop under the existing Program effect boundary; it does not claim unlimited recursion or Python compatibility.
 
+Decision (2026-09-07): count `maxRequestChars` as system plus user Text characters before each logical LLM call, excluding the provider serialization envelope. Count serialized JSON envelopes for observation limits and UTF-8 bytes for actions. Reports count logical subquery dispatch attempts, not interpreter-level transport retries.
+
+Decision (2026-09-07): reuse `BudgetExceeded` for the plain API exhaustion mapping; its typed resource-budget meaning fits this feature, and the message identifies the RLM allowance. The reporting API retains the exact `SessionLimit`. Infrastructure errors propagate without returning a normal report.
+
+Decision (2026-09-07): count document names against context capacity and variable names against aggregate stored capacity, preventing unlimited empty-name metadata or empty-value entries. Accepted batches reserve all slots; reports count calls actually attempted. ADR-7 records these durable boundaries.
+
 ## Outcomes & Retrospective
 
 
-Implementation and experimental acceptance results are pending.
+The experimental session and RLM modules now implement all four feature milestones. The scripted two-megabyte fixture locates and slices facts at offsets 0 and 1,500,000, persists an intermediate value, asks one subquery and submits a typed combined answer in nine outer operations (ten total LLM calls). Two concurrent invocations return different expected facts and begin without each other's variables. All 118 package tests pass, including the compiled documentation example. Final workspace integration validation remains.
 
 ## Context and Orientation
 
 
 `shikumi-tools/src/Shikumi/CodeExec/Interpreter.hs` defines `CodeInterpreter` as a stateless text-to-text computation under `LLM` and `Error ShikumiError`. Its `restrictedInterpreter` evaluates a small arithmetic/string/list language with a 10,000-step limit. It cannot persist variables or reference an external document. `shikumi-tools/src/Shikumi/CodeExec/CodeAct.hs` runs model/code turns then extracts a typed answer; it is a useful loop/testing pattern but is not already a recursive language model. `shikumi/src/Shikumi/Program.hs` allows embedded computations under these two effects. `shikumi/src/Shikumi/LLM/Budget.hs` tracks actual model cost and admits calls optimistically; its dollar ceiling can overshoot by an admitted call's cost and must not be described as a strict monetary reservation.
 
-The reference behavior is from `mori://stanfordnlp/dspy`, project-relative `dspy/predict/rlm.py` (artifact-level URI pending; project currently unregistered in Mori). It keeps context in an interpreter, bounds model calls and output, and manages interpreter ownership. This plan transfers those semantics without adding DSPy as a runtime dependency. [ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review.
+The reference behavior is from `mori://stanfordnlp/dspy`, project-relative `dspy/predict/rlm.py` (artifact-level URI pending; project currently unregistered in Mori). It keeps context in an interpreter, bounds model calls and output, and manages interpreter ownership. This plan transfers those semantics without adding DSPy as a runtime dependency. [ADR-1](../adr/0001-use-profile-governed-architecture-decisions.md) now governs decision records: allocate stable ADR-N handles, preserve decision/provenance metadata, update the bundle index/log, and run `just check-adr`. No earlier feature-specific ADR was found during the initial review. Implementation added [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md), preserving private invocation ownership, serialized observation limits and exact logical subquery admission while retaining the runtime's optimistic dollar contract.
 
 ## Plan of Work
 
@@ -121,3 +130,7 @@ The context store is immutable and session state is an explicit value per invoca
 Use existing `text`, `aeson`, `containers`, `vector`, `effectful`, and the shikumi LLM/Program APIs. This plan has no hard dependency on other new plans. It owns only its new session/RLM modules and tests plus Cabal/docs integration; it does not replace `CodeInterpreter`, modify MCP transport or add arbitrary code execution.
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
+
+Revision (2026-09-07): implemented milestones 1–3 and large-context acceptance with 117 passing package tests; clarified serialized bounds, logical dispatch accounting and existing typed exhaustion mapping. Packaging documentation and final integration checks remain.
+
+Revision (2026-09-07): completed packaging, compiled documentation example and ADR distillation; package suite now has 118 passing tests. Final workspace build remains.

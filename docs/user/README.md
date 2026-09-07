@@ -64,3 +64,5 @@ tracing, evaluation, and optimization — names its real capabilities and nothin
 shikumi type signature reads as an honest capability ledger. See
 [Effects & the runtime](./effects-and-runtime.md#effects-as-a-capability-ledger) for the
 full story.
+
+See [Experimental recursive language-model sessions](./recursive-language-model-sessions.md) for bounded external-document inspection and subqueries.

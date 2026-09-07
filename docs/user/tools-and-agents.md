@@ -363,3 +363,7 @@ configured/unconfigured `web_search` paths.
 For rich results, native message history, checkpoint persistence, and typed final
 submission without extraction, see [Resumable ReAct sessions](resumable-react-sessions.md).
 The legacy APIs described above retain their existing behavior.
+
+## Experimental large-context sessions
+
+[Recursive language-model sessions](recursive-language-model-sessions.md) keep source documents outside the prompt and expose bounded search, slices, private variables and depth-one subqueries with typed submission and an audit report.

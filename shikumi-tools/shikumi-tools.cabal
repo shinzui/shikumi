@@ -49,6 +49,8 @@ library
     Shikumi.CodeExec.Interpreter
     Shikumi.CodeExec.ProgramOfThought
     Shikumi.CodeExec.Prompt
+    Shikumi.CodeExec.RLM
+    Shikumi.CodeExec.Session
     Shikumi.Tool
     Shikumi.Tool.Builtin
     Shikumi.Tool.Builtin.Fs
@@ -99,7 +101,10 @@ test-suite shikumi-tools-test
     ReActSessionExample
     ReActSpec
     RestrictedSpec
+    RLMExample
+    RLMSpec
     SchemaSpec
+    SessionSpec
     ShellSpec
     ToolOutputSpec
     ToolSpec
