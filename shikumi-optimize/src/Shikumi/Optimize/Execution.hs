@@ -16,6 +16,7 @@ module Shikumi.Optimize.Execution
     sessionStopped,
     addPredictedWork,
     reserveCandidate,
+    remainingCandidates,
     evaluateCandidate,
     evaluateCandidates,
     ObjectiveMetric,
@@ -31,7 +32,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Effectful (Eff, Effect, (:>))
-import Effectful.Concurrent (Concurrent)
+import Effectful.Concurrent (Concurrent, ThreadId, myThreadId)
 import Effectful.Concurrent.Async (mapConcurrently)
 import Effectful.Concurrent.QSem (QSem, newQSem, signalQSem, waitQSem)
 import Effectful.Dispatch.Dynamic (interpose)
@@ -80,6 +81,7 @@ data SearchSession (es :: [Effect]) = SearchSession
   { config :: !RunConfig,
     state :: !(IORef OptimizationReport),
     reserved :: !(IORef Int),
+    operationCollectors :: !(IORef (Map.Map ThreadId [IORef Int])),
     startedCandidates :: !(IORef (Set.Set Int)),
     stopped :: !(IORef Bool),
     dispatchPermits :: !QSem,
@@ -116,14 +118,15 @@ runSearchSession ::
   RunConfig -> (SearchSession es -> Eff es a) -> Eff es (Either ShikumiError a, OptimizationReport)
 runSearchSession cfg action = do
   either throwError pure (validateRunConfig cfg)
-  ref <- newIORef (OptimizationReport 1 Completed 0 0 (Map.fromList [("operationLimit", operationLimit (runLimits cfg)), ("candidateLimit", candidateLimit (runLimits cfg)), ("evaluationConcurrency", evaluationConcurrency (runLimits cfg)), ("deterministicSeed", deterministicSeed (runLimits cfg))]) Nothing [] [] [] Nothing "Unscored baseline" True "unspecified" 0 [])
+  ref <- newIORef (OptimizationReport 1 Completed 0 0 (Map.fromList [("operationLimit", operationLimit (runLimits cfg)), ("candidateLimit", candidateLimit (runLimits cfg)), ("evaluationConcurrency", evaluationConcurrency (runLimits cfg)), ("deterministicSeed", deterministicSeed (runLimits cfg))]) Nothing [] [] [] Nothing (Just Unscored) "Unscored baseline" True "unspecified" 0 [])
   count <- newIORef 0
   started <- newIORef Set.empty
+  collectors <- newIORef Map.empty
   halted <- newIORef False
   terminal <- newIORef False
   permits <- newQSem (evaluationConcurrency (runLimits cfg))
   lock <- newQSem 1
-  let s = SearchSession cfg ref count started halted permits lock
+  let s = SearchSession cfg ref count collectors started halted permits lock
       finish status = do
         first <- atomicModifyIORef' terminal (\done -> (True, not done))
         when first $ do
@@ -133,13 +136,17 @@ runSearchSession cfg action = do
           modifyReport s (\r -> r {runStatus = status, candidates = sortOn candidateId (candidates r), unexecutedReservations = [ix | ix <- [0 .. allocated - 1], Set.notMember ix startedIds]})
           emit s (RunFinished status)
       dispatch :: forall x. Eff es x -> Eff es x
-      dispatch op = E.bracket_ (waitQSem (dispatchPermits s)) (signalQSem (dispatchPermits s)) $ do
+      dispatch op = E.bracket_ (waitQSem (dispatchPermits s)) (signalQSem (dispatchPermits s)) $ E.mask $ \restore -> do
         admitted <- atomicModifyIORef' ref $ \r ->
           if admittedOperations r < operationLimit (runLimits cfg)
             then (r {admittedOperations = admittedOperations r + 1}, True)
             else (r, False)
         unless admitted (stop s >> throwError (BudgetExceeded "optimizer operation admission exhausted"))
-        op
+        tid <- myThreadId
+        localCollectors <- Map.findWithDefault [] tid <$> readIORef collectors
+        mapM_ (\counter -> atomicModifyIORef' counter (\n -> (n + 1, ()))) localCollectors
+        restore op
+
   result <-
     ( do
         emit s RunStarted
@@ -172,7 +179,7 @@ runSearchSession cfg action = do
   pure (result, report)
 
 markLegacy :: (Prim :> es) => SearchSession es -> Eff es ()
-markLegacy s = modifyReport s (\r -> r {candidateDetailAvailable = False, selectionReason = "Opaque legacy optimizer; candidate details unavailable", validationMode = "legacy optimizer controlled"})
+markLegacy s = modifyReport s (\r -> r {candidateDetailAvailable = False, resultStatus = Nothing, selectionReason = "Opaque legacy optimizer; candidate details unavailable", validationMode = "legacy optimizer controlled"})
 
 setSelection :: (Prim :> es) => SearchSession es -> Text -> ObjectivePolicy -> Eff es ()
 setSelection s mode policy = modifyReport s $ \r ->
@@ -180,6 +187,7 @@ setSelection s mode policy = modifyReport s $ \r ->
    in r
         { frontier = map candidateId (objectiveFrontier policy (candidates r)),
           selectedCandidate = candidateId <$> winner,
+          resultStatus = Just (maybe Unscored (const CandidateCompleted) winner),
           selectionReason = maybe "Unscored baseline: no eligible completed candidate" (const ("Pareto frontier; primary objective " <> primaryObjective policy <> "; ordered ties; creation order")) winner,
           reportedPolicy = Just policy,
           validationMode = mode
@@ -187,6 +195,10 @@ setSelection s mode policy = modifyReport s $ \r ->
 
 addPredictedWork :: (Prim :> es) => SearchSession es -> Int -> Eff es ()
 addPredictedWork s n = modifyReport s (\r -> r {predictedWork = predictedWork r + max 0 n})
+
+-- | Unreserved candidate slots in this session.
+remainingCandidates :: (Prim :> es) => SearchSession es -> Eff es Int
+remainingCandidates s = (\n -> max 0 (candidateLimit (sessionLimits s) - n)) <$> readIORef (reserved s)
 
 -- | Reserve IDs in scheduling order before spawning any workers.
 reserveCandidate :: (Prim :> es) => SearchSession es -> Eff es (Maybe CandidateId)
@@ -241,17 +253,16 @@ evaluateCandidate s (CandidateId owner ident) ds runner classify metric policy o
           modifyReport s (\r -> r {candidates = report : candidates r})
           emit s (CandidateEnded ident status)
         pure report
-      bump = atomicModifyIORef' calls (\n -> (n + 1, ()))
+      -- Register the collector for this dispatch, including inherited handlers
+      -- in child threads. Only the admission boundary increments it: waiting,
+      -- denied and cancelled-before-admission calls are never counted.
       counted :: forall x. Eff es x -> Eff es x
       counted op = do
-        bump
-        result <- tryShikumi op
-        case result of
-          Left e -> do
-            when (e == BudgetExceeded "optimizer operation admission exhausted") $
-              atomicModifyIORef' calls (\n -> (n - 1, ()))
-            throwError e
-          Right value -> pure value
+        tid <- myThreadId
+        E.bracket_
+          (atomicModifyIORef' (operationCollectors s) (\m -> (Map.insertWith (++) tid [calls] m, ())))
+          (atomicModifyIORef' (operationCollectors s) (\m -> (Map.update (\xs -> case drop 1 xs of [] -> Nothing; rest -> Just rest) tid m, ())))
+          op
       count act =
         interpose
           ( \_ -> \case

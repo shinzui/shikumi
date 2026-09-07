@@ -5,10 +5,10 @@ description: Separate shared operation admission and candidate lifecycle from se
 docId: ADR-5
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-09-07T03:49:40Z
+timestamp: 2026-09-07T04:01:05Z
 generated:
   by: process:codex
-  at: 2026-09-07T03:49:40Z
+  at: 2026-09-07T04:01:05Z
 ---
 
 # Own optimizer admission and diagnostic reports in search sessions
@@ -35,7 +35,8 @@ caller BudgetExceeded errors, and prevents a caught denial from making a partial
 candidate eligible. An exception-safe dispatch semaphore is independent of the
 bounded candidate scheduler, so a recursive evaluator never holds a permit while
 waiting for nested calls. Candidate examples run sequentially in isolated usage
-and latency collectors. Provider transport retries and dollars are different units.
+and latency collectors. Per-dispatch collectors increment at admission, so failed
+admitted calls count while calls cancelled waiting for a permit do not. Provider transport retries and dollars are different units.
 
 Reserve opaque candidate identities before scheduling. Identities belong to one
 session and execute once. Candidate and selection folds use creation order, even
@@ -52,7 +53,7 @@ completed, failed or incomplete state. Synchronous observer exceptions are count
 without changing scores; cancellation propagates with structured cleanup. Observers
 are trusted callbacks and must not indefinitely block.
 
-GEPA reflects only on bounded training evidence. A minibatch screens execution;
+GEPA reflects only on bounded training evidence. A minibatch rejects proposals with no successful training execution;
 it does not reject a candidate solely for a training-score regression, because
 validation may rank it higher. Every validation position is required for eligibility.
 Explicit empty validation is invalid; omission is labeled training-as-validation.

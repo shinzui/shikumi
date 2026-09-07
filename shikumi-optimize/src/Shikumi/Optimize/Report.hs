@@ -168,6 +168,7 @@ data OptimizationReport = OptimizationReport
     unexecutedReservations :: ![Int],
     frontier :: ![Int],
     selectedCandidate :: !(Maybe Int),
+    resultStatus :: !(Maybe CandidateStatus),
     selectionReason :: !Text,
     candidateDetailAvailable :: !Bool,
     validationMode :: !Text,
@@ -191,6 +192,7 @@ instance FromJSON OptimizationReport where
       <*> o .: "unexecutedReservations"
       <*> o .: "frontier"
       <*> o .: "selectedCandidate"
+      <*> o .: "resultStatus"
       <*> o .: "selectionReason"
       <*> o .: "candidateDetailAvailable"
       <*> o .: "validationMode"

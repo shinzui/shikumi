@@ -7,7 +7,7 @@ import Data.Aeson (eitherDecode, encode)
 import Data.Either (isLeft)
 import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Concurrent (Concurrent, runConcurrent)
-import Effectful.Concurrent.Async (cancel, waitCatch, withAsync)
+import Effectful.Concurrent.Async (cancel, mapConcurrently, waitCatch, withAsync)
 import Effectful.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Effectful.Dispatch.Dynamic (interpose)
 import Effectful.Error.Static (Error, catchError, runErrorNoCallStack, throwError)
@@ -22,7 +22,7 @@ import Shikumi.Optimize (Optimizer (..), freezeProgram, fromLegacyOptimizer, opt
 import Shikumi.Optimize.Execution
 import Shikumi.Optimize.Feedback (candidateFailurePolicy)
 import Shikumi.Optimize.Report
-import Shikumi.Program (runProgram)
+import Shikumi.Program (embed, runProgram)
 import Shikumi.Trace.Observation (NodeObservation, runProgramObserved)
 import StubLM (Label (..), Sentence (..), runGepaStubLM, sentimentProg)
 import Test.Tasty (TestTree, testGroup)
@@ -53,7 +53,9 @@ tests =
           assertBool "future report version rejected" (isLeft (eitherDecode (encode report {reportVersion = 2}) :: Either String OptimizationReport)),
       testCase "opaque optimizer and zero cap" $ do
         r <- run $ optimizeWith (cfg 0 1) (fromLegacyOptimizer (Optimizer $ \_ _ p -> runProgram p (Sentence "good") >> pure (freezeProgram p))) ds exactMatch sentimentProg
-        check r $ \(_, report) -> admittedOperations report @?= 0,
+        check r $ \(_, report) -> do
+          admittedOperations report @?= 0
+          resultStatus report @?= Just Unscored,
       testCase "mid candidate stop is incomplete" $ do
         r <- run $ runSearchSession (cfg 1 1) $ \s ->
           evaluateFresh
@@ -67,6 +69,7 @@ tests =
         check r $ \(_, report) -> do
           map candidateStatus (candidates report) @?= [CandidateIncomplete]
           map completedExamples (candidates report) @?= [1]
+          map candidateOperations (candidates report) @?= [1]
           admittedOperations report @?= 1,
       testCase "concurrent final-slot race obeys ceiling and ordered reports" $ do
         r <- run $ runSearchSession (cfg 3 4) $ \s -> do
@@ -87,6 +90,7 @@ tests =
             [ix | Just ix <- ids]
         check r $ \(_, report) -> do
           admittedOperations report @?= 3
+          sum (map candidateOperations (candidates report)) @?= 3
           map candidateId (candidates report) @?= [0, 1, 2, 3]
           length [() | OptimizationEvent _ (CandidateEnded _ _) <- events report] @?= 4,
       testCase "observer exception isolated" $ do
@@ -203,6 +207,56 @@ tests =
         check r $ \(_, report) -> do
           map candidateStatus (candidates report) @?= [CandidateIncomplete]
           map completedExamples (candidates report) @?= [0],
+      testCase "reserved IDs execute once and unused reservations are reported" $ do
+        r <- run $ runSearchSession (cfg 8 1) $ \s -> do
+          first <- reserveCandidate s
+          _ <- reserveCandidate s
+          case first of
+            Nothing -> throwError (ValidationFailure "missing test reservation")
+            Just ident -> do
+              let evaluate =
+                    evaluateCandidate
+                      s
+                      ident
+                      ds
+                      (runProgramObserved sentimentProg)
+                      (candidateFailurePolicy scoreZero)
+                      exactMatch
+                      qualityPolicy
+                      (scalarObjectives exactMatch)
+              _ <- evaluate
+              evaluate
+        check r $ \(out, report) -> do
+          assertBool "reuse rejected" (isLeft out)
+          length (candidates report) @?= 1
+          unexecutedReservations report @?= [1],
+      testCase "Embed bodies share the operation ceiling" $ do
+        r <- run $ runSearchSession (cfg 1 1) $ \_ ->
+          runProgram
+            (embed (\inp -> runProgram sentimentProg inp >> runProgram sentimentProg inp))
+            (Sentence "good")
+        check r $ \(_, report) -> do
+          admittedOperations report @?= 1
+          runStatus report @?= BudgetStopped,
+      testCase "nested concurrent runner counts only admitted operations" $ do
+        r <- run $ runSearchSession (cfg 2 2) $ \s ->
+          evaluateFresh
+            s
+            (dataset [example (Sentence "good") (Label "positive")])
+            ( \inp -> do
+                rows <- mapConcurrently (const (runProgramObserved sentimentProg inp)) [1 .. 4 :: Int]
+                case rows of
+                  row : _ -> pure row
+                  [] -> throwError (ValidationFailure "missing nested test rows")
+            )
+            (candidateFailurePolicy scoreZero)
+            exactMatch
+            qualityPolicy
+            (scalarObjectives exactMatch)
+        check r $ \(_, report) -> do
+          admittedOperations report @?= 2
+          map candidateOperations (candidates report) @?= [2]
+          map candidateStatus (candidates report) @?= [CandidateIncomplete],
       testCase "caller BudgetExceeded remains failure" $ do
         r <- run $ runSearchSession (cfg 8 1) (\_ -> throwError (BudgetExceeded "caller") :: Eff '[LLM, Error ShikumiError, Concurrent, Time, Prim, IOE] ())
         check r $ \(out, report) -> do

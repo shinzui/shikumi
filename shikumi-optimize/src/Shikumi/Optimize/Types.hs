@@ -123,6 +123,9 @@ newtype ConfiguredOptimizer i o = ConfiguredOptimizer
 
 fromLegacyOptimizer :: Optimizer i o -> ConfiguredOptimizer i o
 fromLegacyOptimizer opt = ConfiguredOptimizer $ \session ds metric prog -> do
-  markLegacy session
   halted <- sessionStopped session
-  if halted then pure (CompiledProgram prog) else runOptimizer opt ds metric prog
+  if halted
+    then pure (CompiledProgram prog)
+    else do
+      markLegacy session
+      runOptimizer opt ds metric prog

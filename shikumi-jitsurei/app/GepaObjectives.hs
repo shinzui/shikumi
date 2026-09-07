@@ -17,6 +17,8 @@ import Shikumi.Signature (mkSignature)
 
 newtype Input = Input {question :: Text} deriving stock (Show, Generic)
 
+instance FromModel Input
+
 instance ToPrompt Input
 
 newtype Output = Output {answer :: Text} deriving stock (Eq, Show, Generic)

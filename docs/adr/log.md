@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Update**: Refine ADR-5 with admission-time per-example collectors and executable training-screen semantics.
 * **Update**: Add ADR-5 for shared optimizer admission, validation objectives, and diagnostic reporting.
 * **Update**: Record indexed feedback, explicit attribution, redaction, and typed failure boundaries.
 * **Decision**: Record ADR-3: validated per-node bootstrap mapping, selection and legacy compatibility.

@@ -415,17 +415,22 @@ gepaWith cfg proposer = ConfiguredOptimizer $ \session train metric student -> d
             parent
         -- The screen verifies training execution/feedback before expensive full
         -- validation, without rejecting a child solely for lower training quality.
-        _ <- captureEvidence (feedbackConfig cfg) minibatch (legacyFeedback (\e p -> (metric e p, ""))) child
+        screened <- captureEvidence (feedbackConfig cfg) minibatch (legacyFeedback (\e p -> (metric e p, ""))) child
+        when (all (\(ev, _, _) -> not (isRight (executionResult ev))) screened) $
+          throwError (ValidationFailure "GEPA training screen has no successful executions")
         pure child
       loop step completed = do
         halted <- X.sessionStopped session
-        if halted || step >= X.candidateLimit (X.sessionLimits session) + 4
-          then pure completed
+        remaining <- X.remainingCandidates session
+        if halted || remaining == 0
+          then do
+            when (remaining == 0) (X.reserveCandidate session >> pure ())
+            pure completed
           else do
             let front = R.objectiveFrontier policy (map fst completed)
                 parents = [p | (r, p) <- completed, R.candidateId r `elem` map R.candidateId front]
                 parent = if null parents then best completed else parents !! ((X.deterministicSeed (X.sessionLimits session) + step) `mod` length parents)
-            proposals <- tryShikumi $ forM [0 .. childrenPerGeneration cfg - 1] $ \offset -> do
+            proposals <- tryShikumi $ forM [0 .. min remaining (childrenPerGeneration cfg) - 1] $ \offset -> do
               ident <- X.reserveCandidate session
               case ident of
                 Nothing -> pure Nothing

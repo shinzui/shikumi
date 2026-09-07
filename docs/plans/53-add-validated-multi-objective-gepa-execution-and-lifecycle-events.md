@@ -33,8 +33,10 @@ A user can optimize using training feedback while selecting candidates on a sepa
 ## Surprises & Discoveries
 
 
-The prerequisite plan 52 is implemented and validated, despite the stale master-plan registry. The first integration pass passes all 109 optimizer tests, including objective frontiers, report JSON, caught admission errors, the concurrent final-slot ceiling, and opposite training/validation rankings with a sentinel request check.
+The prerequisite plan 52 is implemented and validated, despite the stale master-plan registry. The first integration pass passed all 109 optimizer tests, including objective frontiers, report JSON, caught admission errors, the concurrent final-slot ceiling, and opposite training/validation rankings with a sentinel request check.
 
+
+A final accounting review found that incrementing a candidate counter before waiting for a dispatch permit would count a cancelled, never-admitted operation. Execution now registers per-dispatch collectors and increments them at the same masked admission boundary as the session counter. Tests compare candidate totals to admitted totals, including nested concurrent runners. The example initially lacked its required FromModel input instance; the full build caught this and the instance was added.
 
 ## Decision Log
 
@@ -48,14 +50,23 @@ On 2026-09-06, define a finite declared objective set with direction and missing
 
 On 2026-09-07, use serial examples inside bounded candidate batches and an independent dispatch semaphore. Keep serializable RunLimits separate from the executable observer. The generic runSearchSession returns the original typed error alongside its diagnostic report; optimizeWith propagates non-session errors, while its lifecycle sink retains terminal metadata. Candidate status and event constructors use CandidateEnded carrying the explicit terminal status to avoid conflicting Haskell constructor names.
 
-On 2026-09-07, training screening verifies execution without requiring training-score improvement: rejecting every training regression would contradict the opposite-ranking validation acceptance fixture. All required validation positions still gate selection. No intention was supplied in either frontmatter; the optional skill question was asked once and implementation proceeded without a trailer.
+On 2026-09-07, training screening requires at least one successful execution without requiring training-score improvement: rejecting every training regression would contradict the opposite-ranking validation acceptance fixture. All required validation positions still gate selection. No intention was supplied in either frontmatter; the optional skill question was asked once and implementation proceeded without a trailer.
 
 On 2026-09-07, refine the deterministic contract to candidate reservation IDs, generation snapshots, parent selection, and result folding. Physical operation order and final-slot allocation across arbitrary concurrent callbacks remain runtime-dependent. Enforcing total ordering across opaque nested operations can prevent barrier-dependent workers from making progress; claiming it from an atomic counter would be false. Width one provides reproducible scheduling for deterministic providers. The source API, user guide, acceptance section, and ADR-5 state this limitation explicitly.
 
 ## Outcomes & Retrospective
 
 
-The shared driver, objective policy, split-aware GEPA path, and lifecycle implementation are in place. The offline optimizer suite passes 114 tests before the final baseline-retention and empty-validation additions. Full repository build, example execution, and final validation remain in progress.
+The shared driver, objective policy, split-aware GEPA path, and lifecycle implementation are in place. All 119 optimizer tests pass, including baseline retention, zero-budget empty-validation rejection, nested concurrent admission counts, and one-use reservations. The full `cabal build all -j1` completed successfully. The offline example prints:
+
+```text
+Validation-selected candidate: B
+Objective frontier: [(1,fromList [("cost",1.0),("quality",1.0)])]
+Admitted operations: 5/20
+Termination: BudgetStopped
+```
+
+The example reaches its two-candidate ceiling, hence BudgetStopped despite unused operation capacity. Final full-suite validation remains in progress.
 
 
 ## Context and Orientation

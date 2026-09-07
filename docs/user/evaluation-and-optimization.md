@@ -426,7 +426,7 @@ Build `config` with `defaultGEPAConfig (FeedbackCallback callback)`, then set
 `validationDataset = Just validation`. Empty training or explicit validation is
 an error. Omitting validation deliberately uses training-as-validation and labels
 that mode in the report. Reflection sees only training evidence. A training
-minibatch screens execution before full validation; a lower training score alone
+minibatch rejects proposals with no successful execution before full validation; a lower training score alone
 does not disqualify a candidate that might generalize better. Validation inputs,
 labels, critiques and traces never enter framework-generated reflection requests.
 Caller programs and callbacks are trusted code, not sandboxed against data access.
@@ -458,7 +458,9 @@ Only candidates with every required validation position can win.
 The session retains ordered candidate outcomes, admitted operations, separately
 estimated work, objective values, frontier and selection reason. A budget stop
 keeps the best completed eligible program; without one, it returns the student
-explicitly unscored. Scored output failures retain their scalar failure policy.
+explicitly unscored (`resultStatus = Just Unscored`). Opaque legacy results use
+`resultStatus = Nothing` because their scoring state is unknown. Scored output
+failures retain their scalar failure policy.
 Typed infrastructure errors propagate; `runSearchSession` is the lower-level API
 returning the original typed error alongside diagnostics for custom strategies.
 `reserveCandidate`, `evaluateCandidate`, and `evaluateCandidates` are independent

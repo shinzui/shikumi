@@ -11,6 +11,7 @@ main = do
   putStrLn "  jitsurei-combinators    retry / validate / mapP / majorityVote / ensemble"
   putStrLn "  jitsurei-evaluate       A typed metric over a dataset -> a Report"
   putStrLn "  jitsurei-optimize       Optimize demos, then serialize and reload them"
+  putStrLn "  jitsurei-gepa-objectives Validation-selected GEPA with quality/cost reports"
   putStrLn "  jitsurei-react          A typed tool and a ReAct agent loop"
   putStrLn "  jitsurei-trace-replay   Caching, hierarchical tracing, deterministic replay"
   putStrLn "  jitsurei-multimodal     An image input field the model actually sees"
