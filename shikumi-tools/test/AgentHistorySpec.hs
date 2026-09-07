@@ -18,7 +18,6 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
 import Fixtures
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse, mkToolCallResponse, mkToolCallsResponse)
 import ReActSessionExample qualified
 import Shikumi.Adapter qualified
 import Shikumi.Agent.History
@@ -28,6 +27,7 @@ import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature, setInstruction)
+import Shikumi.Testing (mkTextResponse, mkToolCallResponse, mkToolCallsResponse)
 import Shikumi.Tool
 import Shikumi.Tool.Output
 import Test.Tasty (TestTree, testGroup)

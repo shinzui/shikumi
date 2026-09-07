@@ -4,7 +4,7 @@ module ShellSpec (tests) where
 
 import Control.Lens ((^.))
 import Data.Text qualified as T
-import MockLLM (runEffMock)
+import Shikumi.Testing (runEffScript)
 import Shikumi.Tool (Tool (..))
 import Shikumi.Tool.Builtin.Shell (BashReq (..), bashTool)
 import Shikumi.Tool.Env (localToolEnv)
@@ -17,7 +17,7 @@ tests =
     "Tool.Shell"
     [ testCase "bash captures stdout and zero exit" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             run
               (bashTool localToolEnv)
               BashReq {command = "echo hi", cwd = Nothing, timeoutMs = Just 5000, stdin = Nothing}
@@ -28,7 +28,7 @@ tests =
             assertBool "stdout contains hi" ("hi" `T.isInfixOf` (resp ^. #stdout)),
       testCase "bash returns stderr and non-zero exit as a value" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             run
               (bashTool localToolEnv)
               BashReq {command = "echo oops 1>&2; exit 3", cwd = Nothing, timeoutMs = Just 5000, stdin = Nothing}

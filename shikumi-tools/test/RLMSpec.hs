@@ -14,7 +14,6 @@ import Effectful (liftIO, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse)
 import RLMExample qualified
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.CodeExec.Prompt (encodeText)
@@ -25,6 +24,7 @@ import Shikumi.LLM (LLM (..))
 import Shikumi.Program (Program, runProgram)
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing (mkTextResponse)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 

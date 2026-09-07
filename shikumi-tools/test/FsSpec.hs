@@ -9,8 +9,8 @@ import Data.Foldable (traverse_)
 import Data.List (sort)
 import Data.Text (Text)
 import Data.Text qualified as T
-import MockLLM (runEffMock)
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Testing (runEffScript)
 import Shikumi.Tool (Tool (..))
 import Shikumi.Tool.Builtin.Fs
   ( EditReq (..),
@@ -53,7 +53,7 @@ tests =
         withTempDir "roundtrip" $ \root -> do
           let file = T.pack (root </> "note.txt")
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               rgPresent <- envExec localToolEnv (presentReq "rg")
               fdPresent <- envExec localToolEnv (presentReq "fd")
               written <- run (writeTool localToolEnv) WriteReq {path = file, content = "alpha\nold title\n"}
@@ -94,7 +94,7 @@ tests =
               nodeFile = T.pack (root </> "node_modules" </> "dep.txt")
               binaryFile = T.pack (root </> "binary.bin")
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               envWriteFile localToolEnv visible "SECRET visible\n"
               envMkdir localToolEnv (T.pack (root </> ".git"))
               envWriteFile localToolEnv gitFile "SECRET git\n"
@@ -113,7 +113,7 @@ tests =
         withTempDir "bad-regex" $ \root -> do
           let visible = T.pack (root </> "visible.txt")
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               envWriteFile localToolEnv visible "hello\n"
               run
                 (grepTool noFastToolEnv)
@@ -127,7 +127,7 @@ tests =
               nestedDir = T.pack (root </> "sub")
               nested = T.pack (root </> "sub" </> "nested.txt")
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               envWriteFile localToolEnv top "marker top\n"
               envMkdir localToolEnv nestedDir
               envWriteFile localToolEnv nested "marker nested\n"
@@ -155,7 +155,7 @@ tests =
         withTempDir "read-truncated" $ \root -> do
           let file = T.pack (root </> "three.txt")
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               envWriteFile localToolEnv file "one\ntwo\nthree\n"
               offsetToEnd <- run (readTool localToolEnv) ReadReq {path = file, offset = Just 1, limit = Nothing}
               firstLine <- run (readTool localToolEnv) ReadReq {path = file, offset = Just 0, limit = Just 1}
@@ -170,7 +170,7 @@ tests =
       testCase "glob at exactly maxResults is not marked truncated" $
         withTempDir "glob-cap" $ \root -> do
           result <-
-            runEffMock [] $ do
+            runEffScript [] $ do
               traverse_
                 ( \n ->
                     envWriteFile
@@ -193,7 +193,7 @@ tests =
             Left _ -> assertBool "directory symlink creation unsupported; skipping" True
             Right () -> do
               result <-
-                runEffMock [] $ do
+                runEffScript [] $ do
                   envWriteFile localToolEnv file "real\n"
                   run (globTool noFastToolEnv) GlobReq {patternText = "*.txt", path = Just (T.pack root)}
               case result of

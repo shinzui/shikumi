@@ -21,7 +21,6 @@ import Fixtures
     weatherRegistry,
     weatherSignature,
   )
-import MockLLM (mkTextResponse, runAgent)
 import Shikumi.Agent.ReAct
   ( Action (..),
     Step (..),
@@ -31,6 +30,7 @@ import Shikumi.Agent.ReAct
     reactWithTrajectory,
   )
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Testing (mkTextResponse, runAgent)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))

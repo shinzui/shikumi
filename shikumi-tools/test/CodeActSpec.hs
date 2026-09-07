@@ -18,7 +18,6 @@ import Data.Vector qualified as V
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse, mkUsageResponse, runAgent, runMockLLMThrowingOn)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Agent.ReAct (Action (..), Step (..), Termination (..), Trajectory (..))
 import Shikumi.CodeExec.CodeAct (CodeActConfig (..), codeActWithTrajectory, defaultCodeActConfig)
@@ -29,6 +28,7 @@ import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program (runProgram)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing (mkTextResponse, mkUsageResponse, runAgent, runScriptLLMThrowingOn)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
@@ -138,7 +138,7 @@ tests =
         out <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog (Task "compute 42")
         case out of
           Right (answer, traj) -> do
@@ -161,7 +161,7 @@ tests =
         out <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog (Task "compute 42")
         out @?= Left (ContextWindowExceeded "context length exceeded")
     ]

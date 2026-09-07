@@ -33,10 +33,10 @@ import Baikai (Response)
 import Data.Aeson (ToJSON, Value, object, (.=))
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse, mkToolCallResponse)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing (mkTextResponse, mkToolCallResponse)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 
 -- ---------------------------------------------------------------------------

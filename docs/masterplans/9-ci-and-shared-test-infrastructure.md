@@ -78,7 +78,7 @@ blind spot this initiative exists to close.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 48 | GitHub Actions CI Pipeline | docs/plans/48-github-actions-ci-pipeline.md | None | None | Complete |
-| 49 | Shared Test Harness and Fixture Diversification | docs/plans/49-shared-test-harness-and-fixture-diversification.md | None | EP-48 | Not Started |
+| 49 | Shared Test Harness and Fixture Diversification | docs/plans/49-shared-test-harness-and-fixture-diversification.md | None | EP-48 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-48).
@@ -147,13 +147,20 @@ and the milestone.
 - [x] EP-48: Milestone 1 — fail-loud skip contract (`SHIKUMI_REQUIRE_BACKENDS`) in the two backend test mains, validated locally in both modes.
 - [x] EP-48: Milestone 2 — `.github/workflows/ci.yml` with lint, test, and examples jobs; actionlint-clean; local mirror commands pass.
 - [x] EP-48: Milestone 3 — workflow pushed and observed green on GitHub; caching effective on the second run.
-- [ ] EP-49: Milestone 1 — `shikumi-testing` package builds; its own test suite passes.
-- [ ] EP-49: Milestone 2 — `shikumi-jitsurei` migrated to the shared harness; all 12 examples still run.
-- [ ] EP-49: Milestone 3 — `shikumi-cli` migrated; its tests pass.
-- [ ] EP-49: Milestone 4 — `shikumi-tools` tests migrated off `MockLLM.hs`; full `cabal test all` green.
+- [x] (2026-09-07) EP-49: Milestone 1 — `shikumi-testing` package builds; its own test suite passes.
+- [x] (2026-09-07) EP-49: Milestone 2 — `shikumi-jitsurei` migrated to the shared harness; all 14 current examples still run.
+- [x] (2026-09-07) EP-49: Milestone 3 — `shikumi-cli` migrated; its tests pass.
+- [x] (2026-09-07) EP-49: Milestone 4 — `shikumi-tools` tests migrated off `MockLLM.hs`; all repository suites pass (Redis skips locally); sibling-only `all` failures recorded.
 
 
 ## Surprises & Discoveries
+
+- 2026-09-07: EP-49 preserved newer multi-tool-call helpers and migrated 16 tools
+  test modules; all 14 current examples produced byte-identical output. The local
+  Cabal override includes `mori://shinzui/baikai` packages, whose catalog and CLI
+  probe failures make unqualified `cabal test all` fail independently of Shikumi.
+  The explicit repository-only test command passes all 13 suites, with the allowed
+  Redis skip and real Postgres integration coverage.
 
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
@@ -242,4 +249,13 @@ Compare the result against the original vision.
   the lean `ghc9124-ci` Nix shell, `shinzui.cachix.org` through Cachix, and a GitHub
   Actions Cabal/dist cache. Redis and Postgres backend suites now fail loudly in CI if
   their backend would skip, and the green run `28717666675` verified that both suites ran
-  real assertions rather than producing `[SKIP]` output. EP-49 remains not started.
+  real assertions rather than producing `[SKIP]` output. EP-49 was not started at that point.
+
+Revision 2026-09-07: record EP-49 implementation against the expanded example and tools suites. Shared ownership and publication constraints are distilled in [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md).
+
+Completion 2026-09-07: EP-49 delivers the internal shared harness, diverse fixtures,
+and all three consumer migrations. Both child plans are complete. The new fixture
+suite passes six tests, CLI passes ten, tools retains 118, and all 14 examples are
+unchanged. `cabal build all` passes; repository test acceptance and the sibling-only
+failures are documented in plan 49. ADR-9 distills harness ownership, dependency
+boundaries, compatibility semantics and the unpublished-test-dependency caveat.

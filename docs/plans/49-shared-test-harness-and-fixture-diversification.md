@@ -55,8 +55,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-09-07) M2: commit.
 - [x] (2026-09-07) M3: migrate `shikumi-cli/src/Shikumi/Cli/Runtime.hs`; `cabal test shikumi-cli` passes.
 - [x] (2026-09-07) M3: commit.
-- [ ] M4: delete `shikumi-tools/test/MockLLM.hs`; update the 16 current importing test modules; `cabal test shikumi-tools` passes.
-- [ ] M4: full `cabal test all` green; commit.
+- [x] (2026-09-07) M4: delete `shikumi-tools/test/MockLLM.hs`; update the 16 current importing test modules; `cabal test shikumi-tools` passes (118 tests, unchanged).
+- [x] (2026-09-07) M4: all 13 repository suites report PASS (Redis skips locally); sibling-only `cabal test all` failures recorded; final milestone committed.
 
 
 ## Surprises & Discoveries
@@ -64,10 +64,12 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-The checkout now uses shikumi 0.3 and baikai 0.6. Hackage preferred.json and upstream tags confirm baikai 0.6.0.1; the new package follows the existing >=0.6 && <0.7 bound. The tools harness now exports `mkToolCallsResponse`, which must also move to preserve current tests.
+The checkout now uses shikumi 0.3 and baikai 0.6. Hackage preferred.json and upstream tags confirm baikai 0.6.0.1; the new package follows the existing >=0.6 && <0.7 bound. The existing ignored `cabal.project.local` also includes packages from `mori://shinzui/baikai`; full `all` validation therefore covers those sibling packages as well. The tools harness now exports `mkToolCallsResponse`, which must also move to preserve current tests.
 
 
 ## Decision Log
+
+- Decision (2026-09-07): accept the full repository suite result separately from local sibling test failures. The ignored local Cabal override adds Baikai suites to `all`; its Claude catalog coverage fails on `claude-fable-5-1` and its core CLI version probe times out. These tests do not depend on the shared harness. Preserve that checkout and explicitly test the thirteen repository packages with suites (the fourteenth package is covered by example execution).
 
 - Decision (2026-09-07): migrate all 16 current tools imports and preserve `mkToolCallsResponse`; smoke-run all 14 current examples with explicit `exe:` targets. The checkout has grown since the plan was drafted.
 
@@ -140,13 +142,27 @@ Milestone 3: the CLI library builds warning-free, all 10 CLI tests pass, and
 `cabal run -v0 exe:shikumi -- --help` prints usage successfully.
 
 
+Milestone 4 and final outcome (2026-09-07): all 16 importing tools modules use the
+shared package, `MockLLM.hs` is removed, and the tools suite retains 118 passing
+tests. `cabal build all` succeeds. The explicit repository package test command
+exits zero with all 13 suites reporting PASS; Redis runs zero tests because its
+socket is unavailable, while Postgres executes its integration assertions.
+The unqualified `cabal test all` additionally runs local sibling Baikai suites and
+fails on the catalog mismatch and version-probe timeout described above. No sibling
+source or local override was changed. Formatting reports zero changes, and strict
+ADR profile/log validation passes for all nine records. All 14 examples have
+byte-identical before/after stdout. ADR-9 captures the durable ownership boundary;
+there are no remaining implementation steps in this plan. Cache-backend harness
+adoption and consumer regression migration remain the explicit follow-up scope.
+
+
 ## Context and Orientation
 
 ADR discovery found no existing record about shared harness ownership. The new
 [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) records the
 internal dependency boundary, compatibility behavior and publication caveat.
 
-shikumi is a thirteen-package cabal project (packages listed in `cabal.project` at the
+shikumi is now a fourteen-package cabal project (packages listed in `cabal.project` at the
 repo root). Everything builds inside the Nix dev shell — enter it with
 `nix develop .#ghc9124` at the repo root; the system `ghc` is the wrong compiler.
 Formatting is fourmolu (config in `fourmolu.yaml`: 2-space indent, trailing arrows/commas,
@@ -644,15 +660,15 @@ Acceptance: `cabal build shikumi-cli` warning-free; `cabal test shikumi-cli` pas
 
 Scope: delete `shikumi-tools/test/MockLLM.hs`; remove `MockLLM` from `other-modules` in
 `shikumi-tools/shikumi-tools.cabal` (line 93) and add `shikumi-testing` to the
-test-suite's `build-depends`. In each of the thirteen spec files that import it
+test-suite's `build-depends`. In each of the sixteen current test modules that import it
 (`AcceptanceSpec.hs`, `BuiltinAcceptanceSpec.hs`, `CodeActSpec.hs`, `CompactionSpec.hs`,
 `EnvSpec.hs`, `Fixtures.hs`, `FsSpec.hs`, `ProgramOfThoughtSpec.hs`, `ProtocolSpec.hs`,
-`ReActSpec.hs`, `ShellSpec.hs`, `ToolSpec.hs`, `WebSpec.hs`), change
+`ReActSpec.hs`, `ShellSpec.hs`, `ToolSpec.hs`, `WebSpec.hs`, `AgentHistorySpec.hs`, `RLMSpec.hs`, `ToolOutputSpec.hs`), change
 `import MockLLM (…)` to `import Shikumi.Testing (…)` and apply the rename table at every
 import and use site — the only renames are `runMockLLM → runScriptLLM`,
 `runMockLLMThrowingOnce → runScriptLLMThrowingOnce`,
 `runMockLLMThrowingOn → runScriptLLMThrowingOn`, `runEffMock → runEffScript`;
-`runAgent`, `mkTextResponse`, `mkUsageResponse`, and `mkToolCallResponse` keep their
+`runAgent`, `mkTextResponse`, `mkUsageResponse`, and `mkToolCallResponse`, and `mkToolCallsResponse` keep their
 names. `CompactionSpec.hs` is the only file using the throwing variants (uses at lines
 115, 139, 161).
 
@@ -663,6 +679,13 @@ change, and `git grep -l "MockLLM"` returns nothing under `shikumi-tools/`.
 ## Concrete Steps
 
 All commands run at the repository root inside the dev shell (`nix develop .#ghc9124`).
+The existing local override adds sibling Baikai packages to `all`. If their own
+suites fail, record that separately and validate this repository with:
+
+```bash
+cabal test shikumi shikumi-cache shikumi-cache-redis shikumi-cache-postgres shikumi-cli shikumi-compile shikumi-eval shikumi-okf shikumi-optimize shikumi-testing shikumi-tools shikumi-trace shikumi-trace-otel
+```
+
 Steps are ordered; each milestone ends green.
 
 Milestone 1:
@@ -736,7 +759,7 @@ Milestone 4:
 
 ```bash
 git rm shikumi-tools/test/MockLLM.hs
-# edit shikumi-tools.cabal and the 13 spec files per Plan of Work; the renames are mechanical:
+# edit shikumi-tools.cabal and the 16 test modules per Plan of Work; the renames are mechanical:
 grep -rn "runMockLLM\|runEffMock\|MockLLM" shikumi-tools/test/   # must end up empty
 nix fmt && cabal test shikumi-tools
 cabal test all
@@ -750,13 +773,17 @@ plan 48's `SHIKUMI_REQUIRE_BACKENDS` contract and is fine locally). Commit as
 
 ## Validation and Acceptance
 
+For a checkout with the local sibling override, the explicit repository test command
+in Concrete Steps is the acceptance gate; failures in additional sibling suites are
+recorded separately rather than concealed as a successful `cabal test all`.
+
 The change is internal plumbing plus new fixtures, so its effect is demonstrated three
 ways. First, deduplication is observable: after Milestone 4,
 `grep -rn "interpret" shikumi-jitsurei/src shikumi-cli/src shikumi-tools/test` finds no
 stub-LM interpreter definitions outside `shikumi-testing/src` (the jitsurei shim
 contains only re-exports; `Shikumi.Cli.Runtime` keeps no `interpret` call of its own),
 and `shikumi-tools/test/MockLLM.hs` no longer exists. Second, behavior is preserved: `cabal test all` inside the dev shell passes with
-the same suites and test counts as before the plan; every one of the twelve
+the same suites and test counts as before the plan; every one of the fourteen current
 `shikumi-jitsurei` executables exits 0 with byte-identical output (the `diff` check in
 Concrete Steps). Third, the new fixtures demonstrably occupy the blind spots:
 `cabal test shikumi-testing` shows `validate` really rejecting `confidence = 1.5` and an
@@ -846,3 +873,5 @@ than duplicating shapes locally; neither plan blocks on this one, and this one d
 block on them.
 
 Revision 2026-09-07: use current dependency bounds and preserve the multi-tool-call response builder added since drafting; record durable ownership in ADR-9.
+
+Revision 2026-09-07 (completion): all four milestones delivered and validated; separate repository acceptance from existing sibling suite failures introduced by the local Cabal override.

@@ -8,8 +8,8 @@ import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful.Error.Static (throwError)
 import Fixtures (weatherArgs, weatherRegistry)
-import MockLLM (runEffMock)
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Testing (runEffScript)
 import Shikumi.Tool
 import Shikumi.Tool.Output
 import Test.Tasty (TestTree, testGroup)
@@ -21,15 +21,15 @@ tests =
     "ToolOutput"
     [ testCase "typed text compatibility" $ do
         let call = B.ToolCall "A" "get_weather" weatherArgs
-        rich <- runEffMock [] (runToolCallOutput weatherRegistry call)
-        plain <- runEffMock [] (runToolCall weatherRegistry call)
+        rich <- runEffScript [] (runToolCallOutput weatherRegistry call)
+        plain <- runEffScript [] (runToolCall weatherRegistry call)
         fmap (fmap renderToolOutput) rich @?= plain,
       testCase "structured-only dynamic output is preserved and visible" $ do
         let value = object ["answer" .= (42 :: Int)]
             output = ToolOutput (B.ToolResult V.empty False) (Just value) [value]
             reg = mkRegistry [mkDynTool "dynamic" "runtime" (object []) (\_ -> pure (Right output))]
             call = B.ToolCall "A" "dynamic" (object [])
-        actual <- runEffMock [] (runToolCallOutput reg call)
+        actual <- runEffScript [] (runToolCallOutput reg call)
         actual @?= Right (Right output)
         assertBool "JSON labels" ("Structured JSON:" `T.isInfixOf` renderToolOutput output && "Extension JSON:" `T.isInfixOf` renderToolOutput output)
         case toolOutputMessage call output of
@@ -50,6 +50,6 @@ tests =
         assertBool "image not dropped in text projection" ("Image JSON:" `T.isInfixOf` renderToolOutput output),
       testCase "dynamic recoverable failure is model-visible" $ do
         let tool = mkDynTool "bad" "" (object []) (\_ -> throwError (ValidationFailure "bad result"))
-        result <- runEffMock [] (runErasedOutput tool (object []))
+        result <- runEffScript [] (runErasedOutput tool (object []))
         result @?= Right (Left (ToolRunFailed "bad" "bad result"))
     ]

@@ -5,10 +5,10 @@ description: Own reusable offline LLM interpreters and nontrivial fixture shapes
 docId: ADR-9
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-09-07T23:00:00Z
+timestamp: 2026-09-07T22:32:18Z
 generated:
   by: process:codex
-  at: 2026-09-07T23:00:00Z
+  at: 2026-09-07T22:32:18Z
 ---
 
 # Centralize offline harness and diverse fixtures

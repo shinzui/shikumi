@@ -95,7 +95,6 @@ test-suite shikumi-tools-test
     EnvSpec
     Fixtures
     FsSpec
-    MockLLM
     ProgramOfThoughtSpec
     ProtocolSpec
     ReActSessionExample
@@ -112,7 +111,7 @@ test-suite shikumi-tools-test
 
   build-depends:
     , aeson
-    , baikai         >=0.6      && <0.7
+    , baikai           >=0.6      && <0.7
     , base
     , bytestring
     , containers
@@ -121,8 +120,9 @@ test-suite shikumi-tools-test
     , filepath
     , generic-lens
     , lens
-    , shikumi        ^>=0.3.0.0
-    , shikumi-tools  ^>=0.3.0.0
+    , shikumi          ^>=0.3.0.0
+    , shikumi-testing  ^>=0.1.0.0
+    , shikumi-tools    ^>=0.3.0.0
     , tasty
     , tasty-hunit
     , text

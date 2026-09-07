@@ -15,13 +15,6 @@ import Fixtures
     weatherRegistry,
     weatherSignature,
   )
-import MockLLM
-  ( mkTextResponse,
-    mkUsageResponse,
-    runAgent,
-    runEffMock,
-    runMockLLMThrowingOn,
-  )
 import Shikumi.Agent.ReAct
   ( Action (..),
     ReActConfig (..),
@@ -41,6 +34,13 @@ import Shikumi.Compaction
   )
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program (runProgram)
+import Shikumi.Testing
+  ( mkTextResponse,
+    mkUsageResponse,
+    runAgent,
+    runEffScript,
+    runScriptLLMThrowingOn,
+  )
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -61,13 +61,13 @@ tests =
       testCase "compactTail folds older items and keeps the recent tail" $ do
         let cfg = defaultCompactionConfig {keepRecent = 2}
         res <-
-          runEffMock [mkTextResponse "S"] $
+          runEffScript [mkTextResponse "S"] $
             compactTail cfg emptyModel id ("summary:" <>) (["e1", "e2", "e3", "e4", "e5", "e6"] :: [Text])
         res @?= Right ["summary:S", "e5", "e6"],
       testCase "compactTail with enabled=False is the identity and calls no model" $ do
         let cfg = defaultCompactionConfig {enabled = False, keepRecent = 0}
             items = ["e1", "e2", "e3"] :: [Text]
-        res <- runEffMock [] $ compactTail cfg emptyModel id ("summary:" <>) items
+        res <- runEffScript [] $ compactTail cfg emptyModel id ("summary:" <>) items
         res @?= Right items,
       testCase "agent on tiny window compacts and completes" $ do
         let cfg =
@@ -119,7 +119,7 @@ tests =
         res <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog weatherQuestion
         case res of
           Right (_ :: WeatherResp, traj) ->
@@ -142,7 +142,7 @@ tests =
         res <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [2] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog weatherQuestion
         res @?= Left (ContextWindowExceeded "context length exceeded"),
       testCase "extract overflow is caught, compacted, and retried once" $ do
@@ -163,7 +163,7 @@ tests =
         res <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [3] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [3] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog weatherQuestion
         case res of
           Right (_ :: WeatherResp, traj) ->
@@ -185,7 +185,7 @@ tests =
         res <-
           runEff
             . runErrorNoCallStack @ShikumiError
-            . runMockLLMThrowingOn [2, 4] (ContextWindowExceeded "context length exceeded") script
+            . runScriptLLMThrowingOn [2, 4] (ContextWindowExceeded "context length exceeded") script
             $ runProgram prog weatherQuestion
         res @?= Left (ContextWindowExceeded "context length exceeded")
     ]

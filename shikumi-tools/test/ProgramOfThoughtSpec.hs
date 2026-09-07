@@ -12,7 +12,6 @@ module ProgramOfThoughtSpec (tests) where
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse, runAgent)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.CodeExec.Interpreter (CodeInterpreter (..))
 import Shikumi.CodeExec.ProgramOfThought (PoTConfig (..), programOfThought, programOfThoughtWith)
@@ -21,6 +20,7 @@ import Shikumi.Module (predict)
 import Shikumi.Program (foldParams)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing (mkTextResponse, runAgent)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 

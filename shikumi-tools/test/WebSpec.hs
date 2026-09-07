@@ -11,8 +11,8 @@ import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
-import MockLLM (runEffMock)
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Testing (runEffScript)
 import Shikumi.Tool (SomeTool (..), ToolRegistry, mkRegistry, runToolCall)
 import Shikumi.Tool.Builtin.Web (webFetchTool, webSearchTool)
 import Shikumi.Tool.Web
@@ -39,7 +39,7 @@ tests =
     "Tool.Web"
     [ testCase "web_fetch returns a stubbed 200 observation" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             runToolCall
               stubRegistry
               (tc "web_fetch" (object ["url" .= ("https://example.test" :: Text)]))
@@ -50,7 +50,7 @@ tests =
           other -> assertFailure ("expected web_fetch observation, got " <> show other),
       testCase "web_fetch surfaces a 404 status as a value" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             runToolCall
               notFoundRegistry
               (tc "web_fetch" (object ["url" .= ("https://example.test/missing" :: Text)]))
@@ -61,7 +61,7 @@ tests =
           other -> assertFailure ("expected 404 as a tool value, got " <> show other),
       testCase "web_search returns stubbed hits" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             runToolCall
               stubRegistry
               (tc "web_search" (object ["query" .= ("shikumi" :: Text)]))
@@ -93,7 +93,7 @@ tests =
       testCase "fetch of a denied URL fails fast with ValidationFailure" $ do
         manager <- newTlsManager
         result <-
-          runEffMock [] $
+          runEffScript [] $
             webFetch
               (localWebClient manager Nothing)
               "http://169.254.169.254/latest/meta-data/"
@@ -109,7 +109,7 @@ tests =
           Just _ -> do
             manager <- newTlsManager
             result <-
-              runEffMock [] $
+              runEffScript [] $
                 runToolCall
                   (mkRegistry [SomeTool (webFetchTool (localWebClient manager Nothing))])
                   (tc "web_fetch" (object ["url" .= ("https://example.com" :: Text)]))

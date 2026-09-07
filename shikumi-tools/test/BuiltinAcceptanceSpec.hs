@@ -14,7 +14,6 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Vector qualified as V
 import GHC.Generics (Generic)
-import MockLLM (mkTextResponse, mkToolCallResponse, runAgent)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Agent.ReAct
   ( Action (..),
@@ -27,6 +26,7 @@ import Shikumi.Agent.ReAct
   )
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing (mkTextResponse, mkToolCallResponse, runAgent)
 import Shikumi.Tool.Builtin (builtinRegistry)
 import Shikumi.Tool.Env (localToolEnv)
 import Shikumi.Tool.Web (FetchResult (..), SearchResult (..), WebClient (..))

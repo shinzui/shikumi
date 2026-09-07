@@ -7,8 +7,8 @@ import Data.ByteString qualified as BS
 import Data.Generics.Labels ()
 import Data.List (find)
 import Data.Text qualified as T
-import MockLLM (runEffMock)
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.Testing (runEffScript)
 import Shikumi.Tool.Env
   ( DirEntry,
     ExecRequest (..),
@@ -37,7 +37,7 @@ tests =
         let file = T.pack (root </> "hello.txt")
             nested = T.pack (root </> "nested")
         result <-
-          runEffMock [] $ do
+          runEffScript [] $ do
             envWriteFile localToolEnv file "hello\n"
             bytes <- envReadFile localToolEnv file
             stat <- envStat localToolEnv file
@@ -78,7 +78,7 @@ tests =
             assertBool "cwd returns an absolute path" ("/" `T.isPrefixOf` cwd),
       testCase "a negative exec timeout is clamped, not disabled" $ do
         result <-
-          runEffMock [] $
+          runEffScript [] $
             envExec
               localToolEnv
               ExecRequest
