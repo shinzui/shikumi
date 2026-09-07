@@ -43,15 +43,8 @@ library
   hs-source-dirs:  src
   exposed-modules: Shikumi.Jitsurei.Stub
   build-depends:
-    , aeson
-    , baikai        >=0.6  && <0.7
-    , base          >=4.20 && <5
-    , effectful
-    , generic-lens
-    , lens          ^>=5.3
-    , shikumi
-    , text          ^>=2.1
-    , vector
+    , base             >=4.20     && <5
+    , shikumi-testing  ^>=0.1.0.0
 
 -- An index that lists the runnable examples (the bundled `shikumi-jitsurei`).
 executable shikumi-jitsurei

@@ -51,11 +51,11 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-09-07) M1: write `shikumi-testing/test/Main.hs`; `cabal test shikumi-testing` passes.
 - [x] (2026-09-07) M1: add `shikumi-testing` to the internal-packages table in `agents/skills/release/SKILL.md`.
 - [x] (2026-09-07) M1: commit with the required trailers.
-- [ ] M2: turn `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` into a re-export shim; run all 14 current examples.
-- [ ] M2: commit.
+- [x] (2026-09-07) M2: turn `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs` into a re-export shim; run all 14 current examples.
+- [x] (2026-09-07) M2: commit.
 - [ ] M3: migrate `shikumi-cli/src/Shikumi/Cli/Runtime.hs`; `cabal test shikumi-cli` passes.
 - [ ] M3: commit.
-- [ ] M4: delete `shikumi-tools/test/MockLLM.hs`; update the 13 importing spec files; `cabal test shikumi-tools` passes.
+- [ ] M4: delete `shikumi-tools/test/MockLLM.hs`; update the 16 current importing test modules; `cabal test shikumi-tools` passes.
 - [ ] M4: full `cabal test all` green; commit.
 
 
@@ -68,6 +68,8 @@ The checkout now uses shikumi 0.3 and baikai 0.6. Hackage preferred.json and ups
 
 
 ## Decision Log
+
+- Decision (2026-09-07): migrate all 16 current tools imports and preserve `mkToolCallsResponse`; smoke-run all 14 current examples with explicit `exe:` targets. The checkout has grown since the plan was drafted.
 
 - Decision: `shikumi-testing` is a proper cabal package listed in `cabal.project`, not a
   vendored test module, and it is internal (never published to Hackage).
@@ -131,6 +133,9 @@ Compare the result against the original purpose.
 
 Milestone 1: shared package compiles warning-free; all six fixture tests pass. `cabal build all` succeeds. ADR-9 passes strict profile and log enforcement. Baseline tools suite: 118 passing tests.
 
+Milestone 2: the compatibility shim builds and all 14 current examples exit zero.
+A recursive diff of the before/after stdout directories is empty: all outputs are byte-identical.
+
 
 ## Context and Orientation
 
@@ -176,10 +181,10 @@ under other names) and two genuinely CLI-specific functions that stay put:
 `mkToolCallResponse`. `runMockLLM` is jitsurei's `runScriptLLM` under another name; the
 throwing variants (throw a `ShikumiError` on selected 1-based completion calls) and
 `mkUsageResponse` (a text response carrying a model and token usage) exist only here and
-move into the shared package. Thirteen spec files import it: `AcceptanceSpec.hs`,
+move into the shared package. The original thirteen spec files import it: `AcceptanceSpec.hs`,
 `BuiltinAcceptanceSpec.hs`, `CodeActSpec.hs`, `CompactionSpec.hs`, `EnvSpec.hs`,
 `Fixtures.hs`, `FsSpec.hs`, `ProgramOfThoughtSpec.hs`, `ProtocolSpec.hs`, `ReActSpec.hs`,
-`ShellSpec.hs`, `ToolSpec.hs`, `WebSpec.hs` (all under `shikumi-tools/test/`). It is
+`ShellSpec.hs`, `ToolSpec.hs`, `WebSpec.hs` (all under `shikumi-tools/test/`). The current checkout also imports it from `AgentHistorySpec.hs`, `RLMSpec.hs`, and `ToolOutputSpec.hs`. It is
 listed under `other-modules` in `shikumi-tools/shikumi-tools.cabal` (line 93).
 
 The fixture blind spots this plan's shared fixtures address (evidence paths from the
