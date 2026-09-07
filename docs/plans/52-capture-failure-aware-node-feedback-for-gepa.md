@@ -25,7 +25,7 @@ GEPA should improve the predictor that actually needs correction and continue pa
 - [x] (2026-09-07 02:48Z) Milestone 1: evidence contracts, bounded critiques, target validation, and legacy adapter.
 - [x] (2026-09-07 02:48Z) Milestone 2: shared typed failure boundary and ordered observed capture.
 - [x] (2026-09-07 02:48Z) Milestone 3: node-grounded reflection and compatibility wrapper.
-- [ ] Milestone 4: integration regressions, documentation, ADR, and full validation.
+- [x] (2026-09-07 02:53Z) Milestone 4: integration regressions, documentation, ADR, and full validation.
 
 
 ## Surprises & Discoveries
@@ -34,6 +34,8 @@ GEPA should improve the predictor that actually needs correction and continue pa
 The ordinary predictor fixture uses rendered-field decoding: malformed text produces `MissingField "sentiment"`, rather than InvalidJSON. The positional regression checks this exact original failure; explicit InvalidJSON injection verifies abort identity.
 
 The observed runner requires Prim but no Time or Concurrent effect. Capture retains its legacy effect signature by reporting per-example provider-acknowledged execution usage rather than introducing a mandatory clock. Ordinary evaluation retains its existing timing and concurrency.
+
+A supplemental strict capability-profile check reports missing recommended `reviews` metadata across all 22 existing capability pages. This is a pre-existing corpus-wide condition; no review provenance was fabricated and no unrelated corpus migration was made. The required strict ADR bundle check passes.
 
 Focused validation passed 47 evaluation, 31 trace, and 94 optimizer tests before the final error-priority and sibling-isolation additions. The prior legacy test failed until its expected critique included the truthful program-scope label.
 
@@ -53,7 +55,23 @@ On 2026-09-07, share scoreExecution in shikumi-eval rather than add trace depend
 ## Outcomes & Retrospective
 
 
-Implementation is complete and all 96 optimizer regressions pass, alongside 47 evaluation and 31 trace tests. Full integration encountered a Baikai fake-tool version-probe timeout during parallel package builds; rerunning the complete suite with `-j1` to establish the integration result. Documentation, changelogs, and ADR-4 are written and strict ADR validation passes.
+Implemented the four milestones. Feedback capture preserves all dataset positions, original typed errors, observation/retry lineage, and provider-acknowledged execution usage. Explicit example/path/invocation attribution is validated before reflection. GEPA reflects on bounded, redacted local evidence and changes only the selected executed node. Legacy entry-point signatures remain supported, with program-scoped critiques labeled rather than broadcast.
+
+The full-search classifier regression improves the second predictor while preserving the extractor and inspecting its intermediate input. Regressions cover missing codecs, invalid Map ordinals, zero/odd limits, sibling exclusion, error prioritization, redaction, retry lineage, exact FailAbort errors, custom failure scores, metric failures, budget escape, and cancellation. Ordinary evaluation and replay behavior remain green. ADR-4 distills the durable evidence, provenance, and error-boundary contracts.
+
+The complete test rerun with `nix develop .#ghc9124 -c cabal test all -j1` passed all 16 suites. The initial parallel run had one dependency fake-tool version-probe timeout; the same probe and all 677 tests in mori://shinzui/baikai passed on the serial rerun. Core focused results were:
+
+```text
+All 47 tests passed (shikumi-eval)
+All 96 tests passed (shikumi-optimize)
+All 31 tests passed (shikumi-trace)
+16 test suites: PASS
+cabal build all -j1: exit 0
+nix fmt / git diff --check: PASS
+just check-adr: OK: 4 concepts (okf_version 0.2)
+```
+
+Remaining limits are deliberate: capture is sequential; callback execution and retry expansion are not strictly charged by predicted-call budgets; structured observations remain optional; and raw returned evidence is not redacted. Plan 53 owns actual bounded execution, split-aware search, and lifecycle reporting. Supplemental capability-profile validation reports the existing missing review metadata across the capability corpus; required ADR enforcement passes.
 
 
 ## Context and Orientation
@@ -141,6 +159,10 @@ Reuse ShikumiError, Score, FailurePolicy, FailureReason, Time, and the existing 
 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
-Revision (2026-09-07): implemented the evidence contracts, shared checked-error execution boundary, node-grounded reflection, and compatibility adapters; recorded actual focused validation and ADR-4. Full integration validation is in progress.
+Revision (2026-09-07): implemented the evidence contracts, shared checked-error execution boundary, node-grounded reflection, and compatibility adapters; recorded actual focused validation and ADR-4. Full integration validation is recorded in Outcomes & Retrospective.
 
-Validation update (2026-09-07): `nix develop .#ghc9124 -c cabal test all` passed every Shikumi suite, including all 96 optimizer tests, but one of 677 Baikai tests failed: the fake tool version probe expected `Just "faketool 9.9.9"` and returned Nothing after 5.01 seconds. The failure occurred during concurrent package builds; full-suite `-j1` confirmation is in progress. No dependency source changes or compatibility workarounds were introduced.
+Validation update (2026-09-07): `nix develop .#ghc9124 -c cabal test all` passed every Shikumi suite, including all 96 optimizer tests, but one of 677 tests in mori://shinzui/baikai failed: the fake tool version probe expected `Just "faketool 9.9.9"` and returned Nothing after 5.01 seconds. The failure occurred during concurrent package builds; full-suite `-j1` confirmation subsequently passed all 16 suites. No dependency source changes or compatibility workarounds were introduced.
+
+Revision (2026-09-07): recorded all 16 passing integration suites, the resolved dependency probe timeout, delivered APIs and regression evidence, and the existing capability-profile metadata limitation.
+
+Completion (2026-09-07): final `nix develop .#ghc9124 -c cabal build all -j1` also passed. All milestones are complete; implementation commit cf73195 and the documentation completion commit retain the ExecPlan trailer.

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-07
+* **Update**: Document failure-aware GEPA attribution, evidence, and budget limits.
 * **Update**: Document node-local bootstrap demonstrations, capture requirements, validated mappings and opaque Embed limits for CAP-16.
 
 ## 2026-08-30

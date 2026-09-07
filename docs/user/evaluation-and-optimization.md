@@ -225,7 +225,7 @@ four families.
 
 | Optimizer | Strategy |
 |---|---|
-| `gepa proposer feedbackMetric budget` | GEPA — captures a per-node natural-language *critique* of how each node performed (a `FeedbackMetric o = o -> Prediction o -> (Score, Text)`), reflects on it to propose a rewritten instruction, and keeps a **Pareto frontier** of candidates non-dominated across the per-example score vector. `reflectiveProposer` is the shipped default proposer. |
+| `gepa proposer feedbackMetric budget` | GEPA — captures a labeled whole-program critique (`FeedbackMetric o = o -> Prediction o -> (Score, Text)`), reflects using executed node evidence to propose a rewritten instruction, and keeps a **Pareto frontier** of candidates non-dominated across the per-example score vector. `reflectiveProposer` is the shipped default proposer. |
 
 **Ensembling** — combine variants:
 
@@ -346,3 +346,69 @@ Dataset i o  +  Metric o
 Evaluation, compilation, and optimization all bottom out in the same `runProgram`/`LLM` stack
 described in [Effects & the runtime](./effects-and-runtime.md) — which is why the CLI can run
 all of them offline against the deterministic stub.
+
+### Failure-aware GEPA feedback
+
+For explicit node attribution, import `Shikumi.Optimize.Feedback` and use
+`gepaWithFeedback config reflectiveProposer callback budget`. A `FeedbackCallback`
+receives the expected output and `EvaluationEvidence`: the zero-based example index,
+original `Either ShikumiError o`, ordered node observations, and provider-reported
+execution token/cost totals. It can call a critic through the optimizer effect row.
+
+For a two-predictor composition, a callback can target only its second predictor:
+
+```haskell
+import Shikumi.Optimize.Feedback
+import Shikumi.Optimize.GEPA
+import Shikumi.Trace.Node
+
+-- The application supplies scoreAndCritique from its domain checks or critic LM.
+callback = FeedbackCallback $ \expected evidence -> do
+  (score, critiqueText) <- scoreAndCritique expected evidence
+  pure FeedbackResult
+    { overallScore = score
+    , programCritique = Nothing
+    , nodeCritiques =
+        [ NodeFeedback (exampleIndex evidence) (NodePath [StepComposeR])
+            Nothing critiqueText Caller
+        ]
+    }
+```
+
+Return no node critique when its target was not executed. Targets are checked
+against actual observations and program paths; `Just ordinal` restricts a critique
+to one invocation, while `Nothing` covers that node's invocations in the example.
+Use `Model` provenance for model-generated critiques. Neither provenance asserts
+human approval. A program-level critique is a separate optional `(Provenance, Text)`.
+`LegacyProgram` is reserved for program attribution.
+
+`captureEvidence config dataset callback program` returns one ordered
+`(EvaluationEvidence, FeedbackResult, Maybe FailureReason)` per input. Output
+failures default to score zero, retaining their original errors and positions.
+Set `failureClassification = candidateFailurePolicy yourScore` to change that score,
+or `const FailAbort` to abort with the original error. Provider failures and timeouts
+abort by default; a caller may classify them explicitly. `BudgetExceeded` and host
+cancellation always escape. Critic failures are labeled `MetricError`, distinct from
+program failures. Ordinary `evaluateWith` retains its existing policies.
+
+Reflection chooses deterministically among executed nodes with relevant critiques.
+It sends local input/output fields (or structured values when codecs exist), error
+status, invocation identity, retry rejection lineage, and only matching node
+critiques. Failures and rejected attempts are prioritized. `includeProgramCritique`
+adds a separately labeled program field; it defaults to false and the legacy `gepa`
+wrapper enables it. `captureFeedback` remains available, projecting legacy program
+critique once to the root log key with a `program (LegacyProgram)` label.
+
+`critiqueCharacters` bounds each critique; `reflectionExamples` bounds invocation
+samples, including retries; `reflectionCharacters` bounds the rendered feedback
+and each other reflection field. Defaults are 2000, 4, and 8000. Negative bounds
+fail before execution, zero critique allowance emits no critique, and zero reflection
+allowance skips mutation. Truncation is marked within the character allowance.
+`redactEvidence` transforms every reflection field before its final truncation and
+before the proposer runs. Raw returned observations are not redacted.
+
+Capture is sequential, Embed interiors stay opaque, and no JSON codec is required.
+Search still uses the supplied optimization metric for candidate selection. Existing
+budget reservations estimate student/proposer calls; arbitrary critic calls and retry
+expansion are not yet strictly metered. Split-aware search, lifecycle reports, and
+actual execution budgets belong to the next execution layer.

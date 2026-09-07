@@ -4,7 +4,7 @@ type: Capability
 description: "Search a Program's instructions, demonstrations, neighbors, and ensembles with multiple optimizers that score typed datasets and stop with the best-so-far candidate at an LM-call budget."
 generated:
   by: process:codex
-  at: "2026-09-07T02:26:32Z"
+  at: "2026-09-07T02:48:16Z"
 capabilityId: CAP-16
 provider: mori://shinzui/shikumi
 status: shipped
@@ -20,6 +20,7 @@ interface:
   - Shikumi.Optimize.RandomSearch
   - Shikumi.Optimize.COPRO
   - Shikumi.Optimize.MIPRO
+  - Shikumi.Optimize.Feedback
   - Shikumi.Optimize.GEPA
   - Shikumi.Optimize.KNN
   - Shikumi.Optimize.Ensemble
@@ -28,6 +29,9 @@ requires:
   - CAP-14
   - CAP-15
 evidence:
+  - kind: test
+    resource: shikumi-optimize/test/FeedbackSpec.hs
+    proves: Failed examples retain positions, node critiques target executed invocations, reflection uses redacted intermediate evidence, and cancellation escapes.
   - kind: test
     resource: shikumi-optimize/test/NodeBootstrapSpec.hs
     proves: Heterogeneous capture pipelines recover node-local demos, reject incompatible mappings before calls, and restore parameters onto their template.
@@ -65,8 +69,17 @@ must decode at the target node. Rejected attempts are excluded and seeded select
 is independent per target. See the [user guide](../user/evaluation-and-optimization.md)
 for configuration and a city/country pipeline.
 
+GEPA supports explicitly attributed node critiques and indexed failed-execution
+evidence. Legacy critiques remain labeled program-scoped. Reflection bounds and
+redacts local evidence and retains failed retry lineage, including without JSON
+codecs. Output failures are scored by default; budget exhaustion and infrastructure
+errors escape unless the latter are explicitly classified.
+
 ## Limits
 
+- GEPA capture is sequential. Critic calls and retry expansion are not strictly
+  charged by the existing predicted-call budget; split-aware execution and lifecycle
+  reports remain future work. Raw returned evidence is not redacted.
 - `Embed` is opaque; hidden predictors cannot provide node demonstrations.
 - Optimizer quality depends on representative training/evaluation data and the
   chosen metric; held-out tests are still required.

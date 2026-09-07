@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expose `scoreExecution` and `tryShikumi` for alternate typed runners retaining execution evidence. Existing evaluation failure, timing, concurrency, and usage behavior is unchanged.
+
 ## 0.2.0.3 — 2026-08-29
 
 ### Changed
