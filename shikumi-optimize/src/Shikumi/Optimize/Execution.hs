@@ -14,8 +14,10 @@ module Shikumi.Optimize.Execution
     markLegacy,
     setSelection,
     sessionStopped,
+    canStartCandidate,
     addPredictedWork,
     reserveCandidate,
+    annotateCandidate,
     remainingCandidates,
     evaluateCandidate,
     evaluateCandidates,
@@ -118,7 +120,7 @@ runSearchSession ::
   RunConfig -> (SearchSession es -> Eff es a) -> Eff es (Either ShikumiError a, OptimizationReport)
 runSearchSession cfg action = do
   either throwError pure (validateRunConfig cfg)
-  ref <- newIORef (OptimizationReport 1 Completed 0 0 (Map.fromList [("operationLimit", operationLimit (runLimits cfg)), ("candidateLimit", candidateLimit (runLimits cfg)), ("evaluationConcurrency", evaluationConcurrency (runLimits cfg)), ("deterministicSeed", deterministicSeed (runLimits cfg))]) Nothing [] [] [] Nothing (Just Unscored) "Unscored baseline" True "unspecified" 0 [])
+  ref <- newIORef (OptimizationReport 1 Completed 0 0 (Map.fromList [("operationLimit", operationLimit (runLimits cfg)), ("candidateLimit", candidateLimit (runLimits cfg)), ("evaluationConcurrency", evaluationConcurrency (runLimits cfg)), ("deterministicSeed", deterministicSeed (runLimits cfg))]) Nothing [] Map.empty [] [] Nothing (Just Unscored) "Unscored baseline" True "unspecified" 0 [])
   count <- newIORef 0
   started <- newIORef Set.empty
   collectors <- newIORef Map.empty
@@ -311,3 +313,20 @@ evaluateCandidates s f = go
       let (batch, rest) = splitAt (evaluationConcurrency (sessionLimits s)) xs
       done <- mapConcurrently f batch
       (done ++) <$> go rest
+
+-- | Attach caller-owned non-sensitive identity before starting a candidate.
+annotateCandidate :: (Concurrent :> es, Prim :> es, Error ShikumiError :> es) => SearchSession es -> CandidateId -> Map.Map Text Text -> Eff es ()
+annotateCandidate s (CandidateId owner ident) metadata = do
+  unless (owner == reserved s) (throwError (ValidationFailure "candidate reservation belongs to another session"))
+  modifyReport s (\r -> r {candidateMetadata = Map.insert ident metadata (candidateMetadata r)})
+  emit s (CandidateMetadata ident metadata)
+
+-- | Check operation capacity before starting another scheduled candidate.
+-- Completed candidates are unaffected when the last slot was used exactly.
+canStartCandidate :: (Prim :> es) => SearchSession es -> Eff es Bool
+canStartCandidate s = do
+  halted <- sessionStopped s
+  current <- readIORef (state s)
+  let available = not halted && admittedOperations current < operationLimit (sessionLimits s)
+  unless available (modifyReport s (\r -> r {runStatus = BudgetStopped}))
+  pure available

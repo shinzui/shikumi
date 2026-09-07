@@ -240,3 +240,19 @@ executable jitsurei-gepa-objectives
     , shikumi-jitsurei
     , shikumi-optimize
     , text
+
+-- Finite typed structure selection and restoration, fully offline.
+executable jitsurei-structure-search
+  import:         common-options
+  main-is:        StructureSearch.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , base              >=4.20 && <5
+    , effectful
+    , shikumi
+    , shikumi-compile
+    , shikumi-eval
+    , shikumi-jitsurei
+    , shikumi-optimize
+    , text

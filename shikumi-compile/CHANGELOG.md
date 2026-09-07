@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add validated finite typed recipe registries and distinct version-1 experimental structure artifacts with exact registry/revision/schema/shape checks; existing compiled state is unchanged.
+
 - Preserve capture codecs through parameter restoration and RAG; adapt codecs to reasoning/value outputs in the chain-of-thought rewrite. Saved parameter shapes remain unchanged.
 
 ## 0.2.0.3 — 2026-08-29

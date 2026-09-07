@@ -23,14 +23,17 @@ Users will compare a finite collection of typechecked language-model program str
 
 - [x] (2026-09-07) Read plan/specification and confirmed plan 53 shared execution is implemented. Created the requested Rei intention.
 - [x] (2026-09-07) Milestone 1: typed registry and compiler tests pass (20 tests at this milestone).
-- [ ] Milestone 2: shared bounded structure selection.
-- [x] (2026-09-07) Milestone 3 pure restore checks and compatible demo/request round-trip pass (22 compiler tests); winning search round-trip awaits optimizer integration.
-- [ ] Milestone 4: example, documentation, ADR and final validation.
+- [x] (2026-09-07) Milestone 2: shared bounded structure selection, deterministic ties, exact-cap queued-work guard and nested stream/ensemble coverage; 131 optimizer tests pass.
+- [x] (2026-09-07) Milestone 3: pure restore checks, compatible demo/request round-trip (22 compiler tests), and winning search output/request round-trip all pass.
+- [x] (2026-09-07) Milestone 4: example selects cot at 4/8 operations and restores identical output/requests; workflow docs, changelogs and ADR-8 written; strict ADR check passes.
+- [ ] Final formatted-tree validation and workspace build.
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+Plan 53 already provides the generic session, objective selection and observed runner required here. No GEPA extraction was needed. Its report lacked caller identity metadata; an optional candidate-metadata map and lifecycle event now carry registry/recipe/revision identity while older version-1 JSON without that map still decodes.
+
+Final review found that queued work could begin after the previous candidate consumed the exact operation cap. The shared `canStartCandidate` guard leaves those reservations unexecuted and reports budget stop without invalidating a candidate that already completed. A regression checks a two-operation baseline followed by an untouched reservation; the nested stream/ensemble regression separately proves interruption within an executing recipe.
 
 ## Decision Log
 
@@ -41,10 +44,14 @@ Users will compare a finite collection of typechecked language-model program str
 
 2026-09-06: Keep existing compiled-state serialization unchanged and add an explicitly versioned structure artifact. Shape equality does not prove two opaque functions implement the same behavior, so recipe revisions and caller-owned registry identity are part of the restore contract.
 
+2026-09-07: Keep identity wrappers and registry constructors opaque, with ordinary accessor functions rather than exported record labels that allow updates. Use the shared `scoringCost` estimate for predicted work and actual session admission for the hard ceiling. Evaluate only validation; training is required and validated but this finite enumeration has no training phase.
+
+2026-09-07: Use additive optional metadata on shared version-1 reports, plus a metadata lifecycle event, without changing candidate numeric IDs or GEPA evaluation. Candidate metadata contains declared identities only. Record the durable registry/artifact and execution contract in [ADR-8](../adr/0008-restore-typed-structures-through-trusted-recipe-registries.md).
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation.)
+All four feature milestones are implemented. The example has printed the configured CoT winner at 4/8 admitted operations and `True` for restored output/request equality. The compiler suite passes 22 tests and the optimizer suite passes 131 tests. Final formatted-tree validation remains before completion; no release or production promotion is performed.
 
 ## Context and Orientation
 
@@ -127,3 +134,5 @@ The input/output schema values, recipe revision and `ProgramShape` are separate 
 Revision (2026-09-06): linked the newly bootstrapped ADR bundle and its authoring/check contract; implementation status is unchanged.
 
 Revision (2026-09-07): implemented registry and versioned artifacts, recorded compiler test evidence, and linked the user-requested intention. Shared search integration is in progress.
+
+Revision (2026-09-07): record shared finite search, restore integration, exact-cap guard, executable example and ADR-8. Final validation is pending.

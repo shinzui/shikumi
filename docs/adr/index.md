@@ -15,4 +15,5 @@ okf_version: "0.2"
 - [Own optimizer admission and diagnostic reports in search sessions](0005-own-optimizer-admission-and-diagnostic-reports-in-search-sessions.md) - Separate shared operation admission and candidate lifecycle from search algorithms and validation objective selection.
 - [Preserve completed ReAct exchanges in versioned sessions](0006-preserve-completed-react-exchanges-in-versioned-sessions.md) - Keep rich tool results and full assistant exchanges in validated checkpoints while compacting only the provider-facing history.
 - [Bound recursive sessions at the LLM operation boundary](0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) - Keep documents and variables private to an invocation and distinguish exact logical subquery admission from optimistic model spending.
+- [Restore typed structures through trusted recipe registries](0008-restore-typed-structures-through-trusted-recipe-registries.md) - Select finite typed implementations with shared validation and restore experimental artifacts through caller-owned registry identity and revisions.
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `structureSearchWith` for validation-only finite recipe selection through shared admission/objectives, plus optional candidate identity metadata in reports and lifecycle events.
+
 - Add validated GEPA execution, named objective selection, hard LLM-operation admission, bounded candidate execution, and diagnostic lifecycle reports.
 
 - Add indexed failure-aware feedback, validated node/invocation attribution, effectful GEPA callbacks, bounded redacted local reflection, and typed error classification. Legacy critiques are now labeled program-scoped rather than broadcast to nodes; existing entry-point signatures remain supported.

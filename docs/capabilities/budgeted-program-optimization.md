@@ -4,7 +4,7 @@ type: Capability
 description: "Search a Program's instructions, demonstrations, neighbors, and ensembles with multiple optimizers that score typed datasets and stop with the best-so-far candidate at an LM-call budget."
 generated:
   by: process:codex
-  at: "2026-09-07T03:49:40Z"
+  at: "2026-09-07T14:05:00Z"
 capabilityId: CAP-16
 provider: mori://shinzui/shikumi
 status: shipped
@@ -20,6 +20,7 @@ interface:
   - Shikumi.Optimize.RandomSearch
   - Shikumi.Optimize.COPRO
   - Shikumi.Optimize.MIPRO
+  - Shikumi.Optimize.Structure
   - Shikumi.Optimize.Execution
   - Shikumi.Optimize.Report
   - Shikumi.Optimize.Feedback
@@ -31,6 +32,9 @@ requires:
   - CAP-14
   - CAP-15
 evidence:
+  - kind: test
+    resource: shikumi-optimize/test/StructureSpec.hs
+    proves: Finite typed recipes select on validation, obey shared admission, retain deterministic ties, and restore identical requests and outputs.
   - kind: test
     resource: shikumi-optimize/test/FeedbackSpec.hs
     proves: Failed examples retain positions, node critiques target executed invocations, reflection uses redacted intermediate evidence, and cancellation escapes.
@@ -109,3 +113,12 @@ These reports are diagnostic, not sealed dataset provenance, promotion authority
 or protected-holdout comparison artifacts. The hard unit is an admitted framework
 LLM operation, not provider-internal attempts or dollars. The seed controls candidate
 scheduling; concurrent dispatch races and live responses are not deterministic.
+
+Finite typed structure selection is available through `structureSearchWith`. The
+caller owns the nonempty recipe registry and implementation revisions; artifacts
+restore only through a compatible registry. This experimental API shares actual
+operation admission and validation objectives, excludes incomplete candidates,
+and returns an explicitly unscored first baseline when necessary. Structure
+artifacts are distinct from compiled parameter state and grant no production
+promotion authority. See [the workflow](../user/evaluation-and-optimization.md#experimental-finite-structure-search)
+and [ADR-8](../adr/0008-restore-typed-structures-through-trusted-recipe-registries.md).

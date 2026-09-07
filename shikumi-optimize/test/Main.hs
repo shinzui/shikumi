@@ -22,6 +22,7 @@ import ProposeSpec qualified
 import RandomSearchSpec qualified
 import SearchSpec qualified
 import SeedingSpec qualified
+import StructureSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
 main :: IO ()
@@ -29,7 +30,8 @@ main =
   defaultMain $
     testGroup
       "shikumi-optimize"
-      [ OptimizeSpec.tests,
+      [ StructureSpec.tests,
+        OptimizeSpec.tests,
         LabeledFewShotSpec.tests,
         BootstrapSpec.tests,
         InstructionSpec.tests,

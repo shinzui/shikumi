@@ -21,7 +21,7 @@ module Shikumi.Optimize.Report
 where
 
 import Control.Monad (forM, unless)
-import Data.Aeson (FromJSON (..), ToJSON, withObject, (.:))
+import Data.Aeson (FromJSON (..), ToJSON, withObject, (.!=), (.:), (.:?))
 import Data.List (minimumBy, nub, sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -149,7 +149,7 @@ data CandidateReport = CandidateReport
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
-data EventKind = RunStarted | CandidateStarted Int | CandidateEnded Int CandidateStatus | BudgetStop | RunFinished RunStatus
+data EventKind = RunStarted | CandidateMetadata Int (Map Text Text) | CandidateStarted Int | CandidateEnded Int CandidateStatus | BudgetStop | RunFinished RunStatus
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -165,6 +165,7 @@ data OptimizationReport = OptimizationReport
     runControls :: !(Map Text Int),
     reportedPolicy :: !(Maybe ObjectivePolicy),
     candidates :: ![CandidateReport],
+    candidateMetadata :: !(Map Int (Map Text Text)),
     unexecutedReservations :: ![Int],
     frontier :: ![Int],
     selectedCandidate :: !(Maybe Int),
@@ -189,6 +190,7 @@ instance FromJSON OptimizationReport where
       <*> o .: "runControls"
       <*> o .: "reportedPolicy"
       <*> o .: "candidates"
+      <*> (o .:? "candidateMetadata" .!= Map.empty)
       <*> o .: "unexecutedReservations"
       <*> o .: "frontier"
       <*> o .: "selectedCandidate"

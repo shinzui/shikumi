@@ -11,7 +11,9 @@
 -- it over the dataset via 'scoreOn'). This is the "thread candidates explicitly"
 -- discipline the MasterPlan mandates.
 module Shikumi.Optimize
-  ( -- * The driver
+  ( module Shikumi.Optimize.Structure,
+
+    -- * The driver
     optimize,
     optimizeWith,
 
@@ -53,6 +55,7 @@ import Shikumi.Optimize.Pareto
 import Shikumi.Optimize.RandomSearch
 import Shikumi.Optimize.Report (CandidateStatus (Unscored), OptimizationReport (..), RunStatus (BudgetStopped))
 import Shikumi.Optimize.Search
+import Shikumi.Optimize.Structure
 import Shikumi.Optimize.Types
 import Shikumi.Program (Program)
 

@@ -38,11 +38,20 @@ import Shikumi.Compile.Types (Compiler (..))
 import Shikumi.Program (Program, emptyParams, programParams)
 import Shikumi.Schema (ToSchema (..))
 
-newtype RecipeId = RecipeId {recipeIdText :: Text} deriving stock (Eq, Ord, Show)
+newtype RecipeId = RecipeId Text deriving stock (Eq, Ord, Show)
 
-newtype RecipeRevision = RecipeRevision {recipeRevisionNumber :: Int} deriving stock (Eq, Ord, Show)
+newtype RecipeRevision = RecipeRevision Int deriving stock (Eq, Ord, Show)
 
-newtype RegistryId = RegistryId {registryIdText :: Text} deriving stock (Eq, Ord, Show)
+newtype RegistryId = RegistryId Text deriving stock (Eq, Ord, Show)
+
+recipeIdText :: RecipeId -> Text
+recipeIdText (RecipeId ident) = ident
+
+recipeRevisionNumber :: RecipeRevision -> Int
+recipeRevisionNumber (RecipeRevision revision) = revision
+
+registryIdText :: RegistryId -> Text
+registryIdText (RegistryId ident) = ident
 
 -- Constructors and record labels are private, so record updates cannot bypass
 -- registry validation or replace its typed schema evidence.

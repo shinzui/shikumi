@@ -28,7 +28,9 @@ tests =
         r <- right (directCotRegistry "r" qaBase)
         let rs = NE.toList (registryRecipes r)
         map (recipeIdText . recipeId) rs @?= ["direct", "cot"]
-        assertBool "different shapes" (programShape (recipeProgram (head rs)) /= programShape (recipeProgram (last rs))),
+        case rs of
+          [direct, cot] -> assertBool "different shapes" (programShape (recipeProgram direct) /= programShape (recipeProgram cot))
+          _ -> assertFailure "expected direct and cot",
       testCase "populated helper base rejected; explicit pipelines accepted" $ do
         assertBool "no silent deletion" (isLeft (directCotRegistry "r" (compiledProgram (compile (fewShotTyped demoPairs) qaBase))))
         a <- right (structureRecipe "direct" 1 "" qaBase)
@@ -42,8 +44,8 @@ tests =
         bytes <- right (encodeStructureArtifact r ident original)
         restored <- right (decodeStructureArtifact r bytes)
         before <- runWithCapture [answerResponse] (compiledProgram original) (Question "test")
-        after <- runWithCapture [answerResponse] (compiledProgram restored) (Question "test")
-        after @?= before,
+        restoredCapture <- runWithCapture [answerResponse] (compiledProgram restored) (Question "test")
+        restoredCapture @?= before,
       testCase "artifact incompatibilities are pure categorized failures" $ do
         r <- right (directCotRegistry "r" qaBase)
         let direct = NE.head (registryRecipes r)

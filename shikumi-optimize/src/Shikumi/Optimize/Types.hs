@@ -7,10 +7,12 @@
 -- and a starting 'Program', it proposes new node parameters (instructions and
 -- few-shot demonstrations), scores each candidate by running the program over the
 -- dataset, and returns the best-scoring 'CompiledProgram' it found. An optimizer
--- never changes a program's structure or types — only its parameters — so the
--- optimized program is the same typed function, merely better-behaved.
+-- normally changes parameters while preserving boundary types.
 --
--- Two optimizers are explicit structure-changing exceptions. 'Shikumi.Optimize.KNN.knnFewShot'
+-- The additive 'Shikumi.Optimize.Structure.structureSearchWith' API selects among
+-- caller-registered typed implementations using shared validation and admission;
+-- its experimental structure artifacts restore through that same registry.
+-- Two legacy optimizers are also explicit structure-changing exceptions. 'Shikumi.Optimize.KNN.knnFewShot'
 -- returns an @Embed@ wrapper that selects demos at run time from an opaque closure;
 -- persist the underlying student or use 'Shikumi.Optimize.KNN.knnFewShotCentroid'
 -- when a plain parameter artifact is required. 'Shikumi.Optimize.Ensemble.ensembleSearch'

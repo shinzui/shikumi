@@ -60,6 +60,7 @@ library
     Shikumi.Optimize.RandomSearch
     Shikumi.Optimize.Report
     Shikumi.Optimize.Search
+    Shikumi.Optimize.Structure
     Shikumi.Optimize.Types
 
   build-depends:
@@ -101,6 +102,7 @@ test-suite shikumi-optimize-test
     RandomSearchSpec
     SearchSpec
     SeedingSpec
+    StructureSpec
     StubLM
 
   build-depends:

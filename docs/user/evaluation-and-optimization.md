@@ -485,3 +485,87 @@ It prints validation-selected candidate B, its objective frontier, actual operat
 versus the cap, and termination status. The fixture's cost values are declared work
 units. Operation limits do not count provider-internal transport retries separately
 and are neither dollar limits nor sealed production-promotion evidence.
+
+## Experimental finite structure search
+
+`Shikumi.Compile.Structure` registers a finite collection of `Program i o` values
+with the same boundary types. A direct prediction, a two-stage pipeline, a retry
+or an ensemble can be compared without compiling generated source. Build entries
+with `structureRecipe id positiveRevision description program`, then pass them in
+search/tie order to `structureRegistry registryId entries`. Empty identities,
+duplicate recipe IDs, empty registries and nonpositive revisions are rejected.
+The registry derives input/output schemas from `ToSchema i` and `ToSchema o`.
+
+For a base program with empty parameters, `directCotRegistry "my-app.qa" base`
+registers `direct` then `cot`, both revision 1. It rejects populated instructions
+or demos: explicitly clear with `mapParams (const emptyParams)` if desired, or
+register independently optimized compatible variants yourself. The CoT compiler
+adds reasoning and projects the typed answer back out; compatible captured leaves
+retain adapted capture codecs.
+
+```haskell
+registry <- either (fail . show) pure (directCotRegistry "my-app.qa" base)
+-- In the usual LLM/Concurrent/Error/Time/Prim effect row:
+result <- structureSearchWith controls training validation exactMatch
+  (candidateFailurePolicy scoreZero) qualityPolicy
+  (scalarObjectives exactMatch) registry
+```
+
+Training and validation must both be nonempty. This initial finite search evaluates
+supplied implementations on validation only; it does not optimize them on training.
+`controls` is the shared `RunConfig`: candidate limits and actual Complete/Stream
+admission include nested retries, ensembles and opaque `Embed` operations. No new
+operation is dispatched beyond the ceiling. Incomplete candidates cannot replace
+completed eligible candidates. Zero budgets return the first recipe with an
+explicit `Unscored` report. Named objectives, hard bounds, frontier selection and
+configured example-error handling are the shared execution contract. Infrastructure
+failures propagate. Candidate identities and ties follow registry order even when
+completion order differs; physical concurrent dispatch and which worker gets the
+last operation slot remain scheduling-dependent. Use width one for reproducible
+scheduling with a deterministic provider. Operation limits do not measure provider
+transport retries or dollars.
+
+`selectedRecipeId`, `selectedRecipeRevision`, `selectedStructure` and
+`structureReport` identify the result. The report's `candidateMetadata` maps numeric
+candidate IDs to registry/recipe/revision metadata and events expose the same map.
+Recipe IDs/descriptions should not contain secrets; callbacks are trusted code.
+
+```haskell
+bytes <- encodeStructureArtifact registry (selectedRecipeId result)
+  (selectedStructure result)
+restored <- decodeStructureArtifact registry bytes
+```
+
+These two calls are pure `Either StructureArtifactError` computations. The distinct
+`shikumi.experimental.structure` envelope requires version 1, exact registry and
+recipe identity/revision, boundary schema values, shape and parameter count. The
+registry supplies executable closures. Advance revisions whenever code, signatures
+or reducers change, even if shape and schemas stay equal. Equality checks detect
+declared incompatibility and do not attest to opaque code or secure malicious
+callbacks. A different application needs the same registered implementation to
+restore the artifact. Existing `encodeCompiled`/`decodeCompiledOnto` state remains
+unchanged. Neither this artifact nor the diagnostic report authorizes production
+promotion or weakens its same-structure requirement.
+
+A direct `Program Question Answer` and a composed
+`Program Question Draft` followed by `Program Draft Answer` can share a registry.
+The intentionally ill-typed expression below cannot compile because the second
+entry's output is `Draft` rather than `Answer`:
+
+```haskell
+-- Invalid, intentionally excluded from the build:
+-- structureRegistry "qa" [answerRecipe, draftRecipe]
+-- answerRecipe :: StructureRecipe Question Answer
+-- draftRecipe  :: StructureRecipe Question Draft
+```
+
+Run the hermetic select/save/load/run example without credentials:
+
+```bash
+nix develop .#ghc9124 -c cabal run shikumi-jitsurei:exe:jitsurei-structure-search
+```
+
+It selects `cot`, reports 4/8 admitted search operations, and prints `True` for
+restored output and request equality. The two subsequent equality-check runs are
+outside the search budget. This demonstrates mechanics with a scripted provider,
+not a claim about live-model quality.
