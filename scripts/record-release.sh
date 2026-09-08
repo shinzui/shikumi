@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Record the mori Project release fact for shinzui/shikumi from an observed tag.
 #
-# Called once per matched tag by the `release` automation
-# (automation/release.dhall), which cannot narrow its own ref pattern: mori's
-# ref globs understand `*` and `**` and nothing else, so "shikumi- followed by a
-# version" is not expressible there. The narrowing happens here instead.
+# Called once per release by the `release` automation (automation/release.dhall).
+# That config's `refRegexes` already restricts the trigger to the umbrella
+# `shikumi-<version>` tag, so this script no longer filters: it exists only to do
+# the two things a reaction cannot express -- strip the `shikumi-` prefix and
+# read the tag's own creation time.
 set -euo pipefail
 
 tag=${1:?usage: record-release.sh TAG}
 
-# A release cut pushes one tag per package -- shikumi-0.3.0.2 alongside
-# shikumi-cache-0.1.2.2, shikumi-eval-0.2.0.2 and ten more. Mori keeps one
-# release fact per project, and shikumi's project version is the umbrella
-# package's, so a tag carrying a package segment before the version is not this
-# fact. Exit 0: being the wrong tag is the ordinary outcome, twelve times out of
-# thirteen, and a nonzero exit would record twelve failed reactions per release.
+# The selector guarantees this shape, so a mismatch is a bug in the selector or
+# a hand-run with the wrong argument -- not the ordinary case it used to be.
+# Fail loudly rather than recording a version that breaks the convention below.
 if [[ ! $tag =~ ^shikumi-([0-9]+(\.[0-9]+)*)$ ]]; then
-  echo "record-release: $tag is a package tag, not the umbrella shikumi tag" >&2
-  exit 0
+  echo "record-release: $tag is not an umbrella shikumi release tag" >&2
+  exit 1
 fi
 
+# Mori keeps one release fact per project and shikumi's project version is the
+# umbrella package's, recorded without the tag prefix -- `0.3.0.3`, not
+# `shikumi-0.3.0.3`. Versions are opaque to mori, so nothing but this line
+# enforces that.
 version=${BASH_REMATCH[1]}
 
 # The tag's own creation time, not the observation time. The two agree when the

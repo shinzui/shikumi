@@ -22,6 +22,12 @@
       hsdev = inputs.haskell-nix-dev.lib.${system};
 
       baseDevPackages = [
+        # Automation reactions run as `nix develop --command`, and the daemon's
+        # own PATH does not carry ~/.nix-profile/bin. Without git here,
+        # scripts/record-release.sh dies on `git for-each-ref` with
+        # "tool 'git' not found". An interactive shell hides this by inheriting
+        # git from the ambient profile; the shell must supply its own.
+        pkgs.git
         pkgs.zlib
         pkgs.just
         pkgs.pkg-config
