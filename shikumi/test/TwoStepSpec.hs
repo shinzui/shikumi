@@ -11,6 +11,7 @@ import Baikai
     emptyResponse,
     emptyTextContent,
   )
+import Baikai.Error (contentFiltered)
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.IORef (newIORef, readIORef)
@@ -18,14 +19,18 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful (runEff)
+import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack)
 import Fixtures (Article, Author (..), Sentiment (..), Summary (..), sampleArticle, sampleSummary)
 import ProgramFixtures (runScriptedLLM)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Error (ShikumiError (..))
+import Shikumi.LLM (LLMConfig (..), RetryPolicy (..), defaultLLMConfig, runLLMResilient)
 import Shikumi.Module (twoStep)
 import Shikumi.Program (Program, runProgram)
+import Shikumi.Routing (routeLLM, runRouting)
 import Shikumi.Schema.Types (field)
 import Shikumi.Signature (Demo (..), Signature, mkSignature, setDemos)
+import StubProvider (classifiedStubRegistry, stubModel)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -93,5 +98,13 @@ tests =
           runEff . runErrorNoCallStack @ShikumiError . runScriptedLLM ref $
             runProgram prog sampleArticle
         remaining <- readIORef ref
-        length remaining @?= 0
+        length remaining @?= 0,
+      testCase "refusal prevents the extraction call" $ do
+        ref <- newIORef 0
+        let err = contentFiltered "refused"
+        reg <- classifiedStubRegistry ref 1 err False 0
+        let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5}
+        out <- runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runRouting stubModel . runLLMResilient cfg . routeLLM $ runProgram prog sampleArticle
+        out @?= Left (ProviderError err)
+        readIORef ref >>= (@?= 1)
     ]

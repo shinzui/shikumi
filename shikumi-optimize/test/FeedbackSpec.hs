@@ -1,6 +1,7 @@
 module FeedbackSpec (tests) where
 
 import Baikai (AssistantContent (..), emptyResponse, emptyTextContent)
+import Baikai.Error (contentFiltered)
 import Control.Exception qualified as E
 import Control.Lens ((&), (.~))
 import Data.IORef (atomicModifyIORef', newIORef)
@@ -79,7 +80,7 @@ tests =
           map observationPath (observations ev) @?= programNodePaths sentimentProg
           assertBool "failed leaf retained" (all (not . observationEligible) (observations ev)),
       testCase "abort returns exact output error; budget and infrastructure always escape by default" $ do
-        let errors = [InvalidJSON "original", BudgetExceeded "budget", ProviderFailure "offline", Timeout "infra"]
+        let errors = [InvalidJSON "original", BudgetExceeded "budget", ProviderFailure "offline", ProviderError (contentFiltered "refused"), Timeout "infra"]
         mapM_
           ( \err -> do
               let cfg = if err == InvalidJSON "original" then defaultFeedbackConfig {failureClassification = const FailAbort} else defaultFeedbackConfig

@@ -96,7 +96,7 @@ import Shikumi.Adapter (ModelCapability (..), ToPrompt (toPrompt), attachSchema,
 import Shikumi.Agent.History (ReActSession)
 import Shikumi.Agent.History qualified as H
 import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
-import Shikumi.Error (ShikumiError (..))
+import Shikumi.Error (ShikumiError (..), fromBaikaiError)
 import Shikumi.LLM (LLM, complete)
 import Shikumi.Program (Program (FMap), embed)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, parseOutput, toSchema)
@@ -658,7 +658,9 @@ advanceSession sig reg cfg original = do
           let payload = resp ^. #message
               reject reason = SessionPaused <$> historyOrThrow (H.appendExchange payload [] (Just reason) False s)
           if payload ^. #stopReason == B.ErrorReason
-            then throwError (ProviderFailure (maybe "Model response failed" id (payload ^. #errorMessage)))
+            then throwError $ case resp ^. #errorInfo of
+              Just err -> fromBaikaiError err
+              Nothing -> ProviderFailure (maybe "Model response failed" id (payload ^. #errorMessage))
             else pure ()
           case parseCalls s resp of
             Left reason -> reject reason

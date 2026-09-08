@@ -32,6 +32,7 @@ import Shikumi.Cli.Options
 import Shikumi.Cli.Registry (Registry, Task (..), lookupTask, registryNames)
 import Shikumi.Cli.Runtime (recordTrace, runReplayProgram, runStubEval, runStubProgram)
 import Shikumi.Compile (encodeCompiled)
+import Shikumi.Error (renderShikumiError)
 import Shikumi.Eval (evaluatePure, renderReportText)
 import Shikumi.Optimize (optimize)
 import Shikumi.Trace (TraceTree (..), renderTree)
@@ -50,7 +51,7 @@ runEval reg _g (EvalOpts name) =
   withTask reg name $ \(Task prog ds metric _input responder _opts) -> do
     r <- runStubEval responder (evaluatePure ds metric prog)
     case r of
-      Left e -> die ("evaluation failed: " <> tshow e)
+      Left e -> die ("evaluation failed: " <> renderShikumiError e)
       Right rep ->
         TIO.putStr ("Report for program \"" <> name <> "\":\n\n" <> renderReportText rep)
 
@@ -90,7 +91,7 @@ runOptimizeCmd reg _g (OptimizeOpts name optName out) =
       Just opt -> do
         r <- runStubEval responder (optimize opt ds metric prog)
         case r of
-          Left e -> die ("optimization failed: " <> tshow e)
+          Left e -> die ("optimization failed: " <> renderShikumiError e)
           Right cp -> do
             BL.writeFile out (encodeCompiled cp)
             TIO.putStrLn
@@ -139,7 +140,7 @@ runRecordCmd reg g (RecordOpts name) =
       let path = traceFilePath g ok
       writeTraceFile path tree
       case res of
-        Left e -> die ("recorded trace, but the run errored: " <> tshow e)
+        Left e -> die ("recorded trace, but the run errored: " <> renderShikumiError e)
         Right () -> TIO.putStrLn ("Recorded trace to " <> T.pack path)
 
 -- ---------------------------------------------------------------------------

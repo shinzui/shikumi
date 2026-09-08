@@ -69,15 +69,15 @@ budget check  →  rate-limit acquire  →  retry loop  →  the Baikai transpor
 ```
 
 - **Budget** (`Maybe Budget`). An optimistic pre-call gate: if the running US-dollar total has
-  already reached the ceiling, the call is refused with `BudgetExceeded`. After a successful
-  call, its cost (read from baikai's `Usage.cost.usd`) is charged. Reserved once before
-  attempts, charged once after success — retries don't double-charge.
+  already reached the ceiling, the call is refused with `BudgetExceeded`. Each response or stream terminal charges its reported cost (baikai's
+  `Usage.cost.usd`) before success or failure is raised, once per observed attempt.
+  Admission is optimistic, once before retries; it does not reserve money.
 - **Rate limiter** (`Maybe RateLimiter`). A counter of permits bounding *in-flight* calls;
   build it once with `newRateLimiter n` and store it in the config (not per call). Acquired and
   released on every exit path.
 - **Retry** (`RetryPolicy`). Exponential backoff, but **only for transient errors**
-  (`isTransient`: `ProviderFailure`, `Timeout`). Deterministic errors (decode, schema,
-  validation, budget) propagate immediately without consuming a retry.
+  (`isTransient`: typed `RateLimited` and `TransientError`, legacy `ProviderFailure`,
+  and `Timeout`). Other errors propagate immediately without consuming a retry.
 
 ```haskell
 data RetryPolicy = RetryPolicy { maxAttempts :: Int, baseDelayMs :: Int, maxDelayMs :: Int }
@@ -304,3 +304,27 @@ cabal run jitsurei-streaming   # field chunks + status events, then the typed an
 
 - The interpose layers in depth: [Caching, tracing & replay](./caching-tracing-replay.md).
 - How evaluation threads `Time`/`Concurrent` through a run: [Evaluation & optimization](./evaluation-and-optimization.md).
+
+## Provider failures and refusals
+
+`ProviderError BaikaiError` retains the transport record, including an optional,
+verbatim `refusalCategory`. Match it to inspect structured failures, and use
+`renderShikumiError` for readable diagnostics. The new public sum constructor
+requires consumers with exhaustive `ShikumiError` matches to add a branch (a PVP
+major-version change when released).
+
+Blocking and streamed errors use `fromBaikaiError`: decode failures, invalid
+requests and context overflow retain their existing `InvalidJSON`, `SchemaMismatch`
+and `ContextWindowExceeded` mappings. Other categories preserve the original
+record in `ProviderError`. Content refusals, authentication errors, unavailable
+providers, unclassified process exits and unknown errors are terminal. Only typed
+rate limits and transient transport errors retry; no classification is guessed
+from message text or refusal-category strings.
+
+Caller-created `ProviderFailure Text` remains retryable for compatibility. A
+malformed third-party `EventError` without `errorInfo` uses this legacy fallback,
+with its message or stop reason. Failed partial output is never returned as a
+successful response. Host exceptions and cancellation continue to escape; only
+transport `BaikaiError` values enter this mapping. GEPA's default failure scoring
+continues to abort on provider infrastructure failures. See
+[ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md).

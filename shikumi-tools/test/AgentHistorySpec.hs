@@ -4,6 +4,7 @@ module AgentHistorySpec (tests) where
 
 import Baikai qualified as B
 import Baikai.Cost qualified as BC
+import Baikai.Error (contentFiltered)
 import Baikai.Usage qualified as BU
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
@@ -290,6 +291,13 @@ tests =
         let failed = firstTurn & #message . #stopReason .~ B.ErrorReason & #message . #errorMessage .~ Just "transport failed"
         (result, _, dispatched) <- recording [Right failed] (start >>= advanceSession weatherSignature registry cfg)
         result @?= Left (ProviderFailure "transport failed")
+        dispatched @?= [],
+      testCase "structured refusal preserves error and never dispatches partial calls" $ do
+        let err = contentFiltered "refused"
+            failed = firstTurn & #message . #stopReason .~ B.ErrorReason & #errorInfo .~ Just err
+        (result, requests, dispatched) <- recording [Right failed] (start >>= advanceSession weatherSignature registry cfg)
+        result @?= Left (ProviderError err)
+        length requests @?= 1
         dispatched @?= [],
       testCase "ordinary tool failures are error-flagged model messages" $ do
         let unknown = mkToolCallResponse "unknown-id" "unknown-tool" (object [])

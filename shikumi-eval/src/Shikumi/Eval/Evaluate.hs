@@ -29,7 +29,7 @@ import Effectful.Concurrent.Async (pooledForConcurrentlyN, race)
 import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Prim (Prim)
 import Shikumi.Effect.Time (Time, getMonotonicTimeNSec)
-import Shikumi.Error (ShikumiError (..))
+import Shikumi.Error (ShikumiError (..), renderShikumiError)
 import Shikumi.Eval.Metric (Metric, MetricM, liftMetric)
 import Shikumi.Eval.Report
   ( EvalConfig (..),
@@ -179,4 +179,5 @@ tryShikumi act = (Right <$> act) `catchError` \_ e -> pure (Left e)
 
 -- | Render a shikumi error for a 'FailureReason'.
 renderErr :: ShikumiError -> T.Text
-renderErr = T.pack . show
+renderErr e@ProviderError {} = renderShikumiError e
+renderErr e = T.pack (show e)

@@ -5,16 +5,18 @@
 module ResilienceSpec (tests) where
 
 import Baikai (AssistantMessageEvent (..), flattenAssistantBlocks)
+import Baikai.Error (BaikaiError (..), ErrorCategory (..), providerError)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
+import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
 import Data.IORef (newIORef, readIORef)
 import Data.Ratio ((%))
 import Effectful (runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Concurrent.Async (mapConcurrently)
 import Effectful.Error.Static (runErrorNoCallStack)
-import Shikumi.Error (ShikumiError (..))
+import Shikumi.Error (ShikumiError (..), fromBaikaiError)
 import Shikumi.LLM
   ( LLMConfig (..),
     RetryPolicy (..),
@@ -27,8 +29,10 @@ import Shikumi.LLM
 import Shikumi.LLM.Budget (newBudget, spentUSD)
 import StubProvider
   ( budgetBarrierStubRegistry,
+    classifiedStubRegistry,
     concurrencyStubRegistry,
     costStubRegistry,
+    exceptionStubRegistry,
     failingStreamCostStubRegistry,
     failingStreamStubRegistry,
     failingStubRegistry,
@@ -59,7 +63,7 @@ tests =
         let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 2 1 5}
         res <- runText cfg
         case res of
-          Left (ProviderFailure _) -> pure ()
+          Left (ProviderError _) -> pure ()
           other -> assertFailure ("expected Left (ProviderFailure ...), got " <> show other)
         n <- readIORef ref
         n @?= 2,
@@ -156,7 +160,29 @@ tests =
         res2 <- runStream cfg
         case res2 of
           Left (BudgetExceeded _) -> pure ()
-          other -> assertFailure ("expected Left (BudgetExceeded ...) after the failed call charged, got " <> show other)
+          other -> assertFailure ("expected Left (BudgetExceeded ...) after the failed call charged, got " <> show other),
+      testGroup
+        "classified attempts across APIs"
+        [ testCase (show (cat, streaming, thrown)) $ do
+            ref <- newIORef 0
+            let err = (providerError "refused") {category = cat, refusalCategory = Just "policy_example"}
+                retryable = cat `elem` [RateLimited, TransientError]
+                cost = 1 % 100
+            reg <- classifiedStubRegistry ref 1 err thrown cost
+            b <- newBudget Nothing
+            let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5, budget = Just b}
+            result <- if streaming then fmap (fmap (const "ok")) (runStream cfg) else runText cfg
+            result @?= if retryable then Right "ok" else Left (fromBaikaiError err)
+            readIORef ref >>= (@?= if retryable then 2 else 1)
+            spentUSD b >>= (@?= if thrown then 0 else cost)
+        | cat <- [AuthError, RateLimited, ContentFiltered, TransientError, ProviderUnavailable, ProcessFailure, OtherError, InvalidRequest, ContextOverflow, DecodeFailure],
+          (streaming, thrown) <- [(False, False), (False, True), (True, False)]
+        ],
+      testCase "cancellation escapes without retry" $ do
+        reg <- exceptionStubRegistry (throwIO ThreadKilled)
+        let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5}
+        result <- try @AsyncException (runText cfg)
+        result @?= Left ThreadKilled
     ]
   where
     runText cfg =

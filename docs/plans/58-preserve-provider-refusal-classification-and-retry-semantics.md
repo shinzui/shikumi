@@ -25,15 +25,17 @@ A provider refusal should reach the caller once, with its structured category in
 ## Progress
 
 
-- [ ] Milestone 1: Preserve the structured transport failure.
-- [ ] Milestone 2: Use one classification for blocking and streaming retries.
+- [x] (2026-09-08) Milestone 1: Preserve the structured transport failure.
+- [x] (2026-09-08) Milestone 2: Use one classification for blocking and streaming retries.
 - [ ] Milestone 3: Document the error boundary and downstream behavior.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-09-08: The released `providerError` constructor creates `OtherError`, not a transient error. Updated the transient blocking fixture to set `TransientError`; malformed stream fixtures deliberately retain missing errorInfo to pin legacy behavior. The core suite passes 225 tests, including the full category/attempt matrix and cancellation.
+
+2026-09-08: ReAct has a defensive raw-response check for custom LLM interpreters. Preserve its structured error before considering partial tool calls, while retaining the existing missing-errorInfo fallback.
 
 
 ## Decision Log
@@ -45,7 +47,7 @@ A provider refusal should reach the caller once, with its structured category in
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Milestones 1 and 2 are implemented and the core suite passes. Final downstream regressions, release-source build and full-suite validation are in progress. ADR-11 records the durable error and retry contract.
 
 
 ## Context and Orientation
@@ -129,3 +131,5 @@ The implementation and tests are repeatable and require no external writes. Add 
 `Shikumi.Error` owns the additive `ProviderError BaikaiError` constructor, the mapping function, retry predicate, and readable renderer. Baikai retains ownership of ErrorCategory and refusalCategory semantics. The later billing plan may inspect this structured error but must not create a second refusal classifier or infer missing categories. This plan does not add partial usage fields to errors; per-attempt billing belongs to the later observer. No LLM operation constructors, serialized checkpoint versions, provider registrations, or package bounds need to change.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
+
+Revision (2026-09-08): Implemented structured mappings and retry parity; recorded fixture findings, shared rendering, defensive ReAct handling and core validation. No dependency bounds changed.

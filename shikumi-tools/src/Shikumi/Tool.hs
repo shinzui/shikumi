@@ -66,7 +66,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, catchError, throwError)
-import Shikumi.Error (ShikumiError (..))
+import Shikumi.Error (ShikumiError (..), renderShikumiError)
 import Shikumi.LLM (LLM)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, toSchema)
 import Shikumi.Tool.Output (ToolOutput, renderToolOutput, textToolOutput)
@@ -258,18 +258,9 @@ runToolCallOutput reg tc = case registryLookup (tc ^. #name) reg of
 encodeText :: (ToJSON a) => a -> Text
 encodeText = decodeUtf8 . LBS.toStrict . encode
 
--- | The human-readable payload of a 'ShikumiError' (its single 'Text' field).
+-- | Shared human-readable error rendering for tool observations.
 shikumiErrorText :: ShikumiError -> Text
-shikumiErrorText = \case
-  InvalidJSON t -> t
-  MissingField t -> "missing field " <> t
-  SchemaMismatch t -> t
-  ValidationFailure t -> t
-  ProviderFailure t -> t
-  ContextWindowExceeded t -> t
-  Timeout t -> t
-  BudgetExceeded t -> t
-  CodeExecFailed t -> t
+shikumiErrorText = renderShikumiError
 
 -- | Which 'ShikumiError's must escape the agent loop rather than become
 -- observations. Budget and context-window exhaustion are infrastructure faults:

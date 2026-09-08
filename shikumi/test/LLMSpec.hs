@@ -30,13 +30,13 @@ tests =
             r <- complete stubModel stubContext stubOptions
             pure (flattenAssistantText (flattenAssistantBlocks r))
         res @?= Right "hello from stub",
-      testCase "unregistered tag -> ProviderFailure" $ do
+      testCase "unregistered tag -> ProviderError" $ do
         reg <- newProviderRegistry -- empty registry: no handler for the stub tag
         res <-
           runEff . runErrorNoCallStack @ShikumiError . runLLMWith reg $ do
             r <- complete stubModel stubContext stubOptions
             pure (flattenAssistantText (flattenAssistantBlocks r))
         case res of
-          Left (ProviderFailure _) -> pure ()
-          other -> assertFailure ("expected Left (ProviderFailure ...), got " <> show other)
+          Left (ProviderError _) -> pure ()
+          other -> assertFailure ("expected Left (ProviderError ...), got " <> show other)
     ]

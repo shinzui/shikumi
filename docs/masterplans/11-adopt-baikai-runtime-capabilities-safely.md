@@ -38,7 +38,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | Not Started |
+| 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | In Progress |
 | 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Not Started |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Not Started |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Not Started |
@@ -71,8 +71,8 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Progress
 
 
-- [ ] EP-58, milestone 1: Preserve the structured transport failure.
-- [ ] EP-58, milestone 2: Use one classification for blocking and streaming retries.
+- [x] EP-58, milestone 1: Preserve the structured transport failure.
+- [x] EP-58, milestone 2: Use one classification for blocking and streaming retries.
 - [ ] EP-58, milestone 3: Document the error boundary and downstream behavior.
 - [ ] EP-59, milestone 1: Separate audit data, safe summaries and replayable history.
 - [ ] EP-59, milestone 2: Bind persisted continuation to its origin and validate after routing.
@@ -92,7 +92,7 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-09-08: EP-58 confirms that typed unknown/process failures must remain terminal and that legacy malformed stream fixtures remain retryable. ReAct also checks raw responses from custom interpreters; it now preserves structured failures before any tool dispatch. EP-61 should consume `ProviderError` directly and keep attempt billing separate.
 
 
 ## Decision Log

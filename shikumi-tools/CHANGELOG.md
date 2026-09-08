@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve structured refusals in defensive ReAct response checks and use shared error rendering for tool observations; partial refused tool calls never dispatch.
+
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`. Preserve cost basis and usage availability in agent checkpoints, including exact rational costs and legacy checkpoint decoding.
 
 ### Added

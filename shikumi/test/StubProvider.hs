@@ -19,6 +19,8 @@ module StubProvider
     failingStreamCostStubRegistry,
     invalidStubRegistry,
     concurrencyStubRegistry,
+    classifiedStubRegistry,
+    exceptionStubRegistry,
   )
 where
 
@@ -152,7 +154,7 @@ budgetBarrierStubRegistry arrived n cost t =
       if a >= n then pure () else retry
     pure (stubResponse t & #message . #usage . #cost . #usd .~ cost)
 
--- | A registry whose @complete@ throws 'providerError' (a transient failure) the
+-- | A registry whose @complete@ throws a typed transient failure the
 -- first @failTimes@ calls, then returns the given text. The 'IORef' records the
 -- total number of attempts (used by the retry tests).
 failingStubRegistry :: IORef Int -> Int -> Text -> IO ProviderRegistry
@@ -160,7 +162,7 @@ failingStubRegistry ref failTimes t =
   mkRegistry t $ \_ _ _ -> do
     n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
     if n <= failTimes
-      then throwIO (providerError ("stub transient failure #" <> T.pack (show n)))
+      then throwIO ((providerError ("stub transient failure #" <> T.pack (show n))) {category = TransientError})
       else pure (stubResponse t)
 
 -- | A terminal-failing event sequence: an 'EventError' whose assembled message
@@ -245,3 +247,36 @@ concurrencyStubRegistry cur mx t =
       c <- readTVar cur
       modifyTVar' mx (max c)
     leave = atomically (modifyTVar' cur (subtract 1))
+
+-- | Exercise in-band, thrown, and streamed classified failures with attempt costs.
+classifiedStubRegistry :: IORef Int -> Int -> BaikaiError -> Bool -> Rational -> IO ProviderRegistry
+classifiedStubRegistry ref failTimes err thrown cost = do
+  let next = atomicModifyIORef' ref (\n -> (n + 1, n < failTimes))
+      payload = stubPayloadWith "partial" & #usage . #cost . #usd .~ cost & #errorMessage .~ Just "legacy text disagrees" & #stopReason .~ ErrorReason
+      response = stubResponse "partial" & #message .~ payload & #errorInfo .~ Just err
+  reg <- newProviderRegistry
+  registerApiProviderWith
+    reg
+    ( apiProviderWith
+        stubApi
+        ( \_ _ _ -> Stream.concatEffect $ do
+            failed <- next
+            pure
+              ( Stream.fromList
+                  ( if failed
+                      then [EventStart (StartPayload (AssistantMessage (stubPayloadWith "")) Nothing), EventError (errorTerminal Nothing Nothing ErrorReason (AssistantMessage payload) err)]
+                      else stubEvents "ok"
+                  )
+              )
+        )
+        ( \_ _ _ -> do
+            failed <- next
+            if failed then if thrown then throwIO err else pure response else pure (stubResponse "ok")
+        )
+    )
+      { describeThinking = stubDescribeThinking
+      }
+  pure reg
+
+exceptionStubRegistry :: IO Response -> IO ProviderRegistry
+exceptionStubRegistry action = mkRegistry "" (\_ _ _ -> action)

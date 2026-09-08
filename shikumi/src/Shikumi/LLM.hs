@@ -198,8 +198,8 @@ defaultLLMConfig reg =
 
 -- | The resilient interpreter. Each operation is wrapped, outermost to
 -- innermost, by: budget check → rate-limit acquire → retry loop → the @Baikai@
--- transport call. The budget is reserved once before the attempts and charged
--- once after success; retries re-run only the transport call.
+-- transport call. Budget admission happens once before the attempts; each
+-- response or stream terminal is charged before success or failure is raised.
 runLLMResilient ::
   (IOE :> es, Concurrent :> es, Error ShikumiError :> es) =>
   LLMConfig ->
@@ -292,18 +292,9 @@ chargeBudget (Just b) resp = recordCost b (responseCostUSD resp)
 responseCostUSD :: Response -> Rational
 responseCostUSD resp = resp ^. #message . #usage . #cost . #usd
 
--- | Enforce the stream-error posture: a terminal 'EventError' becomes an
--- out-of-band 'ShikumiError' — a 'ProviderFailure' carrying the terminal message's
--- @errorMessage@ (or the stop reason if none). A successful event list passes
--- through unchanged, so callers of 'stream' never see an in-band error terminal.
--- Because both interpreters call this /inside/ their retry loop, a transient stream
--- failure is retried exactly like a blocking one ('ProviderFailure' is transient
--- per 'isTransient').
---
--- The baikai version shikumi pins does not attach a structured 'BaikaiError' to a
--- terminal payload (its @TerminalPayload@ is @{reason, message}@; the failure detail
--- lives in the assembled message's @errorMessage@ and @stopReason@), so all stream
--- failures map to 'ProviderFailure' rather than through 'fromBaikaiError'.
+-- | Raise structured terminal failures through the same mapping as blocking
+-- calls. Only malformed third-party terminals without errorInfo use the legacy
+-- text fallback. Successful event lists pass through unchanged.
 raiseStreamError ::
   (Error ShikumiError :> es) => [AssistantMessageEvent] -> Eff es [AssistantMessageEvent]
 raiseStreamError evs = case [tp | EventError tp <- evs] of
@@ -316,7 +307,7 @@ raiseStreamError evs = case [tp | EventError tp <- evs] of
 -- 'responseError' is populated. Convert that in-band failure into the same
 -- out-of-band 'ShikumiError' the rest of shikumi consumes, so an error response
 -- never masquerades as success and 'runLLMResilient' still retries transient
--- failures (a 'ProviderFailure' thrown /inside/ the retry loop). A success
+-- failures (a classified error thrown /inside/ the retry loop). A success
 -- passes through unchanged.
 raiseResponseError ::
   (Error ShikumiError :> es) => Response -> Eff es Response
@@ -326,7 +317,9 @@ raiseResponseError resp = case responseError resp of
 
 -- | Map a terminal 'EventError' payload to a 'ShikumiError'.
 streamTerminalError :: TerminalPayload -> ShikumiError
-streamTerminalError tp = ProviderFailure ("stream failed: " <> detail)
+streamTerminalError tp = case tp ^. #errorInfo of
+  Just err -> fromBaikaiError err
+  Nothing -> ProviderFailure ("stream failed: " <> detail)
   where
     detail = case tp ^. #message of
       AssistantMessage p -> fromMaybe (T.pack (show (tp ^. #reason))) (p ^. #errorMessage)

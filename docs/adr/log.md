@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-08
+* **Added**: ADR-11: Preserve provider errors and centralize retry policy.
+
 ## 2026-09-07
 * **Update**: ADR-10: record explicit output serialization for Field wrappers, verified by the adapters example build.
 * **Added**: ADR-10: bounded schema-guided XML fragments and structured demonstration compatibility.

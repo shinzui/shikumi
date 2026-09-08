@@ -8,10 +8,11 @@ module Shikumi.Error
   ( ShikumiError (..),
     fromBaikaiError,
     isTransient,
+    renderShikumiError,
   )
 where
 
-import Baikai.Error (BaikaiError (..), ErrorCategory (..))
+import Baikai.Error (BaikaiError (..), ErrorCategory (..), isRetryable)
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -28,8 +29,10 @@ data ShikumiError
     SchemaMismatch !Text
   | -- | a typed value failed a user/program validation rule
     ValidationFailure !Text
-  | -- | the provider/transport failed (mapped from baikai)
+  | -- | Legacy unclassified failure supplied by callers or scripted interpreters.
     ProviderFailure !Text
+  | -- | Structured transport failure, including verbatim refusal metadata.
+    ProviderError !BaikaiError
   | -- | the prompt exceeded the model's context window
     ContextWindowExceeded !Text
   | -- | the call exceeded its time budget
@@ -50,20 +53,34 @@ fromBaikaiError e = case category e of
   DecodeFailure -> InvalidJSON (message e)
   InvalidRequest -> SchemaMismatch ("invalid request: " <> message e)
   ContextOverflow -> ContextWindowExceeded (message e)
-  ProcessFailure ->
-    ProviderFailure $
-      case exitCode e of
-        Just n -> "process exited " <> T.pack (show n) <> ": " <> message e
-        Nothing -> message e
-  _ -> ProviderFailure (message e)
+  _ -> ProviderError e
 
--- | Which errors are worth retrying. Provider/transport failures and timeouts are
--- transient; decode, schema, validation, budget, and code-execution failures are
--- deterministic and retrying cannot fix them. Centralizing the policy here keeps
--- it auditable (the resilience interpreter in "Shikumi.LLM" consults exactly this
--- predicate).
+-- | Human-readable detail without dumping the transport record. Baikai's
+-- message is its safe-to-log description; opaque request/response data is absent.
+renderShikumiError :: ShikumiError -> Text
+renderShikumiError = \case
+  ProviderError e ->
+    "provider "
+      <> T.pack (show (category e))
+      <> maybe "" (\n -> " (exit " <> T.pack (show n) <> ")") (exitCode e)
+      <> ": "
+      <> message e
+  InvalidJSON t -> t
+  MissingField t -> "missing field " <> t
+  SchemaMismatch t -> t
+  ValidationFailure t -> t
+  ProviderFailure t -> t
+  ContextWindowExceeded t -> t
+  Timeout t -> t
+  BudgetExceeded t -> t
+  CodeExecFailed t -> t
+
+-- | Retry only typed rate limits and transient failures, using Baikai's
+-- classification. Legacy text failures and timeouts retain their retry policy.
+-- Unknown/process errors and refusals are terminal; never infer from prose.
 isTransient :: ShikumiError -> Bool
 isTransient = \case
+  ProviderError e -> isRetryable e
   ProviderFailure {} -> True
   Timeout {} -> True
   _ -> False
