@@ -40,6 +40,7 @@ library
     Shikumi.LLM
     Shikumi.LLM.Budget
     Shikumi.LLM.Continuation
+    Shikumi.LLM.Defaults
     Shikumi.Module
     Shikumi.Multimodal
     Shikumi.Prelude
@@ -98,6 +99,7 @@ test-suite shikumi-test
     ProgramSpec
     RefineSpec
     RefineStub
+    RequestDefaultsSpec
     ResilienceSpec
     RoutingSpec
     SchemaSpec

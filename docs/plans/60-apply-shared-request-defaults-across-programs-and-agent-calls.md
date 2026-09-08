@@ -25,15 +25,18 @@ A caller should configure reasoning effort, inference speed, output-token limits
 ## Progress
 
 
-- [ ] Milestone 1: Define an explicit default merge.
-- [ ] Milestone 2: Apply defaults at the effective request boundary.
-- [ ] Milestone 3: Demonstrate cache, routing and concurrency behavior.
+- [x] (2026-09-08) Milestone 1: Define an explicit default merge.
+- [x] (2026-09-08) Milestone 2: Apply defaults at the effective request boundary.
+- [x] (2026-09-08) Milestone 3 regressions: routing, concurrency, evidence bypass and effective cache keys pass.
+- [ ] Milestone 3 completion: build/run the compiled example and run the full release-source suite.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-09-08: The released Options and EvidenceRequest types support the finite merge directly. Routing replaces every model by design; defaults preserve distinct recursive sub-models when used without that ambient router. The reusable capture interposer lives in the internal harness; existing RLM scripts now assert defaults on every actual call.
+
+2026-09-08: Focused release-source validation passed 237 core, 128 tools and 33 cache tests. The deliberately misplaced-cache regression demonstrates one base call despite changed defaults; the correct order distinguishes speeds and reasoning while reusing equivalent effective options.
 
 
 ## Decision Log
@@ -42,10 +45,13 @@ A caller should configure reasoning effort, inference speed, output-token limits
 2026-09-08: Use a small fill-only request-default vocabulary at the LLM seam. This covers every existing runner without broadening Program serialization or allowing defaults to overwrite schema/tool policy. Model routing stays independent.
 
 
+2026-09-08: Use the existing terminal `ValidationFailure` for invalid default configuration; no new error constructor is needed. Reject zero default ceilings when entering the scope, including when an explicit call could override them. Pure merging stays total and validation-free. ADR-12 records the durable precedence, model boundary, composition order and evidence policy.
+
+
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Core defaults, cache evidence bypass, consumer regressions, user documentation and ADR-12 are implemented. Strict ADR validation passes. Full build, runnable example and all-suite verification remain before completion.
 
 
 ## Context and Orientation
@@ -129,3 +135,5 @@ The implementation and tests are repeatable and require no external writes. Add 
 Proposed public signatures in Shikumi.LLM.Defaults are `emptyRequestDefaults :: RequestDefaults`, `applyRequestDefaults :: RequestDefaults -> Options -> Options`, and `withRequestDefaults :: (LLM :> es, Error ShikumiError :> es) => RequestDefaults -> Eff es a -> Eff es a`. The pure merge takes validated data; the interposer performs configuration validation before any call. RequestDefaults has named optional defaultThinking, defaultSpeed, defaultMaxTokens, and defaultEvidence fields using released Baikai types. Keep this finite vocabulary, with no model field. The session plan owns history validation, not this module. Billing observes after defaults, but cost calculations remain provider-owned. Existing Program and Params serialization is unchanged; defaults belong to runtime configuration, not compiled artifacts.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
+
+Revision (2026-09-08): Implemented milestones 1 and 2 and focused milestone 3 regressions; documented the existing typed validation error and router/sub-model distinction. Full acceptance is pending.

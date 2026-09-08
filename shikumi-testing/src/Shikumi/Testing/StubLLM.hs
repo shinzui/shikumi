@@ -4,6 +4,7 @@
 module Shikumi.Testing.StubLLM
   ( -- * Interpreters
     runStubLLM,
+    captureLLMRequests,
     runScriptLLM,
     runCountingLLM,
     runScriptLLMThrowingOn,
@@ -22,6 +23,8 @@ where
 
 import Baikai
   ( Context,
+    Model,
+    Options,
     Response,
   )
 import Control.Lens ((^.))
@@ -31,7 +34,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (Concurrent, runConcurrent)
-import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Dispatch.Dynamic (interpose, interpret, passthrough)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
 import Effectful.Prim (Prim, runPrim)
 import Shikumi.Effect.Time (Time, runTime)
@@ -154,3 +157,12 @@ runCountingLLM :: (IOE :> es) => IORef Int -> Response -> Eff (LLM : es) a -> Ef
 runCountingLLM ref resp = interpret $ \_ -> \case
   Complete {} -> liftIO (modifyIORef' ref (+ 1)) >> pure resp
   Stream {} -> pure []
+
+-- | Record effective requests without changing completion or streaming behavior.
+-- Install below routing/defaults to inspect what reaches the base interpreter.
+captureLLMRequests :: (IOE :> es, LLM :> es) => IORef [(Model, Context, Options)] -> Eff es a -> Eff es a
+captureLLMRequests ref = interpose $ \env op -> do
+  case op of
+    Complete m c o -> liftIO (atomicModifyIORef' ref (\xs -> (xs ++ [(m, c, o)], ())))
+    Stream m c o -> liftIO (atomicModifyIORef' ref (\xs -> (xs ++ [(m, c, o)], ())))
+  passthrough env op

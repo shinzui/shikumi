@@ -17,6 +17,7 @@ import MultimodalSpec qualified
 import ProgramAcceptanceSpec qualified
 import ProgramSpec qualified
 import RefineSpec qualified
+import RequestDefaultsSpec qualified
 import ResilienceSpec qualified
 import RoutingSpec qualified
 import SchemaSpec qualified
@@ -33,7 +34,8 @@ main =
   defaultMain $
     testGroup
       "shikumi"
-      [ ContinuationSpec.tests,
+      [ RequestDefaultsSpec.tests,
+        ContinuationSpec.tests,
         ErrorSpec.tests,
         SchemaSpec.tests,
         SignatureSpec.tests,

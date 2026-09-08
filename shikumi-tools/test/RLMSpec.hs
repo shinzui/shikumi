@@ -3,6 +3,7 @@
 module RLMSpec (tests) where
 
 import Baikai (Model, emptyModel)
+import Baikai.Speed (Speed (..))
 import Control.Concurrent (forkFinally, newEmptyMVar, putMVar, takeMVar)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), object, (.=))
@@ -21,10 +22,11 @@ import Shikumi.CodeExec.RLM
 import Shikumi.CodeExec.Session
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..))
+import Shikumi.LLM.Defaults
 import Shikumi.Program (Program, runProgram)
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature)
-import Shikumi.Testing (mkTextResponse)
+import Shikumi.Testing (captureLLMRequests, mkTextResponse)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 
@@ -46,6 +48,7 @@ sig = mkSignature "Combine the two facts."
 -- dispatches even one unscripted call (including hidden extraction or repair).
 runCaptured :: [Either ShikumiError Text] -> Program Question a -> IO (Either ShikumiError a, [(Model, Text)])
 runCaptured script prog = do
+  effective <- newIORef []
   remaining <- newIORef script
   captured <- newIORef []
   out <-
@@ -66,7 +69,11 @@ runCaptured script prog = do
                   either throwError (pure . mkTextResponse) x
             Stream {} -> throwError (ProviderFailure "unexpected stream")
         )
+      . captureLLMRequests effective
+      . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just SpeedFast})
       $ runProgram prog (Question "Find both facts")
+  requests <- readIORef effective
+  map (\(_, _, opts) -> opts ^. #speed) requests @?= replicate (length requests) (Just SpeedFast)
   calls <- reverse <$> readIORef captured
   pure (out, calls)
 

@@ -29,7 +29,9 @@ import Baikai
   )
 import Baikai qualified as B
 import Baikai.Cost qualified as BC
+import Baikai.Evidence qualified as E
 import Baikai.Speed (Speed (..))
+import Baikai.ThinkingLevel (ThinkingLevel (..))
 import Baikai.Usage qualified as BU
 import Control.Exception (bracket)
 import Control.Lens ((&), (.~), (^.))
@@ -68,6 +70,7 @@ import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
 import Shikumi.LLM.Continuation (contextIdentity, requestOrigin, stampContinuation)
+import Shikumi.LLM.Defaults
 import Shikumi.Routing (routeLLM, runRouting)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
@@ -137,7 +140,8 @@ main = do
       defaultMain $
         testGroup
           "shikumi-cache"
-          [ keyTests,
+          [ defaultsTests,
+            keyTests,
             memoryTests,
             sqliteTests,
             memoizeTests,
@@ -426,4 +430,91 @@ versioningTests =
           ( canonicalJSON (requestToCanonicalValueVersioned currentKeyVersion fixModel fixCtx fixOpts)
               /= canonicalJSON (requestToCanonicalValueVersioned "shikumi-cache/v3" fixModel fixCtx fixOpts)
           )
+    ]
+
+defaultsTests :: TestTree
+defaultsTests =
+  testGroup
+    "defaults and cache ordering"
+    [ testCase "empty and equivalent explicit defaults have identical cache bytes" $ do
+        let d = emptyRequestDefaults {defaultSpeed = Just SpeedFast, defaultThinking = Just ThinkingHigh}
+            explicit = fixOpts & #speed .~ Just SpeedFast & #thinking .~ Just ThinkingHigh
+        cacheKey fixModel fixCtx (applyRequestDefaults emptyRequestDefaults fixOpts) @?= cacheKey fixModel fixCtx fixOpts
+        cacheKey fixModel fixCtx (applyRequestDefaults d fixOpts) @?= cacheKey fixModel fixCtx explicit,
+      testCase "correct order separates effective speeds and reasoning then reuses equal options" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let fast = emptyRequestDefaults {defaultSpeed = Just SpeedFast}
+            standard = emptyRequestDefaults {defaultSpeed = Just SpeedStandard}
+            thinking = fast {defaultThinking = Just ThinkingHigh}
+        r <- runEff
+          . runErrorNoCallStack @ShikumiError
+          . runConcurrent
+          . runTime
+          . runRouting fixModel
+          . runCacheMemory tv
+          . runCountingLLM ref stubResponse
+          . cachedLLM
+          $ do
+            _ <- withRequestDefaults fast . routeLLM $ complete emptyModel fixCtx fixOpts
+            _ <- withRequestDefaults standard . routeLLM $ complete emptyModel fixCtx fixOpts
+            _ <- withRequestDefaults thinking . routeLLM $ complete emptyModel fixCtx fixOpts
+            _ <- withRequestDefaults fast . routeLLM $ complete emptyModel fixCtx (fixOpts & #thinking .~ Just ThinkingHigh)
+            pure ()
+        r @?= Right ()
+        readIORef ref >>= (@?= 3),
+      testCase "misplaced cache masks changed defaults (documented counterexample)" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let run speed =
+              runEff
+                . runErrorNoCallStack @ShikumiError
+                . runConcurrent
+                . runTime
+                . runCacheMemory tv
+                . runCountingLLM ref stubResponse
+                . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just speed})
+                . cachedLLM
+                $ complete fixModel fixCtx fixOpts
+        _ <- run SpeedFast
+        _ <- run SpeedStandard
+        readIORef ref >>= (@?= 1),
+      testCase "direct and default strict evidence bypass warm reads and writes" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let evidence = (E.evidenceRequest "strict") {E.strictness = E.EvidenceRequired E.EvidenceFullyObserved}
+            opts = fixOpts & #evidence .~ Just evidence
+            key = cacheKey fixModel fixCtx opts
+            entry = CachedResponse stubResponse someTime currentKeyVersion
+            d = emptyRequestDefaults {defaultEvidence = Just evidence}
+        runEff . runConcurrent . runCacheMemory tv $ storeCache key entry
+        r <- runEff
+          . runErrorNoCallStack @ShikumiError
+          . runConcurrent
+          . runTime
+          . runCacheMemory tv
+          . runCountingLLM ref stubResponse
+          . cachedLLM
+          $ do
+            _ <- complete fixModel fixCtx opts
+            _ <- withRequestDefaults d $ complete fixModel fixCtx fixOpts
+            pure ()
+        r @?= Right ()
+        readIORef ref >>= (@?= 2)
+        -- A write would replace the old timestamp even if the response is equal.
+        got <- runEff . runConcurrent . runCacheMemory tv $ lookupCache key
+        got @?= Just entry
+        freshCache <- newMemoryCache
+        _ <-
+          runEff
+            . runErrorNoCallStack @ShikumiError
+            . runConcurrent
+            . runTime
+            . runCacheMemory freshCache
+            . runCountingLLM ref stubResponse
+            . cachedLLM
+            . withRequestDefaults d
+            $ complete fixModel fixCtx fixOpts
+        absent <- runEff . runConcurrent . runCacheMemory freshCache $ lookupCache key
+        absent @?= Nothing
     ]

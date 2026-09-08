@@ -40,8 +40,8 @@ newtype CacheConfig = CacheConfig
   }
 
 defaultCacheConfig :: CacheConfig       -- entryTTL = Nothing
-cachedLLM          :: (Cache :> es, LLM :> es, Time :> es) => Eff es a -> Eff es a
-cachedLLMWith      :: (Cache :> es, LLM :> es, Time :> es) => CacheConfig -> Eff es a -> Eff es a
+cachedLLM          :: (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) => Eff es a -> Eff es a
+cachedLLMWith      :: (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) => CacheConfig -> Eff es a -> Eff es a
 ```
 
 `Cache` is the *storage mechanism*; `cachedLLM` is the *memoizing policy* that uses it. On a
@@ -71,7 +71,7 @@ cacheKey :: Model -> Context -> Options -> CacheKey
 The key is a **BLAKE3 256-bit digest over a canonical JSON serialization** of everything that
 defines the request: a version string, model id, provider, API kind, base URL, model default
 headers, compatibility shim, system prompt, messages, tools, tool choice, temperature, max
-tokens, per-call headers, thinking, and response format. Message construction timestamps are
+tokens, per-call headers, speed, thinking, and response format. Message construction timestamps are
 stripped before hashing because they are local bookkeeping, not provider-visible prompt
 content. API keys, timeouts, response ids, latency, and per-call metadata are excluded.
 Canonical means object keys sorted by Unicode code point, no insignificant whitespace, UTF-8.
@@ -261,3 +261,21 @@ cabal run jitsurei-trace-replay
 
 One program demonstrated three ways: cached (in-memory), traced (span tree rendered and
 persisted), then replayed from the stored trace fail-closed.
+
+## Defaults and evidence requests
+
+Compose `cachedLLM . withRequestDefaults defaults . routeLLM` above the base
+interpreter. Routing happens first, defaults second, and cache lookup third.
+Equivalent explicit and defaulted options share keys; changes in speed or thinking
+produce different keys. Reversing defaults and cache can reuse an entry before
+the changed defaults are seen. See the
+[compiled defaults example](../../shikumi-jitsurei/app/RequestDefaults.hs) for a
+complete stack including tracing.
+
+Any `Options.evidence = Just request` bypasses both cache reads and writes,
+including warm entries and evidence supplied through defaults. A cached response
+omits evidence and cannot establish a new provider crossing. Ordinary calls retain
+memoization; streams remain uncached. Continuation validation runs before lookup
+or evidence bypass. Trace above cache observes logical calls including hits; a
+transport-attempt observer belongs below cache. Replay remains explicitly offline
+and cannot create fresh provider evidence.

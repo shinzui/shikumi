@@ -1,9 +1,11 @@
 module CompactionSpec (tests) where
 
 import Baikai (emptyModel, zeroUsage)
-import Control.Lens ((&), (.~))
+import Baikai.Speed (Speed (..))
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..))
 import Data.Generics.Labels ()
+import Data.IORef (newIORef, readIORef)
 import Data.Text (Text)
 import Data.Vector qualified as V
 import Effectful (runEff)
@@ -33,12 +35,14 @@ import Shikumi.Compaction
     usageExceedsWindow,
   )
 import Shikumi.Error (ShikumiError (..))
+import Shikumi.LLM.Defaults
 import Shikumi.Program (runProgram)
 import Shikumi.Testing
-  ( mkTextResponse,
+  ( captureLLMRequests,
+    mkTextResponse,
     mkUsageResponse,
-    runAgent,
     runEffScript,
+    runScriptLLM,
     runScriptLLMThrowingOn,
   )
 import Test.Tasty (TestTree, testGroup)
@@ -84,7 +88,17 @@ tests =
                 mkUsageResponse model 10 finishReply,
                 mkTextResponse extractReply
               ]
-        res <- runAgent script (reactWithTrajectory weatherSignature weatherRegistry cfg) weatherQuestion
+        captured <- newIORef []
+        res <-
+          runEff
+            . runErrorNoCallStack @ShikumiError
+            . runScriptLLM script
+            . captureLLMRequests captured
+            . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just SpeedFast})
+            $ runProgram (reactWithTrajectory weatherSignature weatherRegistry cfg) weatherQuestion
+        calls <- readIORef captured
+        length calls @?= 5
+        map (\(_, _, opts) -> opts ^. #speed) calls @?= replicate 5 (Just SpeedFast)
         case res of
           Right (o :: WeatherResp, traj) -> do
             o @?= expectedWeather

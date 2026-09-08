@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `Shikumi.LLM.Defaults`: invocation-scoped thinking, speed, token and evidence defaults with fill-only precedence for blocking and streaming calls. Zero default ceilings raise `ValidationFailure`. Additive public API requires a PVP minor release; existing unreleased major changes still govern the next release.
+
 - Add continuation origin/prefix guards shared by routing and transport. `routeLLM` now requires `Error ShikumiError`; this public constraint change requires a PVP major review at release.
 
 - Preserve structured transport failures in `ProviderError BaikaiError` and expose `renderShikumiError`. Blocking and streaming calls retry only typed rate limits/transient failures; refusals, auth, unavailable-provider, process and unknown failures are terminal. Legacy `ProviderFailure` and malformed stream terminals retain retry behavior. The added public sum constructor requires a PVP major bump at release; exhaustive downstream matches must handle it.

@@ -328,3 +328,45 @@ successful response. Host exceptions and cancellation continue to escape; only
 transport `BaikaiError` values enter this mapping. GEPA's default failure scoring
 continues to abort on provider infrastructure failures. See
 [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md).
+
+## Shared request defaults
+
+Import `Shikumi.LLM.Defaults` and scope a run with `withRequestDefaults`.
+`RequestDefaults` contains only `defaultThinking`, `defaultSpeed`,
+`defaultMaxTokens` and `defaultEvidence`, each optional. `emptyRequestDefaults`
+changes nothing. Explicit options win over defaults; an inner scope wins over an
+outer scope. Evidence requests override as a complete object. A zero default
+token ceiling raises `ValidationFailure` before the scoped action runs.
+
+Defaults cover both blocking and streaming calls, including agent proposals,
+repairs, summaries and recursive subqueries. They preserve temperatures, schemas,
+tool choices, credentials and continuation metadata. They do not select a model
+or change the router's policy: use defaults without ambient routing when requests
+already carry distinct sub-models. Independent concurrent runs share no settings.
+Defaults are runtime configuration and do not change Program or Params encoding.
+
+The compiled offline example in
+[`RequestDefaults.hs`](../../shikumi-jitsurei/app/RequestDefaults.hs) uses this stack:
+
+```haskell
+runEff . runPrim . runTime . runConcurrent . runTrace
+  . runErrorNoCallStack @ShikumiError . runRouting emptyModel . runCacheMemory cache
+  . runStubLLM (const validAnswerResponse) . captureLLMRequests calls . cachedLLM . tracedLLM
+  . withRequestDefaults defaults . routeLLM
+  $ runProgram instructedProg question
+```
+
+The rightmost wrapper handles a call first: routing validates continuation, then
+defaults fill missing options, then trace/cache see the effective request. The
+production base interpreter validates continuation again and strips private
+metadata before transport. Run the complete example with:
+
+```bash
+nix develop .#ghc9124-ci --command cabal run jitsurei-request-defaults
+```
+
+It makes three typed runs and two base calls: the ordinary repeat is cached; the
+evidence-requesting run bypasses cache. Requested high thinking or fast speed
+never proves that the provider used it. Translation and evidence strength remain
+owned by `mori://shinzui/baikai/docs/model-call-evidence`; unsupported preferences
+are handled by the provider. The offline example supplies no provider evidence.

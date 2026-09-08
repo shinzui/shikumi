@@ -25,6 +25,7 @@ import Baikai
     jsonSchemaFormat,
   )
 import Baikai.Models.Generated (openai_gpt_4o_mini)
+import Baikai.Speed (Speed (..))
 import Control.Lens ((^.))
 import Data.Aeson (Value (..), eitherDecodeStrict, object, (.=))
 import Data.Aeson.KeyMap qualified as KM
@@ -47,6 +48,7 @@ import Shikumi.Adapter (metaNativeDemosKey, metaNativePromptKey, metaResponseSch
 import Shikumi.Combinator (majorityVote, majorityVoteBy)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), Response)
+import Shikumi.LLM.Defaults
 import Shikumi.Module (predict)
 import Shikumi.Program
   ( Demo (..),
@@ -112,10 +114,13 @@ captureRouted model prog input = do
       . runErrorNoCallStack @ShikumiError
       . runRouting model
       . runCapturingLLM ref outlineResponse
+      . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just SpeedFast})
       . routeLLM
       $ runProgram prog input
   assertBool "routed program decodes without error" (isRight res)
-  readIORef ref
+  captured <- readIORef ref
+  map (\(_, _, o) -> o ^. #speed) captured @?= replicate (length captured) (Just SpeedFast)
+  pure captured
 
 -- | As 'captureRouted' but under the concurrent executor.
 captureRoutedConc :: Model -> Program Topic Outline -> Topic -> IO [(Model, Context, Options)]
@@ -127,10 +132,13 @@ captureRoutedConc model prog input = do
       . runConcurrent
       . runRouting model
       . runCapturingLLM ref outlineResponse
+      . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just SpeedFast})
       . routeLLM
       $ runProgramConc prog input
   assertBool "routed program decodes without error" (isRight res)
-  readIORef ref
+  captured <- readIORef ref
+  map (\(_, _, o) -> o ^. #speed) captured @?= replicate (length captured) (Just SpeedFast)
+  pure captured
 
 isRight :: Either a b -> Bool
 isRight = either (const False) (const True)
@@ -259,12 +267,14 @@ routesStreamModelAndStripsMetadata =
         . runErrorNoCallStack @ShikumiError
         . runRouting openai_gpt_4o_mini
         . runCapturingLLM ref outlineResponse
+        . withRequestDefaults (emptyRequestDefaults {defaultSpeed = Just SpeedFast})
         . routeLLM
         $ streamProgram (predict topicToOutline) (Topic "cats") (\_ -> pure ())
     assertBool "routed streaming program decodes without error" (isRight res)
     captured <- readIORef ref
     case captured of
       [(m, _, o)] -> do
+        o ^. #speed @?= Just SpeedFast
         m ^. #modelId @?= openai_gpt_4o_mini ^. #modelId
         o ^. #responseFormat
           @?= Just (JsonSchema ((jsonSchemaFormat "output" (deriveSchema @Outline)) {strict = True}))

@@ -33,7 +33,7 @@ import Baikai (Response, StopReason (ErrorReason))
 import Control.Lens ((^.))
 import Control.Monad (when)
 import Data.Generics.Labels ()
-import Data.Maybe (isNothing)
+import Data.Maybe (isJust, isNothing)
 import Data.Time.Clock (NominalDiffTime, diffUTCTime)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, passthrough, send)
@@ -105,20 +105,23 @@ cachedLLMWith ::
 cachedLLMWith cfg = interpose $ \env -> \case
   Complete model ctx opts -> do
     either throwError pure (validateRequestContinuation model ctx opts)
-    let key = cacheKey model ctx opts
-    hit <- lookupCache key
-    now <- getCurrentTime
-    case hit of
-      Just cr
-        | keyVersion cr == currentKeyVersion,
-          fresh (entryTTL cfg) now (storedAt cr) ->
-            pure (response cr)
-      _ -> do
-        resp <- complete model ctx opts
-        stored <- getCurrentTime
-        when (cacheable resp) $
-          storeCache key (CachedResponse resp stored currentKeyVersion)
-        pure resp
+    if isJust (opts ^. #evidence)
+      then complete model ctx opts
+      else do
+        let key = cacheKey model ctx opts
+        hit <- lookupCache key
+        now <- getCurrentTime
+        case hit of
+          Just cr
+            | keyVersion cr == currentKeyVersion,
+              fresh (entryTTL cfg) now (storedAt cr) ->
+                pure (response cr)
+          _ -> do
+            resp <- complete model ctx opts
+            stored <- getCurrentTime
+            when (cacheable resp) $
+              storeCache key (CachedResponse resp stored currentKeyVersion)
+            pure resp
   other -> passthrough env other
   where
     fresh Nothing _ _ = True
