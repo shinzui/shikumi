@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
+
 ## 0.1.2.3 — 2026-08-29
 
 ### Changed

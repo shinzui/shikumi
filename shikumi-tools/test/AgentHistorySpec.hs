@@ -4,12 +4,14 @@ module AgentHistorySpec (tests) where
 
 import Baikai qualified as B
 import Baikai.Cost qualified as BC
+import Baikai.Usage qualified as BU
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
 import Data.IORef
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
@@ -149,7 +151,9 @@ tests =
         (_, resumed, _) <- execute True
         resumed @?= uninterrupted,
       testCase "message metadata, thinking signature and rich blocks survive JSON bytes" $ do
-        let response = firstTurn & #message . #content .~ (V.cons (B.AssistantThinking (B.ThinkingContent "opaque" (Just "signature") True)) (firstTurn ^. #message . #content))
+        let replay = B.ThinkingReplay B.OpenAIResponses "test-model" (V.singleton (object ["opaque" .= ("replay" :: String)]))
+            thinking = B.ThinkingContent "opaque" (Just "signature") True (Just replay)
+            response = firstTurn & #message . #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
         (result, _, _) <- recording [Right response] (start >>= advanceSession weatherSignature registry cfg >>= paused)
         case result of
           Right s -> (eitherDecode (encode (encodeSession s)) >>= either (Left . show) Right . decodeSession) @?= Right s
@@ -339,16 +343,25 @@ tests =
         length requests @?= 2
         dispatched @?= [],
       testCase "exact rational costs and timestamps survive checkpoint encoding" $ do
-        let cost = BC.Cost (1 / 3) (BC.CostBreakdown (1 / 7) (2 / 9) (1 / 11) (1 / 13))
+        let cost = BC.Cost (1 / 3) (BC.CostBreakdown (1 / 7) (2 / 9) (1 / 11) (1 / 13)) (BC.CostBasis (Set.singleton BC.StandardTokenRates) (Set.singleton BC.CacheWriteUsageNotReported))
             response =
               firstTurn
                 & #message . #usage . #cost .~ cost
                 & #message . #usage . #reasoningTokens .~ Just 5
+                & #message . #usage . #availability .~ Just (BU.UsageAvailability (Set.singleton BU.CacheWriteUsage) False (Set.singleton (BU.BillingServiceTier "standard")))
                 & #message . #timestamp .~ Just (read "2026-09-07 01:00:00 UTC")
                 & #message . #errorMessage .~ Just "nonfatal diagnostic"
         (result, _, _) <- recording [Right response] (start >>= advanceSession weatherSignature registry cfg >>= paused)
         case result of
           Right s -> (eitherDecode (encode (encodeSession s)) >>= either (Left . show) Right . decodeSession) @?= Right s
+          Left err -> assertFailure (show err),
+      testCase "legacy checkpoints without billing metadata still decode" $ do
+        let stripBilling (Object fields) = Object (KM.mapWithKey (\_ -> stripBilling) (KM.delete "basis" (KM.delete "availability" fields)))
+            stripBilling (Array values) = Array (V.map stripBilling values)
+            stripBilling other = other
+        (result, _, _) <- recording [Right firstTurn] (start >>= advanceSession weatherSignature registry cfg >>= paused)
+        case result of
+          Right s -> decodeSession (stripBilling (encodeSession s)) @?= Right s
           Left err -> assertFailure (show err),
       testCase "context retry is bounded" $ do
         let compactCfg = cfg {compaction = CompactionConfig 0 1 True}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`. Require the Claude and OpenAI providers at `0.7.0.0` and Effectful at `0.4.0.1`; recognize OpenAI Responses as native structured-output capable.
+
 - Decode nested XML records and arrays with bounded, balanced parsing. Add `nestedXmlAdapter` with `ToJSON` output demonstrations and schema guides; preserve legacy XML rendering and JSON-in-tag container decoding. XML required strings now retain literal `null`.
 
 - Add `CaptureCodec`, `PredictCaptured`, and `predictCaptured` for opt-in typed node capture. Ordinary prediction constraints and parameter serialization are unchanged. Public GADT matches must handle the new constructor; all core traversals preserve codecs.

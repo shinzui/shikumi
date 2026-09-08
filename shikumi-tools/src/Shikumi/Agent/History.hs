@@ -262,14 +262,15 @@ parseUsage :: Value -> Parser B.Usage
 parseUsage = withObject "usage" $ \o -> do
   ratios <- o .: "costRatios" :: Parser [(Integer, Integer)]
   unless (all ((> 0) . snd) ratios) (fail "invalid cost denominator")
+  basis <- o .: "tokens" >>= withObject "tokens" (\t -> t .: "cost" >>= withObject "cost" (\c -> c .:? "basis" .!= mempty))
   cost <- case map (uncurry (%)) ratios of
-    [total, i, out, cached, written] -> pure (BC.Cost total (BC.CostBreakdown i out cached written))
+    [total, i, out, cached, written] -> pure (BC.Cost total (BC.CostBreakdown i out cached written) basis)
     _ -> fail "invalid cost breakdown"
   u <-
     o .: "tokens"
       >>= withObject
         "tokens"
         ( \t ->
-            B.Usage <$> t .: "input_tokens" <*> t .: "output_tokens" <*> t .: "cache_read_tokens" <*> t .: "cache_write_tokens" <*> t .: "reasoning_tokens" <*> t .: "total_tokens" <*> pure cost
+            B.Usage <$> t .: "input_tokens" <*> t .: "output_tokens" <*> t .: "cache_read_tokens" <*> t .: "cache_write_tokens" <*> t .: "reasoning_tokens" <*> t .: "total_tokens" <*> t .:? "availability" <*> pure cost
         )
   pure (u & #cost .~ cost)

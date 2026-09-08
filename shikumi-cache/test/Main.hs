@@ -27,12 +27,17 @@ import Baikai
     user,
     userAt,
   )
+import Baikai.Cost qualified as BC
+import Baikai.Speed (Speed (..))
+import Baikai.Usage qualified as BU
 import Control.Exception (bracket)
 import Control.Lens ((&), (.~))
-import Data.Aeson (object, toJSON, (.=))
+import Data.Aeson (Result (..), Value (..), eitherDecode, encode, fromJSON, object, toJSON, (.=))
+import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
@@ -56,6 +61,7 @@ import Shikumi.Cache
 import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
 import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned, stripMessageTimestamps)
+import Shikumi.Cache.ResponseJSON ()
 import Shikumi.Effect.Time (runTime)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
@@ -171,6 +177,10 @@ keyTests =
         assertBool
           "temperature change must change the key"
           (cacheKey fixModel fixCtx fixOpts /= cacheKey fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)),
+      testCase "speed preference changes the key" $ do
+        let standard = cacheKey fixModel fixCtx (fixOpts & #speed .~ Just SpeedStandard)
+            fast = cacheKey fixModel fixCtx (fixOpts & #speed .~ Just SpeedFast)
+        assertBool "explicit speed must be part of the key" (standard /= fast && fast /= cacheKey fixModel fixCtx fixOpts),
       testCase "baseUrl changes the key" $
         assertBool
           "endpoint routing must be part of the key"
@@ -241,6 +251,19 @@ sqliteTests =
             withSQLiteCache file $ \c ->
               runEff . runCacheSQLite c $ (storeCache restartKey restartEntry >> lookupCache restartKey)
           got @?= Just restartEntry,
+      testCase "billing metadata survives response JSON" $ do
+        let response =
+              emptyResponse
+                & #message . #usage . #cost . #basis .~ BC.CostBasis (Set.singleton BC.StandardTokenRates) (Set.singleton BC.CacheWriteUsageNotReported)
+                & #message . #usage . #availability .~ Just (BU.UsageAvailability (Set.singleton BU.CacheWriteUsage) False (Set.singleton (BU.BillingSpeed "fast")))
+        eitherDecode (encode response) @?= Right response,
+      testCase "legacy usage JSON without billing metadata still decodes" $ do
+        let legacy = case toJSON BU.zeroUsage of
+              Object fields -> Object (KM.delete "availability" (KM.mapWithKey (\k v -> if k == "cost" then stripBasis v else v) fields))
+              other -> other
+            stripBasis (Object fields) = Object (KM.delete "basis" fields)
+            stripBasis other = other
+        fromJSON legacy @?= Success BU.zeroUsage,
       testCase "an absent key returns Nothing" $
         withSystemTempDirectory "shikumi-sqlite" $ \dir -> do
           let file = dir </> "cache.db"

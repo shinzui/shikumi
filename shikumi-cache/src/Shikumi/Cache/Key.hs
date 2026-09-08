@@ -83,10 +83,11 @@ requestToCanonicalValue = requestToCanonicalValueVersioned currentKeyVersion
 -- @api, baseUrl, compat, maxTokens, messages, model, modelHeaders,
 -- optionsHeaders, provider, responseFormat, systemPrompt, temperature,
 -- thinking, toolChoice, tools, version@. 'canonicalJSON' sorts the keys, so the
--- listing order here is irrelevant.
+-- listing order here is irrelevant. Explicit inference speed adds @speed@;
+-- an absent preference preserves the existing key encoding.
 requestToCanonicalValueVersioned :: Text -> Model -> Context -> Options -> Value
 requestToCanonicalValueVersioned version m ctx opts =
-  object
+  object $
     [ "version" .= version,
       "model" .= (m ^. #modelId),
       "provider" .= (m ^. #provider),
@@ -104,6 +105,7 @@ requestToCanonicalValueVersioned version m ctx opts =
       "thinking" .= toJSON (opts ^. #thinking),
       "responseFormat" .= toJSON (opts ^. #responseFormat)
     ]
+      <> maybe [] (\speed -> ["speed" .= speed]) (opts ^. #speed)
   where
     -- Normalize the Double through Scientific so two requests that are == in
     -- temperature serialize identically regardless of how the Double was built.

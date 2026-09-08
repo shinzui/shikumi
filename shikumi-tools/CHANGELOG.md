@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`. Preserve cost basis and usage availability in agent checkpoints, including exact rational costs and legacy checkpoint decoding.
+
 ### Added
 
 - Rich `ToolOutput` results and runtime-schema dynamic tool registration, with

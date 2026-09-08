@@ -59,6 +59,7 @@ import Data.Aeson
     genericParseJSON,
     object,
     withObject,
+    (.!=),
     (.:),
     (.:?),
     (.=),
@@ -93,7 +94,7 @@ instance FromJSON CostBreakdown where
 
 instance FromJSON Cost where
   parseJSON = withObject "Cost" $ \o ->
-    Cost <$> ratField o "usd" <*> o .: "breakdown"
+    Cost <$> ratField o "usd" <*> o .: "breakdown" <*> o .:? "basis" .!= mempty
 
 instance FromJSON AssistantPayload where
   parseJSON = genericParseJSON defaultOptions

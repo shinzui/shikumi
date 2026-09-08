@@ -72,7 +72,7 @@ test-suite shikumi-compile-test
 
   build-depends:
     , aeson
-    , baikai           >=0.6      && <0.7
+    , baikai           >=0.7.0.0  && <0.8
     , base
     , bytestring
     , effectful

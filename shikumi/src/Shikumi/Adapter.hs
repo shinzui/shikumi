@@ -190,6 +190,7 @@ data ModelCapability = NativeSchema | PromptFallback
 capabilityFor :: Model -> ModelCapability
 capabilityFor m = case (m ^. #provider, m ^. #api) of
   ("openai", OpenAIChatCompletions) -> NativeSchema
+  ("openai", OpenAIResponses) -> NativeSchema
   ("anthropic", AnthropicMessages) -> NativeSchema
   _ -> PromptFallback
 

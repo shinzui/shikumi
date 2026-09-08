@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
+
 - Add isolated `runProgramObserved` and `NodeObservation`, sharing traced control flow and retaining failed-attempt evidence with rejection lineage. Embed remains opaque; concurrent outer executions use separate storage.
 
 ## 0.2.0.3 — 2026-08-29

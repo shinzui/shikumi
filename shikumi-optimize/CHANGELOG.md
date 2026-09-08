@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
+
 - Add `structureSearchWith` for validation-only finite recipe selection through shared admission/objectives, plus optional candidate identity metadata in reports and lifecycle events.
 
 - Add validated GEPA execution, named objective selection, hard LLM-operation admission, bounded candidate execution, and diagnostic lifecycle reports.

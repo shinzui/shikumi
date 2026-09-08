@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
+
 - Add validated finite typed recipe registries and distinct version-1 experimental structure artifacts with exact registry/revision/schema/shape checks; existing compiled state is unchanged.
 
 - Preserve capture codecs through parameter restoration and RAG; adapt codecs to reasoning/value outputs in the chain-of-thought rewrite. Saved parameter shapes remain unchanged.

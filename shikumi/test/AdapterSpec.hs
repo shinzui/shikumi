@@ -98,6 +98,8 @@ tests =
     "AdapterSpec"
     [ testCase "capabilityFor: Anthropic messages -> NativeSchema" $
         capabilityFor anthropicModel @?= NativeSchema,
+      testCase "capabilityFor: OpenAI Responses -> NativeSchema" $
+        capabilityFor (emptyModel & #provider .~ "openai" & #api .~ OpenAIResponses) @?= NativeSchema,
       testCase "capabilityFor: Custom (ollama) host -> PromptFallback" $
         capabilityFor ollamaModel @?= PromptFallback,
       testCase "fallback render: system prompt has the instruction and field markers" $ do

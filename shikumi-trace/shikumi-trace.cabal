@@ -52,7 +52,7 @@ library
 
   build-depends:
     , aeson          >=2.2      && <2.3
-    , baikai         >=0.6      && <0.7
+    , baikai         >=0.7.0.0  && <0.8
     , base           >=4.20     && <5
     , bytestring     >=0.11     && <0.13
     , containers     >=0.6      && <0.9
@@ -88,7 +88,7 @@ test-suite shikumi-trace-test
 
   build-depends:
     , aeson
-    , baikai            >=0.6      && <0.7
+    , baikai            >=0.7.0.0  && <0.8
     , base
     , bytestring
     , containers

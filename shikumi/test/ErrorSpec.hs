@@ -31,6 +31,7 @@ tests =
               message = "context length exceeded",
               httpStatus = Just 400,
               retryAfterSeconds = Nothing,
+              refusalCategory = Nothing,
               exitCode = Nothing
             }
           @?= ContextWindowExceeded "context length exceeded",

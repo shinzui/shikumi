@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
+
 - Expose `scoreExecution` and `tryShikumi` for alternate typed runners retaining execution evidence. Existing evaluation failure, timing, concurrency, and usage behavior is unchanged.
 
 ## 0.2.0.3 — 2026-08-29
