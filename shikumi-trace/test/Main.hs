@@ -201,9 +201,13 @@ storeTests =
       testCase "formatVersion 2 without billing fields remains readable" $
         withSystemTempDirectory "shikumi-trace" $ \dir -> do
           let p = dir <> "/v2.json"
-          BL.writeFile p "{\"formatVersion\":2,\"tree\":{\"root\":\"span-0\",\"spans\":{}}}"
+          BL.writeFile p "{\"formatVersion\":2,\"tree\":{\"root\":\"span-0\",\"spans\":{\"span-0\":{\"spanId\":\"span-0\",\"parent\":null,\"kind\":\"ProgramSpan\",\"label\":\"legacy\",\"startedAt\":\"2026-09-08T00:00:00Z\",\"endedAt\":null,\"attrs\":{\"model\":null,\"provider\":null,\"prompt\":null,\"response\":null,\"latencyMs\":null,\"inputTokens\":null,\"outputTokens\":null,\"costUsd\":null,\"retries\":0,\"toolCalls\":[],\"cacheKey\":null,\"nodePath\":null}}}}}"
           res <- readTraceFile p
-          res @?= Right (TraceTree (SpanId "span-0") Map.empty Nothing),
+          case res of
+            Left err -> assertFailure (T.unpack err)
+            Right tree -> do
+              transportBilling tree @?= Nothing
+              map attrs (Map.elems (spans tree)) @?= [emptyAttrs],
       testCase "replayIndex maps each llm-call cacheKey to its response" $ do
         tree <- buildTree
         idx <- replayIndexOrFail tree

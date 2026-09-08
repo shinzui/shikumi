@@ -29,10 +29,11 @@ Evaluation and tracing should show whether a cost is calculated, provider-report
 - [x] (2026-09-08) Milestone 2: Add explicit billing summaries alongside logical usage.
 - [x] (2026-09-08) Milestone 3: Record and export failure billing without corrupting replay.
 - [x] (2026-09-08) Milestone 4 implementation: offline integration fixture, documentation and changelogs.
-- [ ] Milestone 4 validation: full release-source build/test, formatting and final ADR validation.
+- [x] (2026-09-08) Milestone 4 validation: full release-source build/test, formatting and final ADR validation.
 
 
 ## Surprises & Discoveries
+
 
 2026-09-08: The full fixture proves $0.04 logical returned usage versus $0.03 transport billing, three successful attempts, one failed attempt and one missing-usage attempt. The provider response fixture must set ErrorReason as well as errorInfo; responseError deliberately keys on stop reason. Sequential trace export needs a real enclosing ProgramSpan. The memory cache retained spontaneous provider evidence; cache hits now clear it, matching persistent cache behavior.
 
@@ -50,7 +51,17 @@ Evaluation and tracing should show whether a cost is calculated, provider-report
 
 ## Outcomes & Retrospective
 
-Core observations, bounded collection, explicit report/trace attachment and transport export are implemented. Focused core (242), evaluation (47), trace (32), cache (33), and billing/export tests have passed during implementation. The final regression additions and full release-source gates remain to be run before completion. GEPA already retains the full UsageTotals through executionUsage, so no lossy numeric projection needed changing.
+
+Completed in implementation commit `679c6f6`, with final compatibility/replay assertions and validation recorded in the follow-up commit. Core observations, bounded collection, exact persistence, explicit report/trace attachment and transport export are implemented. The full release-source build and all 13 test suites passed. Core ran 242 tests; evaluation 47; trace 32; cache 33; optimizer 131; billing/export 9. Redis ran zero tests because no socket was available; live provider/embedding checks were skipped. These skips are not integration evidence. `nix fmt`, `git diff --check` and strict `just check-adr` passed.
+
+The Hackage index was refreshed and `dist-newstyle-baikai-plans/cache/plan.json` identifies core/Claude/OpenAI 0.7.0.0 and Effectful 0.4.0.1 as `repo-tar` sources. The workstation override was not modified. GEPA already retains the full UsageTotals through executionUsage, so no lossy numeric projection needed changing. ADR-13 distills accounting ownership, bounded retention, absent usage, exact serialization, cache evidence, and honest model attribution. No work remains in this child plan.
+
+```text
+Full release-source build: exit 0
+All 13 test suites: PASS (Redis: zero tests; live checks skipped)
+EP-61 billing/export: All 9 tests passed
+ADR validation: OK: 13 concepts (okf_version 0.2)
+```
 
 
 ## Context and Orientation
@@ -62,7 +73,7 @@ The baseline is commit `ac70154`. It requires `mori://shinzui/baikai/packages/ba
 
 The upgrade already added Cost.basis and Usage.availability decoding; no new orphan instance is needed. In `mori://shinzui/baikai`, source `baikai/src/Baikai/Usage.hs` owns missing counters and observed service/speed facts, while `baikai/src/Baikai/Cost.hs` owns cost sources and estimate reasons. The decision at project-relative `docs/adr/0020-pricing-policies-and-calculation-bases-are-explicit.md` requires unioning basis sets and preserving absent versus reported zero. A provider-reported amount is not an invoice. Do not calculate prices again or infer observed speed from requested speed.
 
-[ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) separates execution evidence from invented node attribution; [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves optimistic dollar admission and actual logical attempts; [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) owns reusable fixtures. Completed plans 39 and 43 already fixed stream usage and exporter cleanup; retain those fixes. No local ADR defines transport-attempt accounting. This plan depends on [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) for final error classification. It integrates with [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) to observe effective requests, and with the Responses integration plan for a concrete combined example.
+[ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) separates execution evidence from invented node attribution; [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves optimistic dollar admission and actual logical attempts; [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) owns reusable fixtures. Completed plans 39 and 43 already fixed stream usage and exporter cleanup; retain those fixes. [ADR-13](../adr/0013-separate-transport-billing-from-logical-usage.md) now defines transport-attempt accounting and its separation from logical usage. This plan depends on [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) for final error classification. It integrates with [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) to observe effective requests, and with the Responses integration plan for a concrete combined example.
 
 Locate dependency sources with `mori registry search baikai`, `mori registry show shinzui/baikai --full`, and `mori registry docs shinzui/baikai` before reading APIs. Verify behavior against the release tag, since a sibling checkout can contain newer code. If changing dependency bounds becomes necessary, check Hackage preferred versions and upstream tags first. Never traverse `/nix/store` or the filesystem root. Cross-repository source paths below are relative to `mori://shinzui/baikai`; artifact-level source/ADR handles are pending. Registry searches for the relevant upstream ADR titles returned no handles, so do not invent bundle-scoped ADR IDs.
 
@@ -142,10 +153,12 @@ The implementation and tests are repeatable and require no external writes. Add 
 ## Interfaces and Dependencies
 
 
-Core owns LLMObservation/LLMObserver and per-attempt emission. Shikumi.Eval.Report owns logical report presentation; a core billing summary type may live in Shikumi.LLM.Observation so neither tracing nor evaluation depends on the other. The collector API returns an observer and a snapshot action with an explicit bounded-detail configuration and empty default. Trace owns its persistence version and optional billing attachment, while trace-otel owns export. Existing `withUsageTotals` retains its logical-call meaning; a collector explicitly wired into the real runtime supplies the transport view. No new provider calls, retries, price table, global state or strict monetary reservation are introduced. Use released CostBasis/UsageAvailability types directly and look up OpenTelemetry APIs through Mori before editing the exporter.
+Core owns LLMObservation/LLMObserver and per-attempt emission. `runLLMWithObserver registry observer` is the bare runner; resilient callers set `LLMConfig.observer`. `newBillingCollector` retains aggregates only; `newBillingCollectorWithLimit n` adds bounded terminal detail. Both return an observer and snapshot action. `UsageRecord` wraps the released Usage with exact-cost persistence; terminalError retains only a classification. The two package-qualified `attachBillingSummary` helpers attach snapshots to Report or TraceTree. Trace format 3 adds optional data and still reads versions 1 and 2. Shikumi.Eval.Report owns logical report presentation; a core billing summary type may live in Shikumi.LLM.Observation so neither tracing nor evaluation depends on the other. The collector API returns an observer and a snapshot action with an explicit bounded-detail configuration and empty default. Trace owns its persistence version and optional billing attachment, while trace-otel owns export. Existing `withUsageTotals` retains its logical-call meaning; a collector explicitly wired into the real runtime supplies the transport view. No new provider calls, retries, price table, global state or strict monetary reservation are introduced. Use released CostBasis/UsageAvailability types directly and look up OpenTelemetry APIs through Mori before editing the exporter.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Implemented the runtime observation seam and bounded collector. Recorded synthetic-zero handling, classification-only observation errors and exact local persistence; downstream presentation validation continues.
 
 Revision (2026-09-08): Completed report and trace integration, added format-2 compatibility coverage and the full evaluation fixture, and corrected memory-cache evidence reuse. Final full-suite validation remains.
+
+Revision (2026-09-08): Completed full release-source validation, strengthened legacy trace decoding and replay-index assertions, and finalized ADR distillation. EP-61 is complete; EP-62 is the next eligible child.

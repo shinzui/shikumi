@@ -136,6 +136,9 @@ tests =
         assertBool "both report views rendered" (all (`T.isInfixOf` R.renderReportText attached) ["logical usage quality", "transport billing", "usage_not_reported", "provider_reported_total"])
         eitherDecode (encode attachedTree) @?= Right attachedTree
         replayIndex attachedTree @?= replayIndex tree
+        case replayIndex attachedTree of
+          Right index -> Map.size index @?= 3
+          Left err -> assertFailure (T.unpack err)
         assertBool "failure text never retained" (not ("private provider output" `T.isInfixOf` B.renderBillingSummary summary))
         (processor, ref) <- inMemoryListExporter
         exportTreeWith processor "billing-test" attachedTree
