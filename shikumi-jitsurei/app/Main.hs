@@ -18,3 +18,4 @@ main = do
   putStrLn "  jitsurei-streaming      Program-level streaming: field chunks + status"
   putStrLn "  jitsurei-adapters       XML adapter, two-step extraction, field constraints"
   putStrLn "  jitsurei-codeexec       programOfThought / codeAct over a hermetic sandbox"
+  putStrLn "  jitsurei-request-defaults Shared request settings, caching and evidence bypass"

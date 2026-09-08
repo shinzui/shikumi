@@ -28,7 +28,7 @@ A caller should configure reasoning effort, inference speed, output-token limits
 - [x] (2026-09-08) Milestone 1: Define an explicit default merge.
 - [x] (2026-09-08) Milestone 2: Apply defaults at the effective request boundary.
 - [x] (2026-09-08) Milestone 3 regressions: routing, concurrency, evidence bypass and effective cache keys pass.
-- [ ] Milestone 3 completion: build/run the compiled example and run the full release-source suite.
+- [x] (2026-09-08) Milestone 3 completion: compiled example runs successfully; full release-source build and all 13 suites pass.
 
 
 ## Surprises & Discoveries
@@ -51,7 +51,9 @@ A caller should configure reasoning effort, inference speed, output-token limits
 ## Outcomes & Retrospective
 
 
-Core defaults, cache evidence bypass, consumer regressions, user documentation and ADR-12 are implemented. Strict ADR validation passes. Full build, runnable example and all-suite verification remain before completion.
+EP-60 is complete. Commit `661204c` implements the defaults layer, evidence cache bypass and focused regressions. The compiled `jitsurei-request-defaults` example demonstrates routing, defaults, trace and cache together: three typed runs make two base calls. The full GHC 9.12.4 build and all 13 test suites pass against Hackage repo-tar sources: Baikai core/Claude/OpenAI 0.7.0.0 and Effectful 0.4.0.1. Redis ran zero tests; live-provider and embedding checks were skipped. No live-provider claim follows from this validation.
+
+ADR-12 distills precedence, invocation isolation, the router/sub-model distinction, finite vocabulary and evidence bypass. User guides and affected changelogs are updated. No dependency bounds or package versions changed. EP-61 can observe effective requests below cache; EP-62 can reuse the compiled stack. Requested preferences remain distinct from provider execution evidence.
 
 
 ## Context and Orientation
@@ -61,7 +63,7 @@ The baseline is commit `ac70154`. It requires `mori://shinzui/baikai/packages/ba
 
 `shikumi/src/Shikumi/Adapter.hs` creates Options from emptyOptions, while `Shikumi.Program` stamps schemas and sample temperatures. `shikumi/src/Shikumi/Routing.hs` replaces placeholder models and realizes those stamps identically for Complete and Stream. `shikumi-tools/src/Shikumi/Agent/ReAct.hs`, `Shikumi/CodeExec/CodeAct.hs`, and `shikumi/src/Shikumi/Compaction.hs` construct further requests with local Options. `shikumi-tools/src/Shikumi/CodeExec/Session.hs` supplies distinct sub-model requests; defaults must not silently replace their models. `shikumi-cache/src/Shikumi/Cache/Key.hs` already includes explicit speed. The core model route and default application are separate transformations.
 
-[ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) requires all recursive calls to pass through LLM admission and prohibits hidden RLM calls. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) requires shared capturing fixtures to live in the internal harness when reusable. There is no local ADR defining ambient request defaults. Upstream `docs/adr/0002-requested-translated-observed-are-never-collapsed.md` and the registered guide `mori://shinzui/baikai/docs/model-call-evidence` distinguish a requested setting from what a provider actually accepted. No other child is a hard dependency. Integrate middleware ordering with [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) and final usage observation with [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md).
+[ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) requires all recursive calls to pass through LLM admission and prohibits hidden RLM calls. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) requires shared capturing fixtures to live in the internal harness when reusable. [ADR-12](../adr/0012-apply-request-defaults-before-cache-and-observation.md) now defines fill-only precedence, routing/defaults/cache order and evidence bypass. Upstream `mori://shinzui/baikai`, project-relative `docs/adr/0002-requested-translated-observed-are-never-collapsed.md` (artifact-level URI pending), and the registered guide `mori://shinzui/baikai/docs/model-call-evidence` distinguish a requested setting from what a provider actually accepted. No other child is a hard dependency. Integrate middleware ordering with [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) and final usage observation with [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md).
 
 Locate dependency sources with `mori registry search baikai`, `mori registry show shinzui/baikai --full`, and `mori registry docs shinzui/baikai` before reading APIs. Verify behavior against the release tag, since a sibling checkout can contain newer code. If changing dependency bounds becomes necessary, check Hackage preferred versions and upstream tags first. Never traverse `/nix/store` or the filesystem root. Cross-repository source paths below are relative to `mori://shinzui/baikai`; artifact-level source/ADR handles are pending. Registry searches for the relevant upstream ADR titles returned no handles, so do not invent bundle-scoped ADR IDs.
 
@@ -137,3 +139,10 @@ Proposed public signatures in Shikumi.LLM.Defaults are `emptyRequestDefaults :: 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Implemented milestones 1 and 2 and focused milestone 3 regressions; documented the existing typed validation error and router/sub-model distinction. Full acceptance is pending.
+
+Revision (2026-09-08): Completed full acceptance and ADR distillation. Validation used the temporary release-source project printed by the Concrete Steps script, with `--builddir=dist-newstyle-baikai-plans` resolved relative to that temporary project. The workstation override was untouched. Full build and `cabal test all` exited zero; `nix fmt`, `git diff --check`, and strict `just check-adr` passed. The compiled example exited zero with:
+
+```text
+Three typed runs, two base calls: ordinary repeat cached; evidence request dispatched.
+Requested: high thinking, standard speed, 4096 output tokens. Offline stub supplies no provider evidence.
+```

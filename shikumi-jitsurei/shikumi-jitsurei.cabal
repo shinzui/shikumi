@@ -253,3 +253,20 @@ executable jitsurei-structure-search
     , shikumi-jitsurei
     , shikumi-optimize
     , text
+
+-- Shared request defaults, cache and trace ordering, and evidence bypass.
+executable jitsurei-request-defaults
+  import:         common-options
+  main-is:        RequestDefaults.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , baikai           >=0.7.0.0 && <0.8
+    , base             >=4.20    && <5
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
+    , shikumi-cache
+    , shikumi-testing
+    , shikumi-trace

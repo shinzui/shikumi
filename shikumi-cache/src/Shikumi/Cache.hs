@@ -88,7 +88,9 @@ defaultCacheConfig = CacheConfig {entryTTL = Nothing}
 -- are never cached. Under concurrent identical requests both callers may miss
 -- and call the provider; this accepted check-then-act race is harmless because
 -- stores are idempotent upserts keyed by content. The streaming op is passed
--- through unchanged — streams are not cached.
+-- through unchanged — streams are not cached. Any evidence request bypasses
+-- both reads and writes, since cached responses cannot establish a new provider
+-- crossing. Compose defaults before this memoizer in request execution order.
 cachedLLM ::
   (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) =>
   Eff es a ->

@@ -28,7 +28,7 @@ The scope is five independently testable improvements across core runtime, sessi
 
 Split by user-visible behavior rather than packages. Refusal handling is the smallest correctness change and establishes the error contract. Reasoning sessions have a distinct persistence and history contract. Request defaults are a pure runtime composition feature. Billing needs its own collector and serialization decisions because logical operation usage differs from transport attempts. The final example validates the combined result rather than becoming a second implementation of any feature.
 
-[ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) preserves completed exchanges and the full audit while permitting request-view compaction; the new plan tightens when compaction is safe. [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves bounded recursive calls and optimistic budget admission. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) prohibits inventing node attribution or provider evidence. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) centralizes reusable offline fixtures without introducing production dependency cycles. Relevant prior plans 34, 39, 43, 49, 54 and 56 are completed and are not reopened. [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md) now defines refusal policy after EP-58 implementation. No local ADR yet defines shared request defaults or transport-attempt billing. Child implementation must record those durable decisions when adopted.
+[ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) preserves completed exchanges and the full audit while permitting request-view compaction; the new plan tightens when compaction is safe. [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves bounded recursive calls and optimistic budget admission. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) prohibits inventing node attribution or provider evidence. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) centralizes reusable offline fixtures without introducing production dependency cycles. Relevant prior plans 34, 39, 43, 49, 54 and 56 are completed and are not reopened. [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md) now defines refusal policy after EP-58 implementation. [ADR-12](../adr/0012-apply-request-defaults-before-cache-and-observation.md) defines shared request defaults and evidence cache bypass after EP-60 implementation. No local ADR yet defines transport-attempt billing. Child implementation must record those durable decisions when adopted.
 
 Upstream context was read through Mori at `mori://shinzui/baikai`: project-relative `docs/adr/0011-core-owns-transport-failure-classification.md`, `docs/adr/0019-reasoning-continuation-is-scoped-to-its-provider-and-model.md`, and `docs/adr/0020-pricing-policies-and-calculation-bases-are-explicit.md`. Artifact-level handles are pending; registry title searches returned none. Their operative rules are embedded in the children: refusals are terminal; opaque replay is origin-scoped; estimates and missing usage remain explicit. Combining everything into one plan would hide independently shippable fixes; splitting billing by package would leave interface ownership unclear.
 
@@ -40,7 +40,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 |---|-------|------|-----------|-----------|--------|
 | 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | Complete |
 | 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Complete |
-| 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | In Progress |
+| 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Complete |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Not Started |
 | 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | Not Started |
 
@@ -81,7 +81,7 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 - [x] EP-59, milestone 3: Provide an explicit fresh conversation and migration documentation.
 - [x] EP-60, milestone 1: Define an explicit default merge.
 - [x] EP-60, milestone 2: Apply defaults at the effective request boundary.
-- [ ] EP-60, milestone 3: Demonstrate cache, routing and concurrency behavior.
+- [x] EP-60, milestone 3: Demonstrate cache, routing and concurrency behavior.
 - [ ] EP-61, milestone 1: Prove a transport-attempt observation seam.
 - [ ] EP-61, milestone 2: Add explicit billing summaries alongside logical usage.
 - [ ] EP-61, milestone 3: Record and export failure billing without corrupting replay.
@@ -93,6 +93,7 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 
 ## Surprises & Discoveries
 
+2026-09-08: EP-60 exposes `Shikumi.LLM.Defaults` with four fill-only optional fields and validates zero default ceilings using terminal `ValidationFailure`. Evidence requests bypass cache reads and writes. `shikumi-jitsurei/app/RequestDefaults.hs` compiles the routing/defaults/trace/cache stack for EP-62. Defaults preserve explicit sub-models; the existing ambient router replaces models, so distinct-model recursive sessions use defaults without that router. EP-61 observes below cache to distinguish actual attempts from logical hits.
 
 2026-09-08: EP-59 preserves the reserved `shikumi.continuation.v1` expectation through routing and cache, stripping it only at transport. EP-60 must retain it when filling defaults. Explicit startup persists a minimal public model identity; callers use routing for full model capabilities and credentials. Unknown opaque version-1 histories require explicit restart.
 
@@ -114,10 +115,12 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Outcomes & Retrospective
 
 
-EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. EP-59 is complete (`c24aa15`): version-2 continuation identity and protected-prefix validation, safe summaries, conservative compaction, and explicit restart are implemented. The full build and all 13 suites passed with release-source dependencies; Redis ran zero tests and live checks were skipped. ADR-6 captures the durable continuation boundary. Two of five child plans are complete; EP-60 is the next eligible child, followed by EP-61 and EP-62.
+EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. EP-59 is complete (`c24aa15`): version-2 continuation identity and protected-prefix validation, safe summaries, conservative compaction, and explicit restart are implemented. The full build and all 13 suites passed with release-source dependencies; Redis ran zero tests and live checks were skipped. ADR-6 captures the durable continuation boundary. EP-60 is complete: shared defaults, effective-option cache differentiation and evidence bypass are implemented (`661204c`), with a compiled offline stack and ADR-12. The full release-source build and all 13 suites passed; Redis ran zero tests and live checks were skipped. Three of five child plans are complete; EP-61 is the next eligible child, followed by EP-62.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Completed EP-58, recorded its release-source validation and cross-plan error contract, and distilled refusal/retry policy into ADR-11. Remaining child statuses and dependencies are unchanged.
 
 Revision (2026-09-08): Completed EP-59, recorded its shared continuation metadata and Error constraints for downstream plans, and extended ADR-6. EP-60 remains the next eligible child.
+
+Revision (2026-09-08): Completed EP-60, recorded its released-source validation and compiled example, and distilled defaults precedence and evidence cache bypass into ADR-12. EP-61 is next.
