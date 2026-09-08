@@ -29,6 +29,7 @@ module Shikumi.Trace
     Span (..),
     TraceTree (..),
     childrenOf,
+    attachBillingSummary,
 
     -- * Node identity (re-exported from "Shikumi.Trace.Node")
     NodePath (..),
@@ -54,7 +55,9 @@ where
 
 import Baikai
   ( AssistantContent (..),
+    AssistantMessageEvent (..),
     Context,
+    Message (..),
     Model,
     Options,
     Response,
@@ -88,6 +91,7 @@ import Shikumi.Cache.Key (CacheKey (..), requestToCanonicalValue)
 import Shikumi.Cache.Key qualified as Key
 import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete, stream)
+import Shikumi.LLM.Observation (BillingSummary, UsageRecord (..), observedModelOf)
 import Shikumi.Trace.Node (NodePath (..))
 import Shikumi.Trace.ResponseJSON ()
 import Text.Read (readMaybe)
@@ -138,7 +142,9 @@ data SpanAttrs = SpanAttrs
     -- | the structural path of the @Program@ node that issued this span's LM call
     -- (EP-16). Present only on model-call spans produced by @runProgramTraced@;
     -- 'Nothing' for spans opened by bare 'withSpan' or a non-node-correlated run.
-    nodePath :: !(Maybe NodePath)
+    nodePath :: !(Maybe NodePath),
+    billingQuality :: !(Maybe UsageRecord),
+    observedModel :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -158,7 +164,9 @@ emptyAttrs =
       retries = 0,
       toolCalls = [],
       cacheKey = Nothing,
-      nodePath = Nothing
+      nodePath = Nothing,
+      billingQuality = Nothing,
+      observedModel = Nothing
     }
 
 -- | One node of the trace tree.
@@ -178,10 +186,15 @@ data Span = Span
 -- reconstructed from each span's 'parent' pointer ('childrenOf').
 data TraceTree = TraceTree
   { root :: !SpanId,
-    spans :: !(Map SpanId Span)
+    spans :: !(Map SpanId Span),
+    transportBilling :: !(Maybe BillingSummary)
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+-- | Attach a run-local bounded transport view, without structural attribution.
+attachBillingSummary :: BillingSummary -> TraceTree -> TraceTree
+attachBillingSummary b t = t {transportBilling = Just b}
 
 -- | The children of a span, in creation order (sorted by start time, ties broken
 -- by numeric @span-N@ id when possible).
@@ -331,7 +344,7 @@ freezeTree :: (Prim :> es) => TraceState -> Eff es TraceTree
 freezeTree st = do
   sp <- readIORef (st ^. #spans)
   r <- readIORef (st ^. #root)
-  pure (TraceTree (fromMaybe (SpanId "") r) sp)
+  pure (TraceTree (fromMaybe (SpanId "") r) sp Nothing)
 
 safeHead :: [a] -> Maybe a
 safeHead [] = Nothing
@@ -343,9 +356,8 @@ safeHead (x : _) = Just x
 
 -- | Capture every LM call as a leaf 'LlmCallSpan' under the active span. Interpose
 -- on EP-1's @LLM@ effect: open a span, delegate to the underlying handler, then
--- fill the span's attributes from the returned 'Response' (and the request). The
--- streaming op is wrapped in a span but its attributes are left empty (streams
--- carry the same data incrementally; the demo/replay path uses 'complete').
+-- fill the span's attributes from the returned 'Response' (and the request). Streaming terminals contribute usage and observed identity; only successful
+-- blocking responses produce replay records.
 --
 -- This capture uses 'runTrace'\'s sequential span stack. Compose it with
 -- 'Shikumi.Program.runProgram'; concurrent program execution is intentionally
@@ -356,7 +368,22 @@ tracedLLM = interpose $ \_ -> \case
     resp <- complete m c o
     annotateSpan (const (llmAttrs m c o resp))
     pure resp
-  Stream m c o -> withSpan LlmCallSpan (llmLabel m) (stream m c o)
+  Stream m c o -> withSpan LlmCallSpan (llmLabel m) $ do
+    evs <- stream m c o
+    case [t | EventDone t <- evs] of
+      t : _ -> case t ^. #message of
+        AssistantMessage p -> annotateSpan $ \a ->
+          a
+            & #model ?~ (m ^. #modelId)
+            & #provider ?~ (m ^. #provider)
+            & #inputTokens ?~ (p ^. #usage . #inputTokens)
+            & #outputTokens ?~ (p ^. #usage . #outputTokens)
+            & #costUsd ?~ realToFrac (p ^. #usage . #cost . #usd :: Rational)
+            & #billingQuality ?~ UsageRecord (p ^. #usage)
+            & #observedModel .~ observedModelOf (t ^. #evidence)
+        _ -> pure ()
+      [] -> pure ()
+    pure evs
 
 -- | The label for an LM-call span: @provider/model-id@.
 llmLabel :: Model -> Text
@@ -374,6 +401,8 @@ llmAttrs m c o resp =
     & #inputTokens ?~ (resp ^. #message . #usage . #inputTokens)
     & #outputTokens ?~ (resp ^. #message . #usage . #outputTokens)
     & #costUsd ?~ realToFrac (resp ^. #message . #usage . #cost . #usd :: Rational)
+    & #billingQuality ?~ UsageRecord (resp ^. #message . #usage)
+    & #observedModel .~ observedModelOf (resp ^. #evidence)
     & #toolCalls .~ toolCallsOf resp
     & #cacheKey ?~ unCacheKey (Key.cacheKey m c o)
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Export separately scoped transport attempts and aggregate counters, including error status and canonical billing quality. Use observed-model evidence for gen_ai.response.model. Preserve existing exporter lifecycle and structural traversal.
+
 ## 0.1.1.1 — 2026-08-29
 
 ### Changed

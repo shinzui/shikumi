@@ -198,6 +198,12 @@ storeTests =
           BL.writeFile p (encode (TraceFile 1 tree))
           res <- readTraceFile p
           res @?= Right tree,
+      testCase "formatVersion 2 without billing fields remains readable" $
+        withSystemTempDirectory "shikumi-trace" $ \dir -> do
+          let p = dir <> "/v2.json"
+          BL.writeFile p "{\"formatVersion\":2,\"tree\":{\"root\":\"span-0\",\"spans\":{}}}"
+          res <- readTraceFile p
+          res @?= Right (TraceTree (SpanId "span-0") Map.empty Nothing),
       testCase "replayIndex maps each llm-call cacheKey to its response" $ do
         tree <- buildTree
         idx <- replayIndexOrFail tree
@@ -409,7 +415,7 @@ duplicateKeyTree firstResp secondResp =
                 }
           }
       ss = [rootSpan, child 1 firstResp, child 2 secondResp]
-   in TraceTree (SpanId "span-0") (Map.fromList [(spanId s, s) | s <- ss])
+   in TraceTree (SpanId "span-0") (Map.fromList [(spanId s, s) | s <- ss]) Nothing
 
 numericSiblingTree :: TraceTree
 numericSiblingTree =
@@ -434,7 +440,7 @@ numericSiblingTree =
             attrs = emptyAttrs
           }
       ss = rootSpan : map child ([2 .. 12] :: [Int])
-   in TraceTree (SpanId "span-1") (Map.fromList [(spanId s, s) | s <- ss])
+   in TraceTree (SpanId "span-1") (Map.fromList [(spanId s, s) | s <- ss]) Nothing
 
 -- ---------------------------------------------------------------------------
 -- A small generator of random trees for the round-trip property
@@ -466,7 +472,7 @@ genTree = do
   let (ss, _) = flattenShape Nothing 0 shape
       m = Map.fromList [(spanId s, s) | s <- ss]
       rootId = spanId (firstSpan ss)
-  pure (TraceTree rootId m)
+  pure (TraceTree rootId m Nothing)
   where
     firstSpan (s : _) = s
     firstSpan [] = error "genTree: empty"

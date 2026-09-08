@@ -49,9 +49,9 @@ data TraceFile = TraceFile
   deriving anyclass (ToJSON, FromJSON)
 
 -- | The trace-file schema version this build reads and writes. Bumped 1→2 in
--- EP-16 for the additive optional @SpanAttrs.nodePath@ field.
+-- EP-16 for optional node paths; 2→3 adds optional billing quality and run attempts.
 currentFormatVersion :: Int
-currentFormatVersion = 2
+currentFormatVersion = 3
 
 -- | The oldest trace format this build still reads. v1→v2 was additive (the
 -- optional @SpanAttrs.nodePath@ field), so v1 files decode without migration.

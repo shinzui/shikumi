@@ -44,7 +44,9 @@ library
 
   build-depends:
     , aeson                                  >=2.2      && <2.3
+    , baikai                                 >=0.7.0.0  && <0.8
     , base                                   >=4.20     && <5
+    , bytestring
     , containers                             >=0.6      && <0.9
     , generic-lens                           >=2.2      && <2.4
     , hs-opentelemetry-api                   >=1.0      && <1.1
@@ -53,6 +55,7 @@ library
     , hs-opentelemetry-semantic-conventions  >=1.40     && <2
     , lens                                   ^>=5.3
     , scientific                             >=0.3      && <0.4
+    , shikumi                                ^>=0.3.0.0
     , shikumi-trace                          ^>=0.2.0.0
     , text                                   ^>=2.1
     , time                                   >=1.12     && <1.17
@@ -63,14 +66,24 @@ test-suite shikumi-trace-otel-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
+  other-modules:  BillingSpec
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
     , aeson
+    , baikai
     , base
+    , bytestring
     , containers
+    , effectful
+    , generic-lens
     , hs-opentelemetry-api                 >=1.0      && <1.1
     , hs-opentelemetry-exporter-in-memory  >=1.0      && <1.1
     , hs-opentelemetry-sdk                 >=1.0      && <1.1
+    , lens
+    , shikumi
+    , shikumi-cache
+    , shikumi-eval
+    , shikumi-testing
     , shikumi-trace                        ^>=0.2.0.0
     , shikumi-trace-otel                   ^>=0.1.1.0
     , tasty

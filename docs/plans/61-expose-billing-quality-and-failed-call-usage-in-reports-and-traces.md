@@ -25,28 +25,32 @@ Evaluation and tracing should show whether a cost is calculated, provider-report
 ## Progress
 
 
-- [ ] Milestone 1: Prove a transport-attempt observation seam.
-- [ ] Milestone 2: Add explicit billing summaries alongside logical usage.
-- [ ] Milestone 3: Record and export failure billing without corrupting replay.
-- [ ] Milestone 4: Demonstrate an evaluation with retry, failure and cache hit.
+- [x] (2026-09-08) Milestone 1: Prove a transport-attempt observation seam.
+- [x] (2026-09-08) Milestone 2: Add explicit billing summaries alongside logical usage.
+- [x] (2026-09-08) Milestone 3: Record and export failure billing without corrupting replay.
+- [x] (2026-09-08) Milestone 4 implementation: offline integration fixture, documentation and changelogs.
+- [ ] Milestone 4 validation: full release-source build/test, formatting and final ADR validation.
 
 
 ## Surprises & Discoveries
 
+2026-09-08: The full fixture proves $0.04 logical returned usage versus $0.03 transport billing, three successful attempts, one failed attempt and one missing-usage attempt. The provider response fixture must set ErrorReason as well as errorInfo; responseError deliberately keys on stop reason. Sequential trace export needs a real enclosing ProgramSpan. The memory cache retained spontaneous provider evidence; cache hits now clear it, matching persistent cache behavior.
 
-(None yet.)
+
+2026-09-08: The released transport wraps thrown errors in an error-shaped response with additive zero usage. Treat that unannotated zero as absent; reported zero with quality metadata remains present. The released Usage/Cost/Evidence source matches the `baikai-0.7.0.0` tag. Core regressions prove billable stream retry, exact one-third JSON round-trip, bounded retention, callback failure propagation and cancellation.
 
 
 ## Decision Log
 
+
+2026-09-08: Retain terminal error classification rather than raw provider messages in observations to satisfy the no-output-content contract. The original structured error still propagates to the caller. Use a core-owned `UsageRecord` decoder with an exact rational cost supplement instead of adding orphan instances. Default collector detail retention is zero; explicit limits retain the first N terminals in observation order. [ADR-13](../adr/0013-separate-transport-billing-from-logical-usage.md) records this boundary.
 
 2026-09-08: Keep logical operation usage separate from actual transport attempts, and add a collector at the runtime seam that already observes each attempt. Explicit report/trace attachment avoids silently changing existing totals or inventing per-node attribution. This larger plan has four independently verifiable milestones because the collector, presentation and persistence must agree.
 
 
 ## Outcomes & Retrospective
 
-
-(To be filled during and after implementation.)
+Core observations, bounded collection, explicit report/trace attachment and transport export are implemented. Focused core (242), evaluation (47), trace (32), cache (33), and billing/export tests have passed during implementation. The final regression additions and full release-source gates remain to be run before completion. GEPA already retains the full UsageTotals through executionUsage, so no lossy numeric projection needed changing.
 
 
 ## Context and Orientation
@@ -141,3 +145,7 @@ The implementation and tests are repeatable and require no external writes. Add 
 Core owns LLMObservation/LLMObserver and per-attempt emission. Shikumi.Eval.Report owns logical report presentation; a core billing summary type may live in Shikumi.LLM.Observation so neither tracing nor evaluation depends on the other. The collector API returns an observer and a snapshot action with an explicit bounded-detail configuration and empty default. Trace owns its persistence version and optional billing attachment, while trace-otel owns export. Existing `withUsageTotals` retains its logical-call meaning; a collector explicitly wired into the real runtime supplies the transport view. No new provider calls, retries, price table, global state or strict monetary reservation are introduced. Use released CostBasis/UsageAvailability types directly and look up OpenTelemetry APIs through Mori before editing the exporter.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
+
+Revision (2026-09-08): Implemented the runtime observation seam and bounded collector. Recorded synthetic-zero handling, classification-only observation errors and exact local persistence; downstream presentation validation continues.
+
+Revision (2026-09-08): Completed report and trace integration, added format-2 compatibility coverage and the full evaluation fixture, and corrected memory-cache evidence reuse. Final full-suite validation remains.

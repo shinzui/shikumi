@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add per-attempt observers to bare/resilient runtimes and a bounded, thread-safe billing collector with exact cost persistence and explicit unknown usage. Observer exceptions propagate without retry; no additional budget charge occurs. `LLMConfig.observer` is a public record addition requiring a PVP major review.
+
 - Add `Shikumi.LLM.Defaults`: invocation-scoped thinking, speed, token and evidence defaults with fill-only precedence for blocking and streaming calls. Zero default ceilings raise `ValidationFailure`. Additive public API requires a PVP minor release; existing unreleased major changes still govern the next release.
 
 - Add continuation origin/prefix guards shared by routing and transport. `routeLLM` now requires `Error ShikumiError`; this public constraint change requires a PVP major review at release.

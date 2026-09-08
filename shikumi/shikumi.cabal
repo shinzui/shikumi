@@ -41,6 +41,7 @@ library
     Shikumi.LLM.Budget
     Shikumi.LLM.Continuation
     Shikumi.LLM.Defaults
+    Shikumi.LLM.Observation
     Shikumi.Module
     Shikumi.Multimodal
     Shikumi.Prelude

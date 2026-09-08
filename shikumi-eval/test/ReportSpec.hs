@@ -32,7 +32,7 @@ fixtureResults =
   ]
 
 fixtureUsage :: UsageTotals
-fixtureUsage = UsageTotals {totalInputTokens = 120, totalOutputTokens = 45, totalTokens = 165, totalCostUsd = 23 % 10000}
+fixtureUsage = UsageTotals {totalInputTokens = 120, totalOutputTokens = 45, totalTokens = 165, totalCostUsd = 23 % 10000, usageQuality = Nothing, unknownUsageCalls = 0}
 
 fixtureReport :: Report
 fixtureReport = mkReport fixtureResults fixtureUsage
@@ -61,8 +61,8 @@ tests =
       testCase "results retained in order" $ map index (results fixtureReport) @?= [0, 1, 2],
       testCase "empty report is zero" $ aggregateScore (mkReport [] emptyUsageTotals) @?= 0,
       testCase "UsageTotals Monoid sums" $
-        UsageTotals 10 20 30 (1 % 100) <> UsageTotals 1 2 3 (2 % 100)
-          @?= UsageTotals 11 22 33 (3 % 100),
+        UsageTotals 10 20 30 (1 % 100) Nothing 0 <> UsageTotals 1 2 3 (2 % 100) Nothing 0
+          @?= UsageTotals 11 22 33 (3 % 100) Nothing 0,
       testCase "UsageTotals mempty is empty" $ (mempty :: UsageTotals) @?= emptyUsageTotals,
       testCase "renderReportText matches the documented format" $
         renderReportText fixtureReport @?= expectedRender

@@ -17,6 +17,7 @@ module StubProvider
     failingStubRegistry,
     failingStreamStubRegistry,
     failingStreamCostStubRegistry,
+    retryStreamCostStubRegistry,
     invalidStubRegistry,
     concurrencyStubRegistry,
     classifiedStubRegistry,
@@ -200,6 +201,27 @@ failingStreamStubRegistry ref failTimes t = do
               Stream.fromList $
                 if n <= failTimes
                   then streamErrorEvents 0 ("stub stream failure #" <> T.pack (show n))
+                  else stubEvents t
+        )
+        (\_ _ _ -> pure (stubResponse t))
+    )
+      { describeThinking = stubDescribeThinking
+      }
+  pure reg
+
+retryStreamCostStubRegistry :: IORef Int -> Int -> Rational -> Text -> IO ProviderRegistry
+retryStreamCostStubRegistry ref failTimes cost t = do
+  reg <- newProviderRegistry
+  registerApiProviderWith
+    reg
+    ( apiProviderWith
+        stubApi
+        ( \_ _ _ -> Stream.concatEffect $ do
+            n <- atomicModifyIORef' ref (\k -> (k + 1, k + 1))
+            pure $
+              Stream.fromList $
+                if n <= failTimes
+                  then streamErrorEvents cost ("stub stream failure #" <> T.pack (show n))
                   else stubEvents t
         )
         (\_ _ _ -> pure (stubResponse t))

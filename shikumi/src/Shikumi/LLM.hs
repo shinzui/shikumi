@@ -26,6 +26,7 @@ module Shikumi.LLM
     -- * Bare interpreters
     runLLM,
     runLLMWith,
+    runLLMWithObserver,
 
     -- * Resilience
     RetryPolicy (..),
@@ -59,6 +60,7 @@ import Baikai.Effectful (Baikai, runBaikai, runBaikaiWith)
 import Baikai.Effectful qualified as BE
 import Baikai.Error (BaikaiError)
 import Baikai.Provider.Registry (ProviderRegistry)
+import Baikai.Usage qualified as U
 import Control.Concurrent.STM
   ( TVar,
     modifyTVar',
@@ -71,6 +73,8 @@ import Control.Lens ((^.))
 import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text qualified as T
+import Data.Time.Clock (getCurrentTime)
+import Data.Unique (hashUnique, newUnique)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, IOE, liftIO, (:>))
 import Effectful.Concurrent (Concurrent, threadDelay)
 import Effectful.Concurrent.STM (atomically)
@@ -80,6 +84,7 @@ import Effectful.Exception (bracket_, try)
 import Shikumi.Error (ShikumiError (..), fromBaikaiError, isTransient)
 import Shikumi.LLM.Budget (Budget, admitCall, recordCost)
 import Shikumi.LLM.Continuation
+import Shikumi.LLM.Observation qualified as O
 
 -- | The provider-neutral LM effect. 'Complete' is a blocking completion;
 -- 'Stream' returns the assembled list of typed events so callers that need
@@ -117,7 +122,7 @@ runLLM ::
   (IOE :> es, Error ShikumiError :> es) =>
   Eff (LLM : es) a ->
   Eff es a
-runLLM = reinterpret_ runBaikai bareHandler
+runLLM = reinterpret_ runBaikai (bareHandler O.noObservation)
 
 -- | Bare interpreter over an explicit registry.
 runLLMWith ::
@@ -125,7 +130,11 @@ runLLMWith ::
   ProviderRegistry ->
   Eff (LLM : es) a ->
   Eff es a
-runLLMWith reg = reinterpret_ (runBaikaiWith reg) bareHandler
+runLLMWith reg = runLLMWithObserver reg O.noObservation
+
+-- | Observe bare transport calls. Callback exceptions propagate without retries.
+runLLMWithObserver :: (IOE :> es, Error ShikumiError :> es) => ProviderRegistry -> O.LLMObserver -> Eff (LLM : es) a -> Eff es a
+runLLMWithObserver reg observer = reinterpret_ (runBaikaiWith reg) (bareHandler observer)
 
 -- | The bare handler, shared by both interpreters. It runs in the handler stack
 -- (@Baikai : es@), so it can call the @Baikai@ transport effect and throw
@@ -137,17 +146,76 @@ runLLMWith reg = reinterpret_ (runBaikaiWith reg) bareHandler
 -- 'stream' never receive an in-band error terminal and resilience/decoding treat
 -- both operations identically.
 bareHandler ::
-  (Baikai :> es, Error ShikumiError :> es) =>
-  LLM (Eff localEs) a ->
-  Eff es a
-bareHandler = \case
+  (IOE :> es, Baikai :> es, Error ShikumiError :> es) =>
+  O.LLMObserver -> LLM (Eff localEs) a -> Eff es a
+bareHandler observer op = do
+  cid <- liftIO freshCallId
+  transportAttempt observer Nothing cid 1 op
+
+freshCallId :: IO T.Text
+freshCallId = (T.pack . ("call-" <>) . show . hashUnique) <$> newUnique
+
+-- The callback sits outside the typed transport try; its exceptions cannot
+-- become retryable provider errors, even if the callback throws BaikaiError.
+transportAttempt ::
+  (IOE :> es, Baikai :> es, Error ShikumiError :> es) =>
+  O.LLMObserver -> Maybe Budget -> T.Text -> Int -> LLM (Eff localEs) a -> Eff es a
+transportAttempt observer mb cid ordinal op = case op of
   Complete m c o -> do
     either throwError pure (validateRequestContinuation m c o)
+    start <- liftIO getCurrentTime
     res <- try @BaikaiError (BE.complete m c (stripContinuationMetadata o))
-    either (throwError . fromBaikaiError) raiseResponseError res
+    case res of
+      Left be -> do
+        emit m O.CompletionCall start (Just (fromBaikaiError be)) Nothing Nothing
+        throwError (fromBaikaiError be)
+      Right resp -> do
+        liftIO (chargeBudget mb resp)
+        emit
+          m
+          O.CompletionCall
+          start
+          (fromBaikaiError <$> responseError resp)
+          (availableUsage (resp ^. #message . #usage))
+          (O.observedModelOf (resp ^. #evidence))
+        raiseResponseError resp
   Stream m c o -> do
     either throwError pure (validateRequestContinuation m c o)
-    BE.streamCollect m c (stripContinuationMetadata o) >>= raiseStreamError
+    start <- liftIO getCurrentTime
+    res <- try @BaikaiError (BE.streamCollect m c (stripContinuationMetadata o))
+    case res of
+      Left be -> do
+        emit m O.StreamCall start (Just (fromBaikaiError be)) Nothing Nothing
+        throwError (fromBaikaiError be)
+      Right evs -> do
+        liftIO (chargeBudgetFromEvents mb evs)
+        let terminals = [tp | ev <- evs, tp <- case ev of EventDone t -> [t]; EventError t -> [t]; _ -> []]
+            terminal = case terminals of t : _ -> Just t; [] -> Nothing
+            usage = terminal >>= \t -> case t ^. #message of AssistantMessage p -> availableUsage (p ^. #usage); _ -> Nothing
+            err = case [streamTerminalError t | EventError t <- evs] of e : _ -> Just e; [] -> Nothing
+        emit m O.StreamCall start err usage (terminal >>= O.observedModelOf . (^. #evidence))
+        raiseStreamError evs
+  where
+    emit m kind start err usage observed = liftIO $ do
+      end <- getCurrentTime
+      observer
+        ( O.LLMObservation
+            cid
+            ordinal
+            kind
+            (m ^. #modelId)
+            (m ^. #provider)
+            observed
+            (O.errorClass <$> err)
+            (O.UsageRecord <$> usage)
+            start
+            end
+        )
+
+-- Baikai represents thrown transport errors with the additive zero. It carries
+-- no observation; a reported zero has availability/basis and is retained.
+availableUsage :: U.Usage -> Maybe U.Usage
+availableUsage u = if u == U.zeroUsage then Nothing else Just u
 
 -- ---------------------------------------------------------------------------
 -- Resilience: retries, rate limiting, budget
@@ -186,7 +254,9 @@ data LLMConfig = LLMConfig
     -- | 'Nothing' = unbounded concurrency
     rateLimit :: !(Maybe RateLimiter),
     -- | which baikai registry to dispatch against
-    registry :: !ProviderRegistry
+    registry :: !ProviderRegistry,
+    -- | Optional per-attempt accounting; never charges budgets itself.
+    observer :: !(Maybe O.LLMObserver)
   }
 
 -- | A config with default retries, no budget, and no rate limit, dispatching
@@ -197,7 +267,8 @@ defaultLLMConfig reg =
     { retryPolicy = defaultRetryPolicy,
       budget = Nothing,
       rateLimit = Nothing,
-      registry = reg
+      registry = reg,
+      observer = Nothing
     }
 
 -- | The resilient interpreter. Each operation is wrapped, outermost to
@@ -209,30 +280,10 @@ runLLMResilient ::
   LLMConfig ->
   Eff (LLM : es) a ->
   Eff es a
-runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
-  Complete m c o ->
-    withBudget mb . withRateLimit mr . retrying rp $ do
-      either throwError pure (validateRequestContinuation m c o)
-      res <- try @BaikaiError (BE.complete m c (stripContinuationMetadata o))
-      case res of
-        Left be -> throwError (fromBaikaiError be)
-        Right resp -> do
-          -- Charge before raising: an error-shaped 'Response' may still carry
-          -- billable usage (mirrors 'chargeBudgetFromEvents' on the stream path).
-          liftIO (chargeBudget mb resp)
-          raiseResponseError resp
-  Stream m c o ->
-    withBudget mb . withRateLimit mr . retrying rp $ do
-      either throwError pure (validateRequestContinuation m c o)
-      evs <- BE.streamCollect m c (stripContinuationMetadata o)
-      -- Charge from the terminal payload (success /or/ error) before raising: a
-      -- failed stream may still have consumed billable tokens.
-      liftIO (chargeBudgetFromEvents mb evs)
-      raiseStreamError evs
-  where
-    mb = budget cfg
-    mr = rateLimit cfg
-    rp = retryPolicy cfg
+runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \op -> do
+  cid <- liftIO freshCallId
+  withBudget (budget cfg) . withRateLimit (rateLimit cfg) $
+    retrying (retryPolicy cfg) (\ordinal -> transportAttempt (fromMaybe O.noObservation (observer cfg)) (budget cfg) cid ordinal op)
 
 -- | Optimistic pre-call budget gate (admission, not reservation). Refuses the
 -- call with 'BudgetExceeded' when the recorded running total has already reached
@@ -270,12 +321,12 @@ withRateLimit (Just (RateLimiter tv)) act =
 retrying ::
   (Concurrent :> es, Error ShikumiError :> es) =>
   RetryPolicy ->
-  Eff es a ->
+  (Int -> Eff es a) ->
   Eff es a
 retrying pol act = go 1
   where
     go attempt =
-      act `catchError` \_cs e ->
+      act attempt `catchError` \_cs e ->
         if isTransient e && attempt < maxAttempts pol
           then do
             threadDelay (backoffMicros pol attempt)

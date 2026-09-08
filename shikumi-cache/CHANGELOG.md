@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clear provider-call evidence on every cache hit, including the memory backend, so logical traces do not reuse a previous crossing as new evidence.
+
 - Bypass memoizer reads and writes for any evidence request, including defaults and warm entries. Apply request defaults before caching so keys reflect effective options. No cache format or public signature change.
 
 - Validate continuation before cache lookup. Both memoizers now require `Error ShikumiError`; this public constraint change requires a PVP major review at release.

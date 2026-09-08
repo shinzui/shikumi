@@ -30,7 +30,7 @@ module Shikumi.Cache
 where
 
 import Baikai (Response, StopReason (ErrorReason))
-import Control.Lens ((^.))
+import Control.Lens ((&), (.~), (^.))
 import Control.Monad (when)
 import Data.Generics.Labels ()
 import Data.Maybe (isJust, isNothing)
@@ -117,7 +117,7 @@ cachedLLMWith cfg = interpose $ \env -> \case
           Just cr
             | keyVersion cr == currentKeyVersion,
               fresh (entryTTL cfg) now (storedAt cr) ->
-                pure (response cr)
+                pure (response cr & #evidence .~ Nothing)
           _ -> do
             resp <- complete model ctx opts
             stored <- getCurrentTime

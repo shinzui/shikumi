@@ -20,7 +20,7 @@ import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval.Evaluate (evaluatePure)
 import Shikumi.Eval.Metric (exactMatch)
-import Shikumi.Eval.Report (Report (..), UsageTotals (..))
+import Shikumi.Eval.Report (Report (..))
 import Shikumi.Eval.Types (dataset, example)
 import Shikumi.Eval.Usage (withUsageTotals)
 import Shikumi.LLM (stream)
@@ -65,10 +65,5 @@ tests =
           Left e -> assertFailure ("unexpected error: " <> show e)
           Right r ->
             usage r
-              @?= UsageTotals
-                { totalInputTokens = 300,
-                  totalOutputTokens = 60,
-                  totalTokens = 360,
-                  totalCostUsd = 3 / 1000
-                }
+              @?= mconcat (replicate 3 usageTotalsPerCall)
     ]

@@ -26,16 +26,24 @@ module Shikumi.Eval.Report
     Report (..),
     mkReport,
     renderReportText,
+    attachBillingSummary,
+    usageTotalsFromUsage,
   )
 where
 
+import Baikai.Cost qualified as C
+import Baikai.Usage qualified as U
+import Data.Aeson (encode)
+import Data.ByteString.Lazy qualified as BL
 import Data.Maybe (isJust, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import GHC.Generics (Generic)
 import Numeric (showFFloat)
 import Numeric.Natural (Natural)
 import Shikumi.Eval.Types (Score, scoreZero, unScore)
+import Shikumi.LLM.Observation (BillingSummary, UsageRecord (..), renderBillingSummary, usageUnknown)
 
 -- | The reason an example did not complete normally.
 data FailureReason
@@ -70,13 +78,15 @@ data UsageTotals = UsageTotals
   { totalInputTokens :: !Natural,
     totalOutputTokens :: !Natural,
     totalTokens :: !Natural,
-    totalCostUsd :: !Rational
+    totalCostUsd :: !Rational,
+    usageQuality :: !(Maybe UsageRecord),
+    unknownUsageCalls :: !Int
   }
   deriving stock (Eq, Show)
 
 -- | The zero of 'UsageTotals'.
 emptyUsageTotals :: UsageTotals
-emptyUsageTotals = UsageTotals 0 0 0 0
+emptyUsageTotals = UsageTotals 0 0 0 0 Nothing 0
 
 instance Semigroup UsageTotals where
   a <> b =
@@ -85,6 +95,23 @@ instance Semigroup UsageTotals where
       (totalOutputTokens a + totalOutputTokens b)
       (totalTokens a + totalTokens b)
       (totalCostUsd a + totalCostUsd b)
+      (combineQuality (usageQuality a) (usageQuality b))
+      (unknownUsageCalls a + unknownUsageCalls b)
+
+combineQuality :: Maybe UsageRecord -> Maybe UsageRecord -> Maybe UsageRecord
+combineQuality Nothing b = b
+combineQuality a Nothing = a
+combineQuality (Just (UsageRecord a)) (Just (UsageRecord b)) = Just (UsageRecord (a <> b))
+
+usageTotalsFromUsage :: U.Usage -> UsageTotals
+usageTotalsFromUsage u =
+  UsageTotals
+    (U.inputTokens u)
+    (U.outputTokens u)
+    (U.totalTokens u)
+    (C.usd (U.cost u))
+    (Just (UsageRecord u))
+    (if usageUnknown (Just (UsageRecord u)) then 1 else 0)
 
 instance Monoid UsageTotals where
   mempty = emptyUsageTotals
@@ -127,7 +154,8 @@ data Report = Report
     usage :: !UsageTotals,
     -- | sum of per-example latencies; under concurrent evaluation this can exceed
     -- wall-clock time because it is total compute latency, not elapsed time
-    totalLatencyMs :: !Integer
+    totalLatencyMs :: !Integer,
+    transportBilling :: !(Maybe BillingSummary)
   }
   deriving stock (Eq, Show)
 
@@ -149,8 +177,13 @@ mkReport rs u =
       total = length rs,
       results = rs,
       usage = u,
-      totalLatencyMs = sum (map latencyMs rs)
+      totalLatencyMs = sum (map latencyMs rs),
+      transportBilling = Nothing
     }
+
+-- | Attach whole-run transport totals, without adding them to logical usage.
+attachBillingSummary :: BillingSummary -> Report -> Report
+attachBillingSummary b r = r {transportBilling = Just b}
 
 -- | A deterministic, human-readable multi-line summary of a report. The format
 -- is stable (fixed 4-decimal score and cost, examples in index order) so the CLI
@@ -167,7 +200,7 @@ mkReport rs u =
 -- When there are no failures the trailing @failures:@ block is omitted.
 renderReportText :: Report -> Text
 renderReportText r =
-  T.intercalate "\n" (header ++ failureLines)
+  T.intercalate "\n" (header ++ qualityLines ++ billingLines ++ failureLines)
   where
     header =
       [ "score="
@@ -187,6 +220,10 @@ renderReportText r =
         "cost: $" <> fixed4 (fromRational (totalCostUsd (usage r))),
         "latency-sum: " <> tshow (totalLatencyMs r) <> " ms"
       ]
+    qualityLines = case usageQuality (usage r) of
+      Nothing -> []
+      Just u -> ["logical usage quality: unknown-calls=" <> tshow (unknownUsageCalls (usage r)) <> " " <> TE.decodeUtf8 (BL.toStrict (encode u))]
+    billingLines = maybe [] (pure . renderBillingSummary) (transportBilling r)
     failingResults = mapMaybe asFailure (results r)
     asFailure er = (\fr -> (index er, fr)) <$> failure er
     failureLines

@@ -13,8 +13,7 @@
 -- (@gen_ai.provider.name@, @gen_ai.request.model@, @gen_ai.response.model@,
 -- @gen_ai.usage.input_tokens@, @gen_ai.usage.output_tokens@,
 -- @gen_ai.operation.name@). The response model is read from the recorded
--- response's echoed @model.modelId@ and omitted when no response model is
--- present. Every span carries @shikumi.@-prefixed attributes
+-- observed-model evidence and omitted when no such evidence is present. Every span carries @shikumi.@-prefixed attributes
 -- (@shikumi.span_kind@, @shikumi.retries@, optional @shikumi.incomplete@, and,
 -- on LM-call spans, @shikumi.cost.usd@ / @shikumi.latency_ms@).
 module Shikumi.Trace.OpenTelemetry
@@ -22,11 +21,14 @@ module Shikumi.Trace.OpenTelemetry
   )
 where
 
+import Baikai.Cost qualified as C
+import Baikai.Usage qualified as U
 import Control.Lens ((^.))
-import Control.Monad (foldM)
+import Control.Monad (foldM, forM_)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Aeson (Value (..))
+import Data.Aeson (ToJSON, Value (..), encode)
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as BL
 import Data.Functor (($>))
 import Data.Generics.Labels ()
 import Data.HashMap.Strict (HashMap)
@@ -37,7 +39,8 @@ import Data.Maybe (fromMaybe)
 import Data.Scientific qualified as Sci
 import Data.Set qualified as Set
 import Data.Text (Text)
-import Data.Time (UTCTime)
+import Data.Text.Encoding qualified as TE
+import Data.Time (UTCTime, getCurrentTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Word (Word64)
 import OpenTelemetry.Attributes qualified as Attr
@@ -46,6 +49,7 @@ import OpenTelemetry.Common (Timestamp, mkTimestamp)
 import OpenTelemetry.Context qualified as Context
 import OpenTelemetry.SemanticConventions qualified as SC
 import OpenTelemetry.Trace.Core qualified as Otel
+import Shikumi.LLM.Observation qualified as B
 import Shikumi.Trace (Span, SpanAttrs, SpanKind (..), TraceTree, childrenOf)
 import Shikumi.Trace.Node (renderNodePath)
 
@@ -53,7 +57,9 @@ import Shikumi.Trace.Node (renderNodePath)
 -- structural ('ProgramSpan' / 'ModuleSpan' / 'CombinatorSpan') and LM-call
 -- ('LlmCallSpan') nodes alike become spans; nesting is preserved.
 exportTree :: (MonadIO m) => Otel.Tracer -> TraceTree -> m ()
-exportTree tracer tree = liftIO (go Set.empty Context.empty (tree ^. #root) $> ())
+exportTree tracer tree = liftIO $ do
+  go Set.empty Context.empty (tree ^. #root) $> ()
+  forM_ (tree ^. #transportBilling) (exportBilling tracer)
   where
     smap = tree ^. #spans
     go visited ctx sid
@@ -104,12 +110,12 @@ genAiAttrs :: SpanAttrs -> HashMap Text Attr.Attribute -> HashMap Text Attr.Attr
 genAiAttrs a m0 =
   maybe id (AttrMap.insertByKey SC.genAi_provider_name) (a ^. #provider) $
     maybe id (AttrMap.insertByKey SC.genAi_request_model) (a ^. #model) $
-      maybe id (AttrMap.insertByKey SC.genAi_response_model) (responseModelOf a) $
+      maybe id (AttrMap.insertByKey SC.genAi_response_model) (a ^. #observedModel) $
         maybe id (\n -> AttrMap.insertByKey SC.genAi_usage_inputTokens (fromIntegral n :: Int64)) (a ^. #inputTokens) $
           maybe id (\n -> AttrMap.insertByKey SC.genAi_usage_outputTokens (fromIntegral n :: Int64)) (a ^. #outputTokens) $
             maybe id (\u -> HashMap.insert "shikumi.cost.usd" (Attr.toAttribute (Sci.toRealFloat u :: Double))) (a ^. #costUsd) $
               maybe id (\l -> HashMap.insert "shikumi.latency_ms" (Attr.toAttribute (fromIntegral l :: Int))) (a ^. #latencyMs) $
-                AttrMap.insertByKey SC.genAi_operation_name ("chat" :: Text) m0
+                AttrMap.insertByKey SC.genAi_operation_name ("chat" :: Text) (qualityAttrs (a ^. #billingQuality) (HashMap.insert "shikumi.accounting.scope" (Attr.toAttribute ("logical-call" :: Text)) m0))
 
 -- | The end instant to export. A span that never closed is exported with its
 -- own start time rather than the wall clock at export time; 'attrsFor' marks
@@ -140,15 +146,70 @@ isErrorResponse (Object o) =
     messageErr _ = False
 isErrorResponse _ = False
 
--- | The model the provider says actually answered, read from the recorded
--- response's echoed @model.modelId@. 'Nothing' when no response was recorded
--- or the field is absent.
-responseModelOf :: SpanAttrs -> Maybe Text
-responseModelOf a = do
-  Object o <- a ^. #response
-  Object m <- KM.lookup "model" o
-  String mid <- KM.lookup "modelId" m
-  pure mid
+-- | Canonical provider basis/availability JSON; absent metadata stays absent.
+qualityAttrs :: Maybe B.UsageRecord -> HashMap Text Attr.Attribute -> HashMap Text Attr.Attribute
+qualityAttrs Nothing m = m
+qualityAttrs (Just (B.UsageRecord u)) m =
+  maybe id (\b -> HashMap.insert "shikumi.cost.basis" (jsonAttribute b)) (C.nonEmptyBasis (U.cost u)) $
+    maybe id (\a -> HashMap.insert "shikumi.usage.availability" (jsonAttribute a)) (U.availability u) m
+
+jsonAttribute :: (ToJSON a) => a -> Attr.Attribute
+jsonAttribute = Attr.toAttribute . TE.decodeUtf8 . BL.toStrict . encode
+
+-- | Explicitly separate transport spans. Their correlation is callId/attempt;
+-- no structural program parent or replay response is manufactured.
+exportBilling :: Otel.Tracer -> B.BillingSummary -> IO ()
+exportBilling tracer summary = do
+  now <- getCurrentTime
+  sp <-
+    Otel.createSpan
+      tracer
+      Context.empty
+      "transport billing summary"
+      Otel.defaultSpanArguments
+        { Otel.startTime = Just (utcToTimestamp now)
+        }
+  Otel.addAttributes
+    sp
+    ( HashMap.fromList
+        [ ("shikumi.accounting.scope", Attr.toAttribute ("transport-summary" :: Text)),
+          ("shikumi.billing.completed_attempts", Attr.toAttribute (B.completedAttempts summary)),
+          ("shikumi.billing.failed_attempts", Attr.toAttribute (B.failedAttempts summary)),
+          ("shikumi.billing.unknown_usage_attempts", Attr.toAttribute (B.unknownUsageAttempts summary)),
+          ("shikumi.billing.detail_truncated", Attr.toAttribute (B.detailTruncated summary))
+        ]
+    )
+  Otel.endSpan sp (Just (utcToTimestamp now))
+  forM_ (B.retainedAttempts summary) $ \o -> do
+    attemptSpan <-
+      Otel.createSpan
+        tracer
+        Context.empty
+        "LLM transport attempt"
+        Otel.defaultSpanArguments
+          { Otel.kind = Otel.Client,
+            Otel.startTime = Just (utcToTimestamp (B.startedAt o))
+          }
+    let base =
+          HashMap.fromList
+            [ ("shikumi.accounting.scope", Attr.toAttribute ("transport-attempt" :: Text)),
+              ("shikumi.call_id", Attr.toAttribute (B.callId o)),
+              ("shikumi.attempt", Attr.toAttribute (B.attempt o)),
+              ("shikumi.call_kind", jsonAttribute (B.callKind o)),
+              ("gen_ai.request.model", Attr.toAttribute (B.requestedModel o)),
+              ("gen_ai.provider.name", Attr.toAttribute (B.requestedProvider o)),
+              ("shikumi.billing.unknown_usage", Attr.toAttribute (B.usageUnknown (B.usage o)))
+            ]
+        observed = maybe id (HashMap.insert "gen_ai.response.model" . Attr.toAttribute) (B.observedModel o)
+        numbers = case B.usage o of
+          Nothing -> id
+          Just (B.UsageRecord u) ->
+            HashMap.insert "gen_ai.usage.input_tokens" (Attr.toAttribute (fromIntegral (U.inputTokens u) :: Int64))
+              . HashMap.insert "gen_ai.usage.output_tokens" (Attr.toAttribute (fromIntegral (U.outputTokens u) :: Int64))
+              . HashMap.insert "shikumi.cost.usd" (Attr.toAttribute (fromRational (C.usd (U.cost u)) :: Double))
+    Otel.addAttributes attemptSpan (observed (numbers (qualityAttrs (B.usage o) base)))
+    Otel.setStatus attemptSpan (maybe Otel.Ok Otel.Error (B.terminalError o))
+    Otel.endSpan attemptSpan (Just (utcToTimestamp (B.endedAt o)))
 
 kindText :: SpanKind -> Text
 kindText = \case

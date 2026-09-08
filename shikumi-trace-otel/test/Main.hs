@@ -6,6 +6,7 @@
 -- non-root span's parent is another emitted span).
 module Main (main) where
 
+import BillingSpec qualified
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value (..), object, (.=))
 import Data.HashMap.Strict qualified as HashMap
@@ -42,7 +43,8 @@ main =
   defaultMain $
     testGroup
       "shikumi-trace-otel"
-      [ nestingTest,
+      [ BillingSpec.tests,
+        nestingTest,
         liveExportInMemoryTest,
         exceptionReleasesProviderTest,
         responseStatusAndModelTest,
@@ -132,10 +134,10 @@ responseStatusAndModelTest =
       other -> assertFailure ("expected Error status, got " <> show other)
     spanStatus okSpan >>= assertEqual "successful response status" Otel.Ok
     errHasResponseModel <- spanHasAttr "gen_ai.response.model" errSpan
-    assertBool "error response without echoed model omits gen_ai.response.model" (not errHasResponseModel)
+    assertBool "error response without observed model omits gen_ai.response.model" (not errHasResponseModel)
     spanAttr "gen_ai.response.model" okSpan
       >>= assertEqual
-        "response model comes from echoed response model"
+        "response model comes from observed evidence"
         (Just (Attr.toAttribute ("claude-sonnet-4-6-20250929" :: Text)))
 
 openSpanTest :: TestTree
@@ -217,7 +219,8 @@ newTracerWithInMemory = do
 fixedTree :: TraceTree
 fixedTree =
   TraceTree
-    { root = SpanId "s0",
+    { transportBilling = Nothing,
+      root = SpanId "s0",
       spans =
         Map.fromList
           [ (SpanId "s0", node "s0" Nothing ProgramSpan "summarize-and-critique" emptyAttrs 0),
@@ -231,7 +234,8 @@ fixedTree =
 throwingTree :: TraceTree
 throwingTree =
   TraceTree
-    { root = SpanId "s0",
+    { transportBilling = Nothing,
+      root = SpanId "s0",
       spans =
         Map.fromList
           [ (SpanId "s0", node "s0" Nothing ProgramSpan (error "trace label exploded") emptyAttrs 0)
@@ -241,7 +245,8 @@ throwingTree =
 responseTree :: TraceTree
 responseTree =
   TraceTree
-    { root = SpanId "s0",
+    { transportBilling = Nothing,
+      root = SpanId "s0",
       spans =
         Map.fromList
           [ (SpanId "s0", node "s0" Nothing ProgramSpan "responses" emptyAttrs 0),
@@ -263,7 +268,8 @@ openSpanTree =
 rootCyclicTree :: TraceTree
 rootCyclicTree =
   TraceTree
-    { root = SpanId "s0",
+    { transportBilling = Nothing,
+      root = SpanId "s0",
       spans =
         Map.fromList
           [ (SpanId "s0", node "s0" (Just "s0") ProgramSpan "self-parented" emptyAttrs 0)
@@ -309,7 +315,8 @@ errorResponseAttrs =
 okResponseAttrs :: SpanAttrs
 okResponseAttrs =
   llmAttrs
-    { response =
+    { observedModel = Just "claude-sonnet-4-6-20250929",
+      response =
         Just
           ( object
               [ "errorInfo" .= Null,

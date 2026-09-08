@@ -53,7 +53,7 @@ import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Eval.Report (UsageTotals (..))
+import Shikumi.Eval.Report (UsageTotals, usageTotalsFromUsage)
 import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Program (Program)
@@ -117,13 +117,7 @@ usageResponse t =
     & #message . #usage . #cost . #usd .~ (1 % 1000)
 
 usageTotalsPerCall :: UsageTotals
-usageTotalsPerCall =
-  UsageTotals
-    { totalInputTokens = 100,
-      totalOutputTokens = 20,
-      totalTokens = 120,
-      totalCostUsd = 1 % 1000
-    }
+usageTotalsPerCall = usageTotalsFromUsage (usageResponse "yes" ^. #message . #usage)
 
 -- | A successful terminal stream whose assembled message carries the same known
 -- non-zero usage as 'usageResponse'.

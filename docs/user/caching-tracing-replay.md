@@ -279,3 +279,49 @@ memoization; streams remain uncached. Continuation validation runs before lookup
 or evidence bypass. Trace above cache observes logical calls including hits; a
 transport-attempt observer belongs below cache. Replay remains explicitly offline
 and cannot create fresh provider evidence.
+
+## Billing observations and observed model identity
+
+For a run with billing detail, create `newBillingCollectorWithLimit n` from
+`Shikumi.LLM.Observation` and set `LLMConfig.observer = Just observer`. Compose
+wrappers in this request order: routing, continuation validation, fill-only
+defaults, logical tracing, cache, then the observer-aware runtime. In Haskell
+function composition the inner wrappers receive the operation first:
+
+```haskell
+runLLMResilient cfg
+  . cachedLLM
+  . tracedLLM
+  . withRequestDefaults defaults
+  . routeLLM
+```
+
+Supply the existing routing, cache, error, time and trace interpreters outside
+that fragment. Enclose the sequential trace capture in `withSpan ProgramSpan`
+so exported logical calls have a real shared root. The compiled composition is
+in `shikumi-trace-otel/test/BillingSpec.hs`. The collector is thread-safe; the
+existing sequential trace builder must not be shared across concurrent workers.
+
+After capture, `Shikumi.Trace.attachBillingSummary billing tree` attaches the
+whole-run snapshot. Trace format **3** persists this optional section separately
+from program spans and reads formats 1 and 2 with missing billing fields. Attempt
+records contain call ID, ordinal, request identity, observed model when available,
+terminal classification, timing and optional usage. They have no prompt, response
+text, opaque reasoning, cache key, or structural node parent. They never enter the
+replay index. IDs identify invocations within a process, not globally durable runs.
+
+Blocking and streaming logical spans carry optional billing quality. Streaming
+usage comes from the terminal payload; it does not make streaming replayable.
+The response model comes only from actual evidence; the request `Model` echoed
+in `Response.model` is not such evidence. Cache hits clear evidence even in the
+memory backend. Evidence-requesting calls continue to bypass cache reads and writes.
+
+The OpenTelemetry exporter labels `shikumi.accounting.scope` as `logical-call`,
+`transport-attempt`, or `transport-summary`. Filter by scope when summing numeric
+costs. Attempt spans export `shikumi.call_id`, `shikumi.attempt`, classification as
+error status, available token/cost values, and optional canonical JSON in
+`shikumi.cost.basis` and `shikumi.usage.availability`. Summary spans export counts,
+unknown-usage counts and truncation, without another numeric spending series.
+An absent usage block does not become a numeric zero observation. The stored
+`UsageRecord` supplements canonical usage JSON with exact rational costs; OTel
+numeric costs remain floating point.

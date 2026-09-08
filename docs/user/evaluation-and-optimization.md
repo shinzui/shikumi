@@ -569,3 +569,60 @@ It selects `cot`, reports 4/8 admitted search operations, and prints `True` for
 restored output and request equality. The two subsequent equality-check runs are
 outside the search budget. This demonstrates mechanics with a scripted provider,
 not a claim about live-model quality.
+
+## Logical usage and transport billing
+
+`Report.usage` and `withUsageTotals` measure successful returned logical calls. A
+cache hit contributes the cached response's usage; a failed transport retry is
+invisible to this view. `UsageTotals.usageQuality` preserves the complete available
+usage, including cost sources, estimate reasons and availability. Its
+`unknownUsageCalls` counts absent, partial, inconsistent or legacy unannotated
+usage. Empty/default totals remain zero. GEPA execution evidence keeps this same
+logical view.
+
+To measure actual attempts, create one core billing collector for the run, pass
+its observer to the runtime, and explicitly attach the snapshot. This fragment
+assumes an existing provider `registry`, request `model`, dataset `ds`, metric and program:
+
+```haskell
+(observer, snapshot) <- newBillingCollectorWithLimit 100
+let cfg = (defaultLLMConfig registry) { observer = Just observer }
+result <- runEff . runPrim . runTime . runConcurrent
+  . runErrorNoCallStack @ShikumiError . runRouting model
+  . runLLMResilient cfg . routeLLM $
+    evaluateWith defaultEvalConfig ds metric program
+billing <- snapshot
+case result of
+  Left err -> do
+    print err
+    Text.putStrLn (renderBillingSummary billing)
+  Right report ->
+    Text.putStrLn (renderReportText (attachBillingSummary billing report))
+```
+
+The collector functions and `renderBillingSummary` come from
+`Shikumi.LLM.Observation`; the report helper comes from `Shikumi.Eval.Report`.
+`newBillingCollector` retains aggregates only. `newBillingCollectorWithLimit n`
+retains at most `max 0 n` terminal records and marks truncation; sums and counts
+continue. Concurrent evaluations may share a collector within one run, but create
+fresh collectors for independent runs. A snapshot remains readable after
+`FailAbort`; `FailScore` keeps its existing behavior.
+
+Transport billing is a separate whole-run view, without per-example or node
+attribution. Never add it to logical usage or charge a budget from an observer.
+Numeric amounts retain exact Rational arithmetic. A zero with reported quality
+is distinct from missing usage, and a provider-reported amount is not an invoice.
+Aggregating a reported cost cannot erase an earlier estimate's reasons. Callback
+exceptions propagate without provider retry, and cancellation produces no
+synthetic terminal or zero-cost success.
+
+The executable test in `shikumi-trace-otel/test/BillingSpec.hs` evaluates four
+examples through routing, defaults, tracing, caching and the resilient runtime.
+A billable retry plus success, a reported zero, missing usage and a later cache
+hit yield **$0.04 logical usage** and **$0.03 transport billing**. The latter has
+three successful attempts, one failed attempt and one unknown-usage attempt.
+Run the offline demonstration and assertions with:
+
+```bash
+nix develop .#ghc9124-ci --command cabal test shikumi-trace-otel --test-options='-p /EP-61/' --test-show-details=direct
+```

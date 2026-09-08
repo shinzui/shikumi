@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve logical usage quality and unknown-call counts, and explicitly attach/render whole-run transport billing separately. Public UsageTotals and Report fields require PVP major review; empty/default constructors retain zero semantics.
+
 - Render structured provider failures through the shared readable renderer while retaining existing failure policy and legacy diagnostics.
 
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.

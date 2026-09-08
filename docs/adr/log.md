@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Update**: Added ADR-13 for bounded transport billing, separate logical accounting, and explicit uncertainty.
 * **Added**: ADR-12: fill-only request defaults, effective request ordering and evidence cache bypass.
 * **Update**: Extend completed-session decision with reasoning-safe version-2 continuation, summary and restart boundaries.
 * **Added**: ADR-11: Preserve provider errors and centralize retry policy.

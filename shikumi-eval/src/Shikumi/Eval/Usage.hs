@@ -21,7 +21,7 @@ import Data.Generics.Labels ()
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpose)
 import Effectful.Prim.IORef (Prim, atomicModifyIORef', newIORef, readIORef)
-import Shikumi.Eval.Report (UsageTotals (..), emptyUsageTotals)
+import Shikumi.Eval.Report (UsageTotals, emptyUsageTotals, usageTotalsFromUsage)
 import Shikumi.LLM (LLM (..), Response, complete, stream)
 
 -- | Run @act@, accumulating every @LLM@ call's usage/cost into a 'UsageTotals'.
@@ -55,13 +55,7 @@ usageOfMessage _ = emptyUsageTotals
 
 -- | Project an assistant payload's token usage and cost into a 'UsageTotals'.
 usageOfAssistant :: AssistantPayload -> UsageTotals
-usageOfAssistant msg =
-  UsageTotals
-    { totalInputTokens = msg ^. #usage . #inputTokens,
-      totalOutputTokens = msg ^. #usage . #outputTokens,
-      totalTokens = msg ^. #usage . #totalTokens,
-      totalCostUsd = msg ^. #usage . #cost . #usd
-    }
+usageOfAssistant msg = usageTotalsFromUsage (msg ^. #usage)
 
 -- | The usage of one streamed call: read off terminal events. Baikai streams
 -- emit exactly one 'EventDone' or 'EventError' carrying the assembled message

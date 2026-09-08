@@ -10,6 +10,8 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.STM (newTVarIO, readTVarIO)
 import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
+import Control.Lens ((^.))
+import Data.Aeson (eitherDecode, encode)
 import Data.IORef (newIORef, readIORef)
 import Data.Ratio ((%))
 import Effectful (runEff)
@@ -27,6 +29,7 @@ import Shikumi.LLM
     stream,
   )
 import Shikumi.LLM.Budget (newBudget, spentUSD)
+import Shikumi.LLM.Observation qualified as O
 import StubProvider
   ( budgetBarrierStubRegistry,
     classifiedStubRegistry,
@@ -38,6 +41,7 @@ import StubProvider
     failingStubRegistry,
     flattenAssistantText,
     invalidStubRegistry,
+    retryStreamCostStubRegistry,
     stubContext,
     stubModel,
     stubOptions,
@@ -49,7 +53,60 @@ tests :: TestTree
 tests =
   testGroup
     "ResilienceSpec"
-    [ testCase "retry recovers after 2 failures" $ do
+    [ testCase "EP-61: retry emits two correlated attempts and retains failure cost" $ do
+        (observe, snapshot) <- O.newBillingCollectorWithLimit 10
+        ref <- newIORef 0
+        reg <- retryStreamCostStubRegistry ref 1 (1 % 3) "ok"
+        let cfg = (defaultLLMConfig reg) {observer = Just observe, retryPolicy = RetryPolicy 2 0 0}
+        result <-
+          runEff . runConcurrent . runErrorNoCallStack @ShikumiError . runLLMResilient cfg $
+            stream stubModel stubContext stubOptions
+        assertBool "retry succeeded" (either (const False) (const True) result)
+        summary <- snapshot
+        O.completedAttempts summary @?= 1
+        O.failedAttempts summary @?= 1
+        (O.getUsage (O.observedUsage summary) ^. #cost . #usd) @?= (1 % 3)
+        map O.attempt (O.retainedAttempts summary) @?= [1, 2]
+        case O.retainedAttempts summary of
+          [a, b] -> O.callId a @?= O.callId b
+          _ -> assertFailure "expected two attempts"
+        eitherDecode (encode summary) @?= Right summary,
+      testCase "EP-61: thrown transport failure has no invented usage" $ do
+        ref <- newIORef 0
+        reg <- failingStubRegistry ref 1 "ok"
+        (observe, snapshot) <- O.newBillingCollectorWithLimit 2
+        _ <- runText ((defaultLLMConfig reg) {observer = Just observe, retryPolicy = RetryPolicy 2 0 0})
+        summary <- snapshot
+        case O.retainedAttempts summary of
+          first : _ -> O.usage first @?= Nothing
+          [] -> assertFailure "no attempt observed",
+      testCase "EP-61: bounded collector keeps exact totals after detail truncation" $ do
+        (observe, snapshot) <- O.newBillingCollectorWithLimit 1
+        reg <- costStubRegistry (1 % 3) "ok"
+        let cfg = (defaultLLMConfig reg) {observer = Just observe}
+        _ <- runText cfg
+        _ <- runText cfg
+        summary <- snapshot
+        O.completedAttempts summary @?= 2
+        O.unknownUsageAttempts summary @?= 2
+        length (O.retainedAttempts summary) @?= 1
+        O.detailTruncated summary @?= True
+        (O.getUsage (O.observedUsage summary) ^. #cost . #usd) @?= (2 % 3),
+      testCase "EP-61: callback BaikaiError propagates without another transport attempt" $ do
+        ref <- newIORef 0
+        reg <- failingStubRegistry ref 0 "ok"
+        let err = (providerError "observer failed") {category = TransientError}
+            cfg = (defaultLLMConfig reg) {observer = Just (\_ -> throwIO err)}
+        result <- try @BaikaiError (runText cfg)
+        result @?= Left err
+        readIORef ref >>= (@?= 1),
+      testCase "EP-61: cancellation emits no synthetic success" $ do
+        (observe, snapshot) <- O.newBillingCollector
+        reg <- exceptionStubRegistry (throwIO ThreadKilled)
+        result <- try @AsyncException (runText ((defaultLLMConfig reg) {observer = Just observe}))
+        result @?= Left ThreadKilled
+        snapshot >>= (@?= O.emptyBillingSummary),
+      testCase "retry recovers after 2 failures" $ do
         ref <- newIORef 0
         reg <- failingStubRegistry ref 2 "ok"
         let cfg = (defaultLLMConfig reg) {retryPolicy = RetryPolicy 3 1 5}

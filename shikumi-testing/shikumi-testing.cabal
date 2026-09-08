@@ -42,16 +42,18 @@ library
     Shikumi.Testing.Fixtures
     Shikumi.Testing.Response
     Shikumi.Testing.StubLLM
+    Shikumi.Testing.Transport
 
   build-depends:
     , aeson
-    , baikai        >=0.7.0.0  && <0.8
-    , base          >=4.20     && <5
+    , baikai         >=0.7.0.0  && <0.8
+    , base           >=4.20     && <5
     , effectful
     , generic-lens
-    , lens          ^>=5.3
-    , shikumi       ^>=0.3.0.0
-    , text          ^>=2.1
+    , lens           ^>=5.3
+    , shikumi        ^>=0.3.0.0
+    , streamly-core
+    , text           ^>=2.1
     , vector
 
 test-suite shikumi-testing-test

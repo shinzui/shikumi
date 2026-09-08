@@ -18,3 +18,4 @@ okf_version: "0.2"
 - [Restore typed structures through trusted recipe registries](0008-restore-typed-structures-through-trusted-recipe-registries.md) - Select finite typed implementations with shared validation and restore experimental artifacts through caller-owned registry identity and revisions.
 - [Centralize offline harness and diverse fixtures](0009-centralize-offline-harness-and-diverse-fixtures.md) - Own reusable offline LLM interpreters and nontrivial fixture shapes in an internal package below consumer libraries and tests.
 - [Use bounded schema-guided XML fragments](0010-use-bounded-schema-guided-xml-fragments.md) - Decode a bounded XML vocabulary through the existing typed decoder and use JSON serialization for structured XML demonstrations.
+- [Separate transport billing from logical usage](0013-separate-transport-billing-from-logical-usage.md) - Observe bounded transport attempts and preserve accounting uncertainty separately from logical usage.
