@@ -3,9 +3,11 @@ name: release
 description: >
   Cut a release of the shikumi Haskell packages and publish them to Hackage following the
   Haskell PVP (A.B.C.D). Inspects changes since each package's last tag, computes the version
-  bump, updates cabal versions, internal dependency bounds, and changelogs, runs the project's
-  format/build/test/check gates, commits, tags, pushes, publishes to Hackage in dependency
-  order, and creates per-package GitHub releases. Use when preparing a Hackage release.
+  bump, updates cabal versions, internal dependency bounds, and changelogs, audits the
+  docs/capabilities OKF catalog for capabilities the release adds or changes, runs the
+  project's format/build/test/check gates, commits, tags, pushes, publishes to Hackage in
+  dependency order, and creates per-package GitHub releases. Use when preparing a Hackage
+  release.
 argument-hint: "[major|minor|patch]"
 disable-model-invocation: true
 allowed-tools: Read, Bash, Edit, Glob, Grep, Write, AskUserQuestion
@@ -189,7 +191,127 @@ in each published package's directory. For each release:
 - The notes should describe API-visible changes (what a Hackage consumer cares about), grouped
   as Added / Changed / Fixed / Removed.
 
-### 6. Verify — run the full gate (inside the dev shell)
+### 6. Audit the capability catalog (`docs/capabilities/`)
+
+`docs/capabilities/` is an OKF bundle (declared in `mori.dhall` as the `capabilities` bundle)
+that states, for consumers, **what shikumi provides today** — one record per capability, each
+backed by evidence a reader can open. A release that ships consumer-visible provision without
+updating the catalog publishes a catalog that is already wrong. Audit it on **every** release,
+reusing the per-package diffs from step 2.
+
+#### 6.1 Read the current catalog
+
+```bash
+cat docs/capabilities/index.md   # the CAP-N table: handle, capability, since, package
+ls docs/capabilities/            # one file per capability, plus index.md, log.md, profile.dhall
+cat docs/capabilities/log.md     # what previous releases changed and why
+```
+
+The highest `CAP-N` in the table is the last allocated handle; new records continue from there.
+**Handles are stable** — never renumber, reuse, or reorder them.
+
+#### 6.2 Classify each release-set package's diff
+
+For each package being released, walk its changes since the last tag and classify every
+consumer-visible change:
+
+- **New capability** — something a consumer can now adopt **and verify independently** that no
+  existing record covers. Write a new record.
+- **Material growth of an existing capability** — the profile is explicit here: record the
+  growth as a **new** capability whose `requires` names the older one. Do **not** move an
+  existing record's `since` forward; that misinforms a consumer pinned to an older version.
+- **Refined limits, interface, or evidence** — the record's claim is unchanged but the body is
+  now inaccurate or thin. Update `interface`, `evidence`, and the `## Limits` section in place;
+  `since` stays where it is.
+- **Removal or deprecation** — set `status: deprecated` (still usable, discouraged) or
+  `withdrawn`, and add `replacedBy`, which the profile requires once `status` leaves `shipped`.
+- **Nothing consumer-visible** (internal refactor, tests, build plumbing, docs) — no catalog
+  change. Say so explicitly when reporting, rather than silently skipping the audit.
+
+What is **not** a capability, per the profile:
+
+- Anything that does not exist yet. There is deliberately no `planned` status — absent behavior
+  belongs in `docs/improvement-requests/` or `docs/plans/`.
+- Anything that only works when several repositories cooperate; that is a use-case feature owned
+  by the consuming repository, not a shikumi provision claim.
+- One record per exported module. A capability is one thing a consumer adopts and verifies as a
+  unit; things that always ship together and are proven by the same evidence are one record.
+- `shikumi-jitsurei` demos — they are *evidence* for a capability, never a capability.
+
+Also check the transport boundary: behavior that belongs to `mori://shinzui/baikai` (provider
+transport) is not a shikumi capability, even when a shikumi release exposes it. A baikai cohort
+upgrade only earns a catalog change if it makes a *shikumi* provision claim newly true.
+
+#### 6.3 Write or update the records
+
+A new record is `docs/capabilities/<kebab-case-name>.md` with this frontmatter shape (all
+`required` fields of the `coordination.capabilities` profile, plus the recommended
+`interface`):
+
+```yaml
+---
+title: "<human-readable capability name>"
+type: Capability
+description: "<one sentence a consumer can evaluate without reading the body>"
+generated:
+  by: <agent/model identity producing this record>
+  at: "<UTC ISO-8601 timestamp>"
+capabilityId: CAP-<next unused N>
+provider: mori://shinzui/shikumi
+status: shipped
+stability: experimental
+since: "<version being published for this package in this release>"
+packages:
+  - <package name>
+interface:
+  - <module, command, or endpoint a consumer actually touches>
+requires:
+  - CAP-<n>            # optional; omit the key when there is nothing to require
+evidence:
+  - kind: test         # test | conformance | example | benchmark | module | guide
+    resource: <repo-relative path, package target, module name, or URL>
+    proves: <what a reader learns by opening it>
+---
+```
+
+Rules that matter:
+
+- **`since` is the version this release publishes** for that package (from step 3) — not the
+  package's previous version. Use `unreleased` only for a capability that lives in a package
+  with no Hackage release (`shikumi-cli`); when such a package is ever published, that release
+  updates those records' `since` to the published version.
+- **Evidence is mandatory and must resolve.** A record with no evidence is an improvement
+  request, not a capability. `mori` does *not* check evidence paths, so verify each one exists
+  (`test -f <resource>`) before committing. Prefer hermetic tests and worked examples.
+- **Mirror every `requires` entry as a Markdown body link** (e.g. `[CAP-17 typed tool
+  registry](typed-tools.md)`). OKF derives graph edges from body links only; a `requires` entry
+  that is not also a body link validates cleanly and is invisible to the graph.
+- **Every record carries a `## Limits` section** stating honestly what it does not do — match
+  the candor of the existing records.
+
+#### 6.4 Update `index.md` and `log.md`
+
+- Add a row to the `# Capabilities` table in `docs/capabilities/index.md`, in CAP-N order, with
+  the handle link, title, `since`, and package.
+- Re-read the index prose. If the release changes something it asserts — the uniform
+  `experimental` stability promise, which packages are published versus `unreleased`, the
+  "Deliberately excluded" list — update that prose too.
+- Prepend a dated entry to `docs/capabilities/log.md` under `## <YYYY-MM-DD>` (today), with
+  `* **Update**:` / `* **Adoption**:` lines saying what changed and why.
+
+#### 6.5 Validate
+
+```bash
+mori capabilities validate --bundle capabilities
+```
+
+It must report `OK: <n> capability record(s)`. Fix every reported problem — **a release does not
+go out with an invalid bundle.** Re-check evidence paths by hand, since the validator does not.
+
+Report the catalog decisions (new records, updated records, and "no catalog change because …")
+to the operator alongside the version bumps in step 8's sign-off.
+
+### 7. Verify — run the full gate (inside the dev shell)
 
 Do **not** skip any of these. Stop on the first failure.
 
@@ -201,6 +323,8 @@ nix develop -c bash -lc '
 nix fmt                    # formatting is clean...
 git diff --exit-code       # ...and produced no changes (else commit them)
 nix flake check            # treefmt + any flake checks
+
+mori capabilities validate --bundle capabilities   # capability catalog still valid
 ```
 
 Additionally, dry-run the packaging for each package to catch sdist/Hackage issues early:
@@ -210,9 +334,10 @@ nix develop -c cabal sdist <pkg>          # builds the source tarball
 nix develop -c cabal check                # run from inside <pkg>/ — Hackage lint
 ```
 
-### 7. Commit, tag, push
+### 8. Commit, tag, push
 
-Use **Conventional Commits**. One release commit captures the version/changelog/bound edits:
+Use **Conventional Commits**. One release commit captures the version, changelog, dependency
+bound, and capability-catalog edits:
 
 ```bash
 git add -A
@@ -234,7 +359,7 @@ git push origin master
 git push origin <tag> [<tag> ...]      # or: git push origin --tags
 ```
 
-### 8. Publish to Hackage — in dependency order
+### 9. Publish to Hackage — in dependency order
 
 For each released package, **in the dependency order from the Packages table**, publish the
 package and then its documentation. Wait for each upload to be accepted before starting its
@@ -258,7 +383,7 @@ nix develop -c cabal upload --publish --documentation \
 If an upload fails, **stop**: fix the issue and do not upload any dependent packages until the
 upstream one is live, or you will publish packages whose dependencies don't exist on Hackage.
 
-### 9. Create GitHub releases
+### 10. Create GitHub releases
 
 `gh` is available; the remote is `shinzui/shikumi`. For each released package, create a GitHub
 release from its tag, with notes taken from that package's new changelog section:
@@ -274,12 +399,19 @@ Verify each release page renders, then report the Hackage URLs
 
 ## Important — guardrails
 
-- **Confirm before committing.** Show the operator the computed per-package version bumps and
-  the changelog entries, and get explicit sign-off **before** the commit/tag step (step 7).
+- **Confirm before committing.** Show the operator the computed per-package version bumps, the
+  changelog entries, and the capability-catalog decisions, and get explicit sign-off **before**
+  the commit/tag step (step 8).
 - **Always publish in dependency order** (the Packages table). An upload must be live before its
   dependents go up.
-- **Never skip the check gates** (step 6): `cabal build all`, `cabal test all`, `nix fmt`,
-  `nix flake check`. A release must pass all of them.
+- **Never skip the check gates** (step 7): `cabal build all`, `cabal test all`, `nix fmt`,
+  `nix flake check`, `mori capabilities validate`. A release must pass all of them.
+- **Audit `docs/capabilities/` on every release** (step 6), including releases you expect to be
+  purely internal — the conclusion "no catalog change" is a result to report, not a step to skip.
+- **Never move an existing capability's `since` forward, and never renumber or reuse a CAP-N
+  handle.** Growth of a capability is a new record that `requires` the old one.
+- **Never add a capability record for behavior that does not ship in this release.** The profile
+  has no `planned` status; unshipped work belongs in `docs/improvement-requests/`.
 - **Stop on any failure.** Do not continue to later steps or later packages after a failure.
 - **Never continue publishing dependents after an upstream upload fails** — a half-published
   release leaves Hackage with packages whose dependencies are missing.
