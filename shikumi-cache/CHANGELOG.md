@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0.0 — 2026-09-08
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` for the breaking core release.
+
 - Clear provider-call evidence on every cache hit, including the memory backend, so logical traces do not reuse a previous crossing as new evidence.
 
 - Bypass memoizer reads and writes for any evidence request, including defaults and warm entries. Apply request defaults before caching so keys reflect effective options. No cache format or public signature change.

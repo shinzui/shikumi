@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.1.0 — 2026-09-08
+
+### Changed
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` so this package builds
+  against the breaking core release. No change to this package's own API.
+
 ## 0.2.0.0 — 2026-08-07
 
 ### Added

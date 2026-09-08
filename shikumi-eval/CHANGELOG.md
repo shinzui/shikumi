@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.0.0 — 2026-09-08
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` for the breaking core release.
+
 - Preserve logical usage quality and unknown-call counts, and explicitly attach/render whole-run transport billing separately. Public UsageTotals and Report fields require PVP major review; empty/default constructors retain zero semantics.
 
 - Render structured provider failures through the shared readable renderer while retaining existing failure policy and legacy diagnostics.

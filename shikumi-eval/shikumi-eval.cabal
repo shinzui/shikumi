@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-eval
-version:         0.2.0.3
+version:         0.3.0.0
 synopsis:        Typed evaluation framework for shikumi LM programs (EP-8)
 category:        AI
 description:
@@ -53,7 +53,7 @@ library
     , effectful     >=2.5      && <2.7
     , generic-lens  >=2.2      && <2.4
     , lens          ^>=5.3
-    , shikumi       ^>=0.3.0.0
+    , shikumi       ^>=0.4.0.0
     , tasty         >=1.4      && <1.6
     , tasty-golden  >=2.3      && <2.4
     , text          ^>=2.1
@@ -84,8 +84,8 @@ test-suite shikumi-eval-test
     , effectful
     , generic-lens
     , lens
-    , shikumi       ^>=0.3.0.0
-    , shikumi-eval  ^>=0.2.0.0
+    , shikumi       ^>=0.4.0.0
+    , shikumi-eval  ^>=0.3.0.0
     , tasty
     , tasty-golden
     , tasty-hunit

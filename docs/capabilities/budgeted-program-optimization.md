@@ -20,10 +20,6 @@ interface:
   - Shikumi.Optimize.RandomSearch
   - Shikumi.Optimize.COPRO
   - Shikumi.Optimize.MIPRO
-  - Shikumi.Optimize.Structure
-  - Shikumi.Optimize.Execution
-  - Shikumi.Optimize.Report
-  - Shikumi.Optimize.Feedback
   - Shikumi.Optimize.GEPA
   - Shikumi.Optimize.KNN
   - Shikumi.Optimize.Ensemble
@@ -32,12 +28,6 @@ requires:
   - CAP-14
   - CAP-15
 evidence:
-  - kind: test
-    resource: shikumi-optimize/test/StructureSpec.hs
-    proves: Finite typed recipes select on validation, obey shared admission, retain deterministic ties, and restore identical requests and outputs.
-  - kind: test
-    resource: shikumi-optimize/test/FeedbackSpec.hs
-    proves: Failed examples retain positions, node critiques target executed invocations, reflection uses redacted intermediate evidence, and cancellation escapes.
   - kind: test
     resource: shikumi-optimize/test/NodeBootstrapSpec.hs
     proves: Heterogeneous capture pipelines recover node-local demos, reject incompatible mappings before calls, and restore parameters onto their template.
@@ -68,24 +58,31 @@ It composes [evaluation](typed-evaluation.md), shape-safe
 [compilation](pure-program-compilation.md), and node-correlated
 [trace feedback](hierarchical-tracing.md).
 
-Bootstrap, RandomSearch, and MIPRO recover demonstrations per predictor. Composite
-programs require `predictCaptured` leaves; matching checks structure and schemas,
-or accepts an explicit compatible teacher-to-student path mapping. Captured demos
-must decode at the target node. Rejected attempts are excluded and seeded selection
-is independent per target. See the [user guide](../user/evaluation-and-optimization.md)
-for configuration and a city/country pipeline.
+Bootstrap, RandomSearch, and MIPRO recover demonstrations for a predictor, and
+the [user guide](../user/evaluation-and-optimization.md) walks through
+configuration and a city/country pipeline.
 
-GEPA supports explicitly attributed node critiques and indexed failed-execution
-evidence. Legacy critiques remain labeled program-scoped. Reflection bounds and
-redacts local evidence and retains failed retry lineage, including without JSON
-codecs. Output failures are scored by default; budget exhaustion and infrastructure
-errors escape unless the latter are explicitly classified.
+Four later capabilities grow this one and are released separately, so a consumer
+pinned to an earlier `shikumi-optimize` gets this record's provision and not
+theirs:
+
+- [CAP-33 validated optimizer execution and lifecycle reports](validated-gepa-execution.md)
+  makes budget admission precise and adds versioned diagnostic reports.
+- [CAP-34 structure search over finite recipe registries](structure-search.md)
+  selects among alternative program structures.
+- [CAP-35 failure-aware optimizer feedback](failure-aware-optimizer-feedback.md)
+  attributes critiques to the node and invocation that failed.
+- [CAP-36 node-local bootstrap demonstration pools](node-local-bootstrap-pools.md)
+  recovers demonstrations per node in a composite program.
 
 ## Limits
 
-- GEPA capture is sequential. Critic calls and retry expansion are not strictly
-  charged by the existing predicted-call budget; split-aware execution and lifecycle
-  reports remain future work. Raw returned evidence is not redacted.
+- GEPA capture is sequential. In this record's provision, critic calls and retry
+  expansion are not strictly charged by the predicted-call budget and raw
+  returned evidence is not redacted; strict admission, lifecycle reports, and
+  bounded redacted reflection arrive with
+  [CAP-33](validated-gepa-execution.md) and
+  [CAP-35](failure-aware-optimizer-feedback.md).
 - `Embed` is opaque; hidden predictors cannot provide node demonstrations.
 - Optimizer quality depends on representative training/evaluation data and the
   chosen metric; held-out tests are still required.
@@ -93,32 +90,3 @@ errors escape unless the latter are explicitly classified.
   the matching compiled template.
 - Budget accounting is expressed in LM calls, not currency; provider pricing
   and token totals remain separate runtime observations.
-
-## Configured validation and execution reports
-
-`optimizeWith` and `gepaWith` add separate validation data, named quality/resource
-objectives, and versioned diagnostic reports. The configured session atomically
-admits Shikumi Complete/Stream operations and bounds active dispatches independently
-of candidate batches. Retry and Embed calls share admission with proposal and critic
-calls. Incomplete validation cannot win; a stopped search retains its completed
-winner or reports an unscored baseline. Legacy opaque strategies expose run-level
-accounting with candidate detail explicitly unavailable.
-
-`jitsurei-gepa-objectives` is an offline validation-selected B fixture. Optimizer
-regressions exercise contrary training/validation rankings, sentinel exclusion from
-reflection, cost ceilings and Pareto ties, budget catches and concurrent contention,
-barrier-controlled dispatch width, cancellation cleanup, and report JSON round trips.
-
-These reports are diagnostic, not sealed dataset provenance, promotion authority,
-or protected-holdout comparison artifacts. The hard unit is an admitted framework
-LLM operation, not provider-internal attempts or dollars. The seed controls candidate
-scheduling; concurrent dispatch races and live responses are not deterministic.
-
-Finite typed structure selection is available through `structureSearchWith`. The
-caller owns the nonempty recipe registry and implementation revisions; artifacts
-restore only through a compatible registry. This experimental API shares actual
-operation admission and validation objectives, excludes incomplete candidates,
-and returns an explicitly unscored first baseline when necessary. Structure
-artifacts are distinct from compiled parameter state and grant no production
-promotion authority. See [the workflow](../user/evaluation-and-optimization.md#experimental-finite-structure-search)
-and [ADR-8](../adr/0008-restore-typed-structures-through-trusted-recipe-registries.md).

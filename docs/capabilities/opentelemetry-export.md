@@ -34,9 +34,17 @@ completed tree; live export observes spans as they close. Both retain parentage,
 program-node attributes, model identity, usage, error status, and incomplete
 span state. Provider flushing and shutdown are bracketed even when export throws.
 
+Transport attempts are exported as separately scoped counters alongside
+aggregate totals, so a retried call is visible as the several attempts it cost
+rather than as one logical call, and `gen_ai.response.model` is populated from
+observed evidence only. This is the export side of
+[CAP-23 per-attempt transport billing observation](transport-billing-observation.md).
+
 ## Limits
 
-- Export fidelity is bounded by the attributes recorded in the source trace.
+- Export fidelity is bounded by the attributes recorded in the source trace. A
+  trace recorded before billing detail was captured exports aggregate usage
+  without per-attempt transport counters.
 - A corrupt cyclic trace is traversed defensively, but accepting corrupt input
   does not repair its semantics.
 - Collector configuration, sampling, transport, retention, and sensitive-data

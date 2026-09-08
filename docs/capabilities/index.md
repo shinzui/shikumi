@@ -19,10 +19,13 @@ reader can open. The catalog deliberately describes provision, not roadmap:
 planned work remains in improvement requests and execution plans.
 
 **Stability is uniformly experimental.** The packages are pre-1.0 and their
-recent changelogs include breaking minor releases. The capabilities are usable
-and released, but the project does not yet promise source compatibility across
-minor versions. The CLI is implemented and tested in this repository but has
-not been published to Hackage, so its `since` value is `unreleased`.
+recent changelogs include breaking minor releases — the 2026-09-08 release
+raised `shikumi`, `shikumi-tools`, `shikumi-cache`, `shikumi-eval`,
+`shikumi-trace`, and `shikumi-optimize` to new major versions at once. The
+capabilities are usable and released, but the project does not yet promise
+source compatibility across minor versions. The CLI is implemented and tested in
+this repository but has not been published to Hackage, so its `since` value is
+`unreleased`.
 
 ## Deliberately excluded
 
@@ -63,3 +66,17 @@ not been published to Hackage, so its `since` value is `unreleased`.
 | [CAP-20](built-in-work-tools.md) | Built-in filesystem, shell, and web tools | 0.2.0.0 | shikumi-tools |
 | [CAP-21](offline-cli-workflows.md) | Offline-capable evaluation, trace, optimize, and replay CLI | unreleased | shikumi-cli |
 | [CAP-22](okf-program-documentation.md) | OKF program and application documentation generation | 0.1.0.0 | shikumi-okf |
+| [CAP-23](transport-billing-observation.md) | Per-attempt transport billing observation | 0.4.0.0 | shikumi |
+| [CAP-24](scoped-request-defaults.md) | Invocation-scoped request defaults | 0.4.0.0 | shikumi |
+| [CAP-25](reasoning-continuation-guards.md) | Reasoning continuation guards | 0.4.0.0 | shikumi |
+| [CAP-26](nested-xml-decoding.md) | Bounded nested XML structured output | 0.4.0.0 | shikumi |
+| [CAP-27](typed-prediction-capture.md) | Opt-in typed prediction capture | 0.4.0.0 | shikumi |
+| [CAP-28](rich-tool-outputs.md) | Rich tool outputs and runtime tool registration | 0.4.0.0 | shikumi-tools |
+| [CAP-29](resumable-react-sessions.md) | Resumable ReAct sessions with versioned checkpoints | 0.4.0.0 | shikumi-tools |
+| [CAP-30](recursive-language-model-sessions.md) | Bounded recursive language-model sessions | 0.4.0.0 | shikumi-tools |
+| [CAP-31](typed-structure-registries.md) | Typed program structure registries | 0.2.1.0 | shikumi-compile |
+| [CAP-32](isolated-node-observation.md) | Isolated node observation with rejection lineage | 0.3.0.0 | shikumi-trace |
+| [CAP-33](validated-gepa-execution.md) | Validated optimizer execution and lifecycle reports | 0.3.0.0 | shikumi-optimize |
+| [CAP-34](structure-search.md) | Structure search over finite recipe registries | 0.3.0.0 | shikumi-optimize |
+| [CAP-35](failure-aware-optimizer-feedback.md) | Failure-aware optimizer feedback | 0.3.0.0 | shikumi-optimize |
+| [CAP-36](node-local-bootstrap-pools.md) | Node-local bootstrap demonstration pools | 0.3.0.0 | shikumi-optimize |

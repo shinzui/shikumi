@@ -40,10 +40,16 @@ The argument contract reuses the schema and validation capability in
 [CAP-1](typed-signatures-and-schemas.md), so tool inputs fail with the same
 located errors as predicted outputs.
 
+Structured tool results and tools whose schema is only known at runtime are a
+later addition — see
+[CAP-28 rich tool outputs and runtime tool registration](rich-tool-outputs.md).
+
 ## Limits
 
 - The registry validates tool names and arguments; it does not make a handler's
   side effects safe or authorized.
 - Observations are text at the model boundary even when the request is typed.
+  [CAP-28](rich-tool-outputs.md) keeps richer structure locally but still
+  projects to text for the provider.
 - Provider-native tool calling depends on the selected model transport. The
   same registry can instead be rendered through a prompt protocol by an agent.

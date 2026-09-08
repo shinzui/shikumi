@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.2.0 — 2026-09-08
+
+- Add the missing `bytestring` upper bound (`>=0.11 && <0.13`), matching the
+  rest of the package set. `cabal check` reported it under
+  `missing-upper-bounds`; the dependency was added this cycle without one.
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` and `shikumi-trace` to `^>=0.3.0.0`, and give the test suite's bare `shikumi`, `shikumi-cache`, `shikumi-eval`, and `shikumi-testing` dependencies explicit PVP bounds.
+
 - Export separately scoped transport attempts and aggregate counters, including error status and canonical billing quality. Use observed-model evidence for gen_ai.response.model. Preserve existing exporter lifecycle and structural traversal.
 
 ## 0.1.1.1 — 2026-08-29

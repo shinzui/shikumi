@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.0.0 — 2026-09-08
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` and `shikumi-cache` to `^>=0.2.0.0`.
+
 - Persist optional billing detail and logical span quality in format 3 while reading formats 1 and 2. Streaming terminals now populate usage; observed model identity comes only from evidence. Billing attachment does not add replay entries. Public record additions require PVP major review.
 
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.

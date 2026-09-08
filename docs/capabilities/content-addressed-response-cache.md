@@ -41,13 +41,19 @@ backend. `CacheConfig` applies shared entry-TTL policy, and persistent lookup or
 store failures can degrade to misses/no-ops so cache infrastructure does not
 take down the LM path.
 
-It interposes on the runtime from [CAP-4](resilient-runtime-routing.md).
+It interposes on the runtime from [CAP-4](resilient-runtime-routing.md). Where
+[CAP-24 invocation-scoped request defaults](scoped-request-defaults.md) are
+installed, defaults are applied beneath the cache, so keys reflect the options
+that actually reach the provider rather than the sparser options a caller
+wrote.
 
 ## Limits
 
 - Only blocking completion calls are cached; transport streams pass through.
 - In-band provider error responses are not stored.
-- Cached responses intentionally discard original model-call evidence because a
-  cache hit did not cross the provider boundary.
+- Cached responses intentionally clear original model-call evidence — on every
+  backend, including the in-memory one — because a cache hit did not cross the
+  provider boundary and must not be replayed as new evidence. A request that
+  asks for evidence bypasses the memoizer's reads and writes entirely.
 - The SQLite backend is process-persistent, but callers still own database-file
   placement and lifecycle.

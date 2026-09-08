@@ -50,6 +50,11 @@ step cap and no filesystem, process, or network access. `CodeInterpreter` is a
 plain swappable value, so tests and constrained applications can replace it
 without changing the loop.
 
+Working over documents that stay outside the prompt, under explicit operation
+and character budgets, is a later addition on the same no-host-execution
+footing — see
+[CAP-30 bounded recursive language-model sessions](recursive-language-model-sessions.md).
+
 ## Limits
 
 - No general Python, JavaScript, or subprocess sandbox ships on the composable

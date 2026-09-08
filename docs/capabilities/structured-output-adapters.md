@@ -41,10 +41,16 @@ All paths converge on the same `FromModel` and `Validatable` decoder, so changin
 wire format does not change application types or error handling. Few-shot demos
 are translated to the corresponding native JSON or fallback representation.
 
+The XML path decodes flat tag-shaped fields and JSON-in-tag containers. Nested
+records and arrays are decoded by the later, bounded parser described in
+[CAP-26 bounded nested XML structured output](nested-xml-decoding.md).
+
 ## Limits
 
 - Capability detection is based on the model provider/API identity known to
   shikumi; unusual compatible endpoints may need explicit routing configuration.
 - XML is opt-in and never auto-selected.
+- This record's XML support is flat; nested structure requires the separate
+  adapter in [CAP-26](nested-xml-decoding.md).
 - Native structured output constrains the response shape, but provider-level
   failures and semantic validation can still fail the call.

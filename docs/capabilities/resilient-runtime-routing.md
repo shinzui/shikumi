@@ -45,14 +45,24 @@ streaming calls, and charges a failed stream from its terminal usage before
 surfacing the error. Time, primitive state, and concurrency are represented as
 separate effects rather than hidden behind unrestricted `IO`.
 
+Failure classification is typed rather than textual: rate limits and transient
+failures are retried, while refusals, authentication failures, unavailable
+providers, and process failures are terminal.
+
 This runtime executes the program values described by
-[CAP-2](composable-program-values.md).
+[CAP-2](composable-program-values.md). Three later capabilities extend it
+without changing what it computes —
+[CAP-23 per-attempt transport billing observation](transport-billing-observation.md),
+[CAP-24 invocation-scoped request defaults](scoped-request-defaults.md), and
+[CAP-25 reasoning continuation guards](reasoning-continuation-guards.md).
 
 ## Limits
 
 - Budget admission is optimistic: concurrent calls can collectively overshoot
   a ceiling because no reservation is held for an in-flight request.
-- Retry policy only retries errors classified as transient; validation and
-  configuration failures escape immediately.
+- Retry policy only retries typed transient failures and rate limits; refusals,
+  authentication, unavailable-provider, validation, and configuration failures
+  escape immediately. Legacy untyped provider failures retain their previous
+  retry behavior.
 - Provider implementations and credentials come from
   `mori://shinzui/baikai` and its backend packages, not from shikumi itself.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.1.0 — 2026-09-08
+
+- Raise the internal `shikumi` bound to `^>=0.4.0.0` for the breaking core release.
+
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
 
 - Add validated finite typed recipe registries and distinct version-1 experimental structure artifacts with exact registry/revision/schema/shape checks; existing compiled state is unchanged.

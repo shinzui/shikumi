@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi
-version:         0.3.0.3
+version:         0.4.0.0
 synopsis:        Typed, structured, evaluable LM programs over baikai
 category:        AI
 description:
@@ -129,7 +129,7 @@ test-suite shikumi-test
     , generic-lens
     , lens
     , QuickCheck
-    , shikumi            ^>=0.3.0.0
+    , shikumi            ^>=0.4.0.0
     , stm
     , streamly-core
     , tasty

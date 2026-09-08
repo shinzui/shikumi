@@ -57,7 +57,7 @@ library
     , generic-lens
     , http-types     >=0.12.6   && <0.13
     , lens           ^>=5.3
-    , shikumi        ^>=0.3.0.0
+    , shikumi        ^>=0.4.0.0
     , streamly-core
     , text           ^>=2.1
     , vector
@@ -72,7 +72,7 @@ test-suite shikumi-testing-test
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
     , base
-    , shikumi          ^>=0.3.0.0
+    , shikumi          ^>=0.4.0.0
     , shikumi-testing  ^>=0.1.0.0
     , tasty
     , tasty-hunit

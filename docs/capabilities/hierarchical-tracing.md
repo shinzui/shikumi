@@ -41,9 +41,17 @@ while program tracing adds structural `NodePath` values aligned with the core
 parameter traversal. Consumers can render a readable tree, persist a versioned
 JSON file, or attach critiques to individual nodes for reflective optimizers.
 
+Spans additionally carry optional transport billing detail and logical span
+quality, and observed model identity is taken only from recorded evidence rather
+than inferred. Attaching billing adds no replay entries, so it does not disturb
+[CAP-12 fail-closed deterministic replay](deterministic-replay.md).
+
 This capability observes the program and runtime from
 [CAP-2](composable-program-values.md) and
-[CAP-4](resilient-runtime-routing.md).
+[CAP-4](resilient-runtime-routing.md). For structured per-node evidence intended
+to be consumed programmatically — including failed attempts and rejection
+lineage — see
+[CAP-32 isolated node observation with rejection lineage](isolated-node-observation.md).
 
 ## Limits
 
@@ -52,4 +60,5 @@ This capability observes the program and runtime from
 - Trace files may contain prompts and responses; storage access and redaction
   are the consumer's responsibility.
 - File-format compatibility is versioned and bounded by
-  `minSupportedFormatVersion`.
+  `minSupportedFormatVersion`. This release writes format 3 while still reading
+  formats 1 and 2; a format-3 file cannot be read by an older consumer.

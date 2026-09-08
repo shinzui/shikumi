@@ -1,6 +1,6 @@
 cabal-version:   3.4
 name:            shikumi-compile
-version:         0.2.0.3
+version:         0.2.1.0
 synopsis:        The compiler layer for shikumi LM programs (EP-9)
 category:        AI
 description:
@@ -56,7 +56,7 @@ library
     , effectful     >=2.5      && <2.7
     , generic-lens  >=2.2      && <2.4
     , lens          ^>=5.3
-    , shikumi       ^>=0.3.0.0
+    , shikumi       ^>=0.4.0.0
     , text          ^>=2.1
 
 test-suite shikumi-compile-test
@@ -78,8 +78,8 @@ test-suite shikumi-compile-test
     , effectful
     , generic-lens
     , lens
-    , shikumi          ^>=0.3.0.0
-    , shikumi-compile  ^>=0.2.0.0
+    , shikumi          ^>=0.4.0.0
+    , shikumi-compile  ^>=0.2.1.0
     , tasty
     , tasty-hunit
     , text

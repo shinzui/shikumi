@@ -50,6 +50,13 @@ report can distinguish poor predictions from provider or decoding failures. The
 capability evaluates the programs from [CAP-2](composable-program-values.md)
 under the runtime policies in [CAP-4](resilient-runtime-routing.md).
 
+Usage accounting separates *logical* usage — what the evaluated program asked
+for, including counts of calls whose usage the provider did not report — from
+whole-run *transport* billing, which is attached and rendered separately. The
+two answer different questions, and a single blended number answers neither.
+`scoreExecution` and `tryShikumi` are exposed so an alternate typed runner can
+reuse the scoring path while retaining its own execution evidence.
+
 ## Limits
 
 - Model-backed metrics inherit the cost, latency, and nondeterminism of their LM
@@ -58,3 +65,5 @@ under the runtime policies in [CAP-4](resilient-runtime-routing.md).
   wall-clock elapsed time.
 - A metric defines the meaning of quality; the framework enforces `Score` bounds
   but cannot validate domain fitness.
+- Transport billing is attached per run, not per example. A report cannot
+  attribute retry cost to the individual example that provoked it.

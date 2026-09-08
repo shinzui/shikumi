@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.0.0 — 2026-09-08
+
+- Raise the internal bounds to `shikumi ^>=0.4.0.0`, `shikumi-compile ^>=0.2.1.0`, `shikumi-eval ^>=0.3.0.0`, and `shikumi-trace ^>=0.3.0.0`.
+
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.
 
 - Add `structureSearchWith` for validation-only finite recipe selection through shared admission/objectives, plus optional candidate identity metadata in reports and lifecycle events.

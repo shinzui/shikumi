@@ -50,6 +50,10 @@ protocol through [CAP-3 adapter capability
 detection](structured-output-adapters.md), and runs model turns under the
 [CAP-4 runtime](resilient-runtime-routing.md).
 
+Running an agent as an explicit, checkpointable session that can be stored and
+resumed in another process is a later addition — see
+[CAP-29 resumable ReAct sessions with versioned checkpoints](resumable-react-sessions.md).
+
 ## Limits
 
 - Context compaction summarizes history and can lose detail. It is best-effort
