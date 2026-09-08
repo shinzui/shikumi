@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Update**: Extend ADR-9 with released-adapter loopback fixtures, bounded worker cleanup, consumer test ownership and explicit live gates.
 * **Update**: Added ADR-13 for bounded transport billing, separate logical accounting, and explicit uncertainty.
 * **Added**: ADR-12: fill-only request defaults, effective request ordering and evidence cache bypass.
 * **Update**: Extend completed-session decision with reasoning-safe version-2 continuation, summary and restart boundaries.

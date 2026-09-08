@@ -42,7 +42,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 | 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Complete |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Complete |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Complete |
-| 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | Not Started |
+| 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | In Progress |
 
 
 

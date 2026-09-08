@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify released Responses wire schemas, exact opaque checkpoint replay, call IDs, origin rejection, terminal errors, retries, cache observations and server cleanup with loopback integration tests.
+
 - Write version-2 reasoning-safe checkpoints while reading version 1. Add safe summary rendering, explicit-model startup and pure restart; defer unsafe compaction and reject incompatible continuation before dispatch. Public API additions require a PVP review at release.
 
 - Preserve structured refusals in defensive ReAct response checks and use shared error rendering for tool observations; partial refused tool calls never dispatch.

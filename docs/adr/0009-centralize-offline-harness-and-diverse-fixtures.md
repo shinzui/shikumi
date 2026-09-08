@@ -5,10 +5,10 @@ description: Own reusable offline LLM interpreters and nontrivial fixture shapes
 docId: ADR-9
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-09-07T22:32:18Z
+timestamp: 2026-09-08T19:01:31Z
 generated:
   by: process:codex
-  at: 2026-09-07T22:32:18Z
+  at: 2026-09-08T19:01:31Z
 ---
 
 # Centralize offline harness and diverse fixtures
@@ -36,6 +36,16 @@ replay remain CLI-owned. Script exhaustion returns an empty text turn; streaming
 returns no chunks; injected completion errors do not consume scripted responses.
 Marker responses preserve the existing 18 input tokens, 5 output tokens and 4 ms
 latency used by trace assertions.
+
+The harness also owns scripted loopback HTTP fixtures for released public provider
+adapters. Use isolated registries, dummy credentials, ephemeral 127.0.0.1 ports,
+bounded actions and explicit worker termination/joining on every exit path.
+Consumer tests inspect emitted requests to establish transport behavior; an LLM
+stub or successful live answer alone cannot establish exact opaque replay.
+Core tests retain pure routing coverage because depending on the core-dependent
+harness would create a package cycle. Adapter integration belongs in consumer
+suites. Examples default to offline operation; live operation requires a separate
+CLI mode, opt-in environment switch, explicit model/credentials and bounded work.
 
 ## Consequences
 

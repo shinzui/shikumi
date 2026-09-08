@@ -264,3 +264,25 @@ This pure operation returns `Either HistoryError ReActSession`, performs no mode
 or tool calls, and leaves `old` available for audit. The result has no old native
 exchanges and no bound origin. Store it separately; restart never silently
 rewrites an archive or modifies a signed exchange.
+
+## Verified Responses checkpoint workflow
+
+`jitsurei-responses` demonstrates a completed lookup exchange, checkpoint JSON
+encoding/decoding, a new user turn and a validated native final submission.
+Run it with the [offline command](effects-and-runtime.md#a-complete-responses-workflow).
+The real adapter test captures outgoing JSON and compares the full reasoning
+item, including its empty summary, encrypted continuation and unknown extension
+fields. It checks distinct item IDs and `call_id` values, tool-result ordering,
+and exactly one tool execution across resume.
+
+An empty reasoning summary does not mean there is no state to preserve. Replay
+opaque items exactly with their original provider/API/model/endpoint and protected
+prefix. Changing the routed model or API fails before another HTTP request;
+compacting away a prefix while retaining dependent opaque state also fails.
+Use `restartSessionFromSummary` with caller-approved text to create a fresh,
+separate conversation when changing origin. Keep the original audit independently;
+never reconstruct encrypted continuation from the human-readable summary.
+
+The example reports whether it sent opaque continuation on resume, without printing
+the payload. Exact wire replay is proved by the loopback tests. A live final answer
+alone, especially one with no continuation, is not that proof.

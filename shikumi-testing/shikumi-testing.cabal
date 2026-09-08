@@ -13,6 +13,8 @@ description:
   an output type whose @Validatable@ rule can fail, a two-stage program) that
   every package's tests can regression-test against.
   .
+  Also provides a bounded loopback fixture for released Responses adapters.
+  .
   Internal to the repository: not published to Hackage.
 
 license:       BSD-3-Clause
@@ -41,20 +43,26 @@ library
     Shikumi.Testing
     Shikumi.Testing.Fixtures
     Shikumi.Testing.Response
+    Shikumi.Testing.Responses
     Shikumi.Testing.StubLLM
     Shikumi.Testing.Transport
 
   build-depends:
     , aeson
     , baikai         >=0.7.0.0  && <0.8
+    , baikai-openai  >=0.7.0.0  && <0.8
     , base           >=4.20     && <5
+    , bytestring
     , effectful
     , generic-lens
+    , http-types     >=0.12.6   && <0.13
     , lens           ^>=5.3
     , shikumi        ^>=0.3.0.0
     , streamly-core
     , text           ^>=2.1
     , vector
+    , wai            >=3.2.5    && <3.3
+    , warp           >=3.4.15   && <3.5
 
 test-suite shikumi-testing-test
   import:         common-options

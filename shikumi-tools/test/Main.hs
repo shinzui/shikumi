@@ -13,6 +13,8 @@ import ProgramOfThoughtSpec qualified
 import ProtocolSpec qualified
 import RLMSpec qualified
 import ReActSpec qualified
+import ResponsesIntegrationSpec qualified
+import ResponsesSchemaSpec qualified
 import RestrictedSpec qualified
 import SchemaSpec qualified
 import SessionSpec qualified
@@ -27,7 +29,9 @@ main =
   defaultMain $
     testGroup
       "shikumi-tools"
-      [ SessionSpec.tests,
+      [ ResponsesSchemaSpec.tests,
+        ResponsesIntegrationSpec.tests,
+        SessionSpec.tests,
         RLMSpec.tests,
         AgentHistorySpec.tests,
         SchemaSpec.tests,

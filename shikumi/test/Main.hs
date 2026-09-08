@@ -19,6 +19,7 @@ import ProgramSpec qualified
 import RefineSpec qualified
 import RequestDefaultsSpec qualified
 import ResilienceSpec qualified
+import ResponsesSpec qualified
 import RoutingSpec qualified
 import SchemaSpec qualified
 import SerializeSpec qualified
@@ -34,7 +35,8 @@ main =
   defaultMain $
     testGroup
       "shikumi"
-      [ RequestDefaultsSpec.tests,
+      [ ResponsesSpec.tests,
+        RequestDefaultsSpec.tests,
         ContinuationSpec.tests,
         ErrorSpec.tests,
         SchemaSpec.tests,

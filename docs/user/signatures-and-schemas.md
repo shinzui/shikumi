@@ -364,3 +364,22 @@ cabal run jitsurei-multimodal   # an image input field lowered to a UserImage bl
 a `Constrained` record's schema keywords plus a violating/conforming decode; `jitsurei-multimodal`
 renders an image-bearing request and shows the user turn carries a real image block — both fully
 offline against the stub LM.
+
+## Responses native schemas and transport limits
+
+The compiled [Responses example](../../shikumi-jitsurei/app/Responses.hs) uses the
+same derived schema as other typed programs. `routeLLM` selects native schema
+support for `OpenAIResponses`: outgoing requests contain `text.format` with
+`type: json_schema`, `strict: true`, and the derived schema. The real-adapter
+regressions inspect both completion and streaming requests, including shared
+output/reasoning defaults. Typed extraction and validation still run after the
+provider returns.
+
+The released 0.7.0.0 adapter in `mori://shinzui/baikai/packages/baikai-openai`
+rejects stop sequences, seed, frequency/presence penalties and image tool results
+before HTTP dispatch. Offline tests pin the stop-sequence and image-result paths.
+Sampling options can be omitted according to the model's Responses compatibility
+settings; a requested setting is not evidence that the provider used it. Native
+schema support does not imply support for every neutral `Options` field.
+See [the runtime guide](effects-and-runtime.md#a-complete-responses-workflow)
+for separate provider registration and the offline command.

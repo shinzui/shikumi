@@ -325,3 +325,21 @@ unknown-usage counts and truncation, without another numeric spending series.
 An absent usage block does not become a numeric zero observation. The stored
 `UsageRecord` supplements canonical usage JSON with exact rational costs; OTel
 numeric costs remain floating point.
+
+## Responses example: logical usage versus transport billing
+
+The [compiled Responses workflow](../../shikumi-jitsurei/app/Responses.hs) combines
+request defaults, native schema routing, a run-local bounded observer, completed
+session checkpoints and explicit billing attachment to its trace. Its default
+loopback run prints a validated Paris answer, one tool execution, 75 logical
+tokens and three completed transport attempts. The fixture's zero USD value is
+not a claim of free or exact billing: its quality output identifies missing
+cache-write usage, absent service-tier evidence and unavailable pricing. Inspect
+quality metadata alongside totals.
+
+The HTTP regression also scripts one transient failure followed by success and
+checks two attempt observations. A separate cache regression performs two logical
+calls with only one HTTP request and one transport observation. These tests put
+the observer below the cache; the example requests evidence and does not add a
+cache. Replay and cached answers must never manufacture fresh billing attempts or
+provider evidence. Normal CI uses a dummy key and retains no real opaque payloads.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `jitsurei-responses`: a default loopback typed/checkpoint workflow with separate transport billing and explicitly gated, bounded live mode. CI now smoke-tests all 16 examples.
+
 - Add the offline `jitsurei-request-defaults` executable demonstrating routing, defaults, trace, cache and evidence bypass.
 
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`.

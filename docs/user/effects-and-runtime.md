@@ -370,3 +370,51 @@ evidence-requesting run bypasses cache. Requested high thinking or fast speed
 never proves that the provider used it. Translation and evidence strength remain
 owned by `mori://shinzui/baikai/docs/model-call-evidence`; unsupported preferences
 are handled by the provider. The offline example supplies no provider evidence.
+
+## A complete Responses workflow
+
+Run the compiled example with a loopback server and a dummy credential:
+
+```bash
+nix develop .#ghc9124-ci --command cabal run exe:jitsurei-responses
+```
+
+The implementation in [Responses.hs](../../shikumi-jitsurei/app/Responses.hs)
+registers the released Responses adapter separately from Chat Completions:
+
+```haskell
+import Baikai qualified as B
+import Baikai.Provider.OpenAI.Responses (openaiResponsesProvider)
+
+registry <- B.newProviderRegistry
+B.registerApiProviderWith registry openaiResponsesProvider
+```
+
+Its default mode needs no provider credentials and contacts only an ephemeral
+127.0.0.1 server. It executes a typed program, runs one lookup tool, serializes a
+completed-turn checkpoint through JSON bytes, resumes, and validates the final
+answer. It prints `tool executions: 1`, `logical usage:`, `transport billing:`,
+and `opaque continuation sent on resume: True`.
+
+An optional public-provider run requires all three explicit inputs:
+
+```bash
+SHIKUMI_RESPONSES_LIVE=1 nix develop .#ghc9124-ci --command cabal run exe:jitsurei-responses -- --live --model "$SHIKUMI_RESPONSES_MODEL"
+```
+
+Set `OPENAI_API_KEY` and `SHIKUMI_RESPONSES_MODEL` yourself before that command.
+The executable looks up the exact OpenAI model ID in `Baikai.Models.Generated.allModels`
+and selects `OpenAIResponses`; catalog membership alone does not guarantee current
+account access or endpoint support. It makes no automatic retries, caps output at
+256 tokens and the agent at three iterations, and uses 15-second request and
+65-second run timeouts. Credentials and timeouts remain runtime configuration.
+The live switch is separate from `SHIKUMI_LIVE` and never runs in normal CI.
+A successful live run without opaque continuation establishes connectivity only.
+
+The released adapter owns request translation and error classification. In
+`mori://shinzui/baikai/packages/baikai-openai` version 0.7.0.0, a
+`response.failed` frame with `content_filter` maps to `OtherError`, which remains
+terminal. Ordinary refusal content is not guaranteed to become a typed
+`ContentFiltered` error. Shikumi preserves the released classification; it does
+not infer refusals from text. The loopback regression pins one HTTP attempt for
+that failure even with retries enabled.

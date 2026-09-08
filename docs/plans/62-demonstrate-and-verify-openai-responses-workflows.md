@@ -25,15 +25,17 @@ A user should have a compiled example showing how to register OpenAI Responses, 
 ## Progress
 
 
-- [ ] Milestone 1: Exercise the released provider through a local server.
-- [ ] Milestone 2: Publish a compiled runnable example.
+- [x] Milestone 1: Exercise the released provider through a local server.
+- [x] Milestone 2: Publish a compiled runnable example.
 - [ ] Milestone 3: Document the supported workflow and its limits.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-09-08: Real-adapter tests cannot live in the core suite through shikumi-testing because that introduces a Cabal package cycle. Core owns pure schema routing coverage; tools owns real HTTP schema and session tests. Warp listener bracketing alone allowed delayed request workers to outlive cancellation; explicit tracked-worker termination and joining now bounds cleanup.
+
+2026-09-08: The released Responses failure-frame mapper classifies content_filter as OtherError, not ContentFiltered. It is terminal and makes one HTTP request. Tests and documentation preserve this limitation instead of adding a Shikumi classifier. Normal refusal content is not guaranteed a typed refusal error.
 
 
 ## Decision Log
@@ -42,10 +44,12 @@ A user should have a compiled example showing how to register OpenAI Responses, 
 2026-09-08: Make real adapter tests hermetic and live access a distinct explicit mode. The example integrates completed child interfaces rather than redefining them, and separates successful live connectivity from evidence that encrypted continuation was actually replayed.
 
 
+2026-09-08: Extend ADR-9 with real released-adapter fixture ownership, cycle-free consumer placement, worker cleanup and independently gated live examples. Preserve provider-owned classification. Dependency lookup used Mori for the registered dependency and WAI sources; Hackage preferred versions verified wai 3.2.5, warp 3.4.15 and http-types 0.12.6 before adding internal-only fixture bounds. The Responses source matches the baikai-openai-0.7.0.0 tag.
+
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Focused real-adapter tests pass (eight Responses matches including the existing mixed-provider regression); the compiled default example prints a validated Paris answer, one tool execution, 75 logical tokens and three completed transport attempts with explicit billing uncertainty. Full release-source validation and documentation gates remain in progress. No public-provider calls have been made.
 
 
 ## Context and Orientation

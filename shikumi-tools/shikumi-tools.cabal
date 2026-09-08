@@ -99,6 +99,8 @@ test-suite shikumi-tools-test
     ProtocolSpec
     ReActSessionExample
     ReActSpec
+    ResponsesIntegrationSpec
+    ResponsesSchemaSpec
     RestrictedSpec
     RLMExample
     RLMSpec
@@ -121,6 +123,7 @@ test-suite shikumi-tools-test
     , generic-lens
     , lens
     , shikumi          ^>=0.3.0.0
+    , shikumi-cache
     , shikumi-testing  ^>=0.1.0.0
     , shikumi-tools    ^>=0.3.0.0
     , tasty

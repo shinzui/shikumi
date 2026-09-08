@@ -4,8 +4,8 @@ version:         0.1.0.0
 synopsis:        Worked examples (実例) for the shikumi framework
 description:
   Runnable cookbook examples for shikumi, mirroring the README's motivating
-  examples one-for-one. Every example runs fully offline against a deterministic
-  in-process stub LM (no API key, no network), so each is a believable, executable
+  examples one-for-one. Every example defaults to offline operation against a deterministic
+  stub LM or loopback fixture (no provider API key or public network), so each is a believable, executable
   demonstration of the real public API — not a sketch. The shared offline harness
   lives in @Shikumi.Jitsurei.Stub@; each @app/@ module is a self-contained @main@
   a reader can lift straight into their own project.
@@ -270,3 +270,24 @@ executable jitsurei-request-defaults
     , shikumi-cache
     , shikumi-testing
     , shikumi-trace
+
+-- Released Responses adapter over loopback by default, with an explicit live mode.
+executable jitsurei-responses
+  import:         common-options
+  main-is:        Responses.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , aeson
+    , baikai           >=0.7.0.0 && <0.8
+    , baikai-openai    >=0.7.0.0 && <0.8
+    , base             >=4.20    && <5
+    , effectful
+    , generic-lens
+    , lens
+    , shikumi
+    , shikumi-eval
+    , shikumi-testing
+    , shikumi-tools
+    , shikumi-trace
+    , text
