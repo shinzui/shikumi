@@ -28,7 +28,7 @@ The scope is five independently testable improvements across core runtime, sessi
 
 Split by user-visible behavior rather than packages. Refusal handling is the smallest correctness change and establishes the error contract. Reasoning sessions have a distinct persistence and history contract. Request defaults are a pure runtime composition feature. Billing needs its own collector and serialization decisions because logical operation usage differs from transport attempts. The final example validates the combined result rather than becoming a second implementation of any feature.
 
-[ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) preserves completed exchanges and the full audit while permitting request-view compaction; the new plan tightens when compaction is safe. [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves bounded recursive calls and optimistic budget admission. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) prohibits inventing node attribution or provider evidence. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) centralizes reusable offline fixtures without introducing production dependency cycles. Relevant prior plans 34, 39, 43, 49, 54 and 56 are completed and are not reopened. No local ADR yet defines refusal policy, shared request defaults or transport-attempt billing. Child implementation must record those durable decisions when adopted.
+[ADR-6](../adr/0006-preserve-completed-react-exchanges-in-versioned-sessions.md) preserves completed exchanges and the full audit while permitting request-view compaction; the new plan tightens when compaction is safe. [ADR-7](../adr/0007-bound-recursive-sessions-at-the-llm-operation-boundary.md) preserves bounded recursive calls and optimistic budget admission. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) prohibits inventing node attribution or provider evidence. [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) centralizes reusable offline fixtures without introducing production dependency cycles. Relevant prior plans 34, 39, 43, 49, 54 and 56 are completed and are not reopened. [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md) now defines refusal policy after EP-58 implementation. No local ADR yet defines shared request defaults or transport-attempt billing. Child implementation must record those durable decisions when adopted.
 
 Upstream context was read through Mori at `mori://shinzui/baikai`: project-relative `docs/adr/0011-core-owns-transport-failure-classification.md`, `docs/adr/0019-reasoning-continuation-is-scoped-to-its-provider-and-model.md`, and `docs/adr/0020-pricing-policies-and-calculation-bases-are-explicit.md`. Artifact-level handles are pending; registry title searches returned none. Their operative rules are embedded in the children: refusals are terminal; opaque replay is origin-scoped; estimates and missing usage remain explicit. Combining everything into one plan would hide independently shippable fixes; splitting billing by package would leave interface ownership unclear.
 
@@ -38,7 +38,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | In Progress |
+| 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | Complete |
 | 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Not Started |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Not Started |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Not Started |
@@ -73,7 +73,7 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 
 - [x] EP-58, milestone 1: Preserve the structured transport failure.
 - [x] EP-58, milestone 2: Use one classification for blocking and streaming retries.
-- [ ] EP-58, milestone 3: Document the error boundary and downstream behavior.
+- [x] EP-58, milestone 3: Document the error boundary and downstream behavior.
 - [ ] EP-59, milestone 1: Separate audit data, safe summaries and replayable history.
 - [ ] EP-59, milestone 2: Bind persisted continuation to its origin and validate after routing.
 - [ ] EP-59, milestone 3: Provide an explicit fresh conversation and migration documentation.
@@ -110,6 +110,8 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. One of five child plans is complete; EP-59 is the next eligible child, followed by EP-60, EP-61 and EP-62.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
+
+Revision (2026-09-08): Completed EP-58, recorded its release-source validation and cross-plan error contract, and distilled refusal/retry policy into ADR-11. Remaining child statuses and dependencies are unchanged.

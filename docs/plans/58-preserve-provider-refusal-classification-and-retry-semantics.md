@@ -27,7 +27,7 @@ A provider refusal should reach the caller once, with its structured category in
 
 - [x] (2026-09-08) Milestone 1: Preserve the structured transport failure.
 - [x] (2026-09-08) Milestone 2: Use one classification for blocking and streaming retries.
-- [ ] Milestone 3: Document the error boundary and downstream behavior.
+- [x] (2026-09-08) Milestone 3: Document the error boundary and downstream behavior.
 
 
 ## Surprises & Discoveries
@@ -43,11 +43,17 @@ A provider refusal should reach the caller once, with its structured category in
 
 2026-09-08: Keep a structured ProviderError alongside the legacy text constructor and make permanent failures non-retryable. This retains caller compatibility while letting released stream terminals use the same classification as completions. Separate billing observation from errors so failures do not become containers for unrelated run totals.
 
+2026-09-08: Delegate typed retry classification to Baikai.isRetryable, protected by the complete released-category matrix. Preserve legacy evaluator diagnostics for existing constructors while routing ProviderError through the shared renderer. ReAct preserves structured raw-response errors defensively for custom LLM interpreters. Record these boundaries in ADR-11.
+
 
 ## Outcomes & Retrospective
 
 
-Milestones 1 and 2 are implemented and the core suite passes. Final downstream regressions, release-source build and full-suite validation are in progress. ADR-11 records the durable error and retry contract.
+Completed in implementation commit `360c6d4`. Structured provider errors now survive blocking, provider-thrown and stream-terminal paths; only typed transient categories retry. Refusals stop after one attempt, preserve the original record and prevent extraction or partial tool dispatch. Legacy text failures remain compatible. Shared rendering covers tools, evaluation and CLI diagnostics, and GEPA still aborts on provider infrastructure failures.
+
+Validation used GHC 9.12.4 and a temporary project descriptor without the workstation override. Cabal plan.json identifies core, Claude and OpenAI at 0.7.0.0 and Effectful at 0.4.0.1 as Hackage repo-tar sources. `cabal build all --enable-tests` passed. After correcting a placement error in the new extraction regression, `cabal test all --test-show-details=direct` passed all 13 suites: 226 core, 120 tools, 131 optimizer, 47 evaluator, 31 trace, 6 trace-otel, 27 cache, 22 compile, 18 OKF, 10 CLI, 6 testing and 2 PostgreSQL tests; Redis returned PASS while explicitly running zero tests. Live provider and embedding tests were skipped by their opt-in gates. The full run includes the requested focused package set; it was not repeated separately. `nix fmt`, `git diff --check` and `just check-adr` passed.
+
+ADR distillation is complete in [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md): typed classification ownership, legacy fallback, cancellation, cost-before-error ordering and public-sum release impact are durable. No dependency bounds, serialized formats, provider registrations or publication changed. The remaining initiative work belongs to plans 59–62.
 
 
 ## Context and Orientation
@@ -57,7 +63,7 @@ The baseline is commit `ac70154`. It requires `mori://shinzui/baikai/packages/ba
 
 `shikumi/src/Shikumi/Error.hs` owns `ShikumiError`, `fromBaikaiError`, and `isTransient`. Its catch-all mapping currently turns content filtering, authentication failures, and unavailable providers into the same retryable `ProviderFailure Text`. `shikumi/src/Shikumi/LLM.hs` owns both bare interpreters and the resilient retry loop. `streamTerminalError` currently ignores structured information and its comment incorrectly says that terminal payloads lack it. In the published dependency, `baikai/src/Baikai/Stream/Event.hs` defines `TerminalPayload.errorInfo :: Maybe BaikaiError`; this is confirmed in the `baikai-0.7.0.0` tag. `BaikaiError.refusalCategory` is optional provider text, not a closed Shikumi enumeration.
 
-`shikumi/test/ErrorSpec.hs`, `LLMSpec.hs`, `ResilienceSpec.hs`, and `StubProvider.hs` cover mappings and attempt counts. `shikumi/src/Shikumi/Stream.hs` reconstructs successful responses; do not turn failed partial text into successful typed output. Audit downstream pattern matches in evaluator failure policies, optimizer classification, tools, and CLI renderers. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) requires original failure evidence and forbids swallowing cancellation; [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) keeps reusable fixtures below consumer packages. No local ADR currently defines refusal classification. Upstream `docs/adr/0011-core-owns-transport-failure-classification.md` in `mori://shinzui/baikai` says refusal categories are preserved verbatim and `ContentFiltered` is terminal, never inferred from message prose. This plan has no hard dependency; [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) consumes its error contract.
+`shikumi/test/ErrorSpec.hs`, `LLMSpec.hs`, `ResilienceSpec.hs`, and `StubProvider.hs` cover mappings and attempt counts. `shikumi/src/Shikumi/Stream.hs` reconstructs successful responses; do not turn failed partial text into successful typed output. Audit downstream pattern matches in evaluator failure policies, optimizer classification, tools, and CLI renderers. [ADR-4](../adr/0004-separate-feedback-attribution-from-execution-evidence.md) requires original failure evidence and forbids swallowing cancellation; [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) keeps reusable fixtures below consumer packages. At planning time no local ADR defined refusal classification; implementation now establishes [ADR-11](../adr/0011-preserve-provider-errors-and-centralize-retry-policy.md). Upstream `docs/adr/0011-core-owns-transport-failure-classification.md` in `mori://shinzui/baikai` says refusal categories are preserved verbatim and `ContentFiltered` is terminal, never inferred from message prose. This plan has no hard dependency; [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) consumes its error contract.
 
 Locate dependency sources with `mori registry search baikai`, `mori registry show shinzui/baikai --full`, and `mori registry docs shinzui/baikai` before reading APIs. Verify behavior against the release tag, since a sibling checkout can contain newer code. If changing dependency bounds becomes necessary, check Hackage preferred versions and upstream tags first. Never traverse `/nix/store` or the filesystem root. Cross-repository source paths below are relative to `mori://shinzui/baikai`; artifact-level source/ADR handles are pending. Registry searches for the relevant upstream ADR titles returned no handles, so do not invent bundle-scoped ADR IDs.
 
@@ -133,3 +139,5 @@ The implementation and tests are repeatable and require no external writes. Add 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Implemented structured mappings and retry parity; recorded fixture findings, shared rendering, defensive ReAct handling and core validation. No dependency bounds changed.
+
+Revision (2026-09-08): Finalized all milestones after release-source build, full-suite validation and ADR distillation. Redis/live skips are explicitly excluded from integration evidence.
