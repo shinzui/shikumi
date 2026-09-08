@@ -39,7 +39,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | Complete |
-| 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | In Progress |
+| 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Complete |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Not Started |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Not Started |
 | 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | Not Started |
@@ -78,7 +78,7 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 - [x] EP-58, milestone 3: Document the error boundary and downstream behavior.
 - [x] EP-59, milestone 1: Separate audit data, safe summaries and replayable history.
 - [x] EP-59, milestone 2: Bind persisted continuation to its origin and validate after routing.
-- [ ] EP-59, milestone 3: Provide an explicit fresh conversation and migration documentation.
+- [x] EP-59, milestone 3: Provide an explicit fresh conversation and migration documentation.
 - [ ] EP-60, milestone 1: Define an explicit default merge.
 - [ ] EP-60, milestone 2: Apply defaults at the effective request boundary.
 - [ ] EP-60, milestone 3: Demonstrate cache, routing and concurrency behavior.
@@ -114,8 +114,10 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Outcomes & Retrospective
 
 
-EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. One of five child plans is complete; EP-59 is the next eligible child, followed by EP-60, EP-61 and EP-62.
+EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. EP-59 is complete (`c24aa15`): version-2 continuation identity and protected-prefix validation, safe summaries, conservative compaction, and explicit restart are implemented. The full build and all 13 suites passed with release-source dependencies; Redis ran zero tests and live checks were skipped. ADR-6 captures the durable continuation boundary. Two of five child plans are complete; EP-60 is the next eligible child, followed by EP-61 and EP-62.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Completed EP-58, recorded its release-source validation and cross-plan error contract, and distilled refusal/retry policy into ADR-11. Remaining child statuses and dependencies are unchanged.
+
+Revision (2026-09-08): Completed EP-59, recorded its shared continuation metadata and Error constraints for downstream plans, and extended ADR-6. EP-60 remains the next eligible child.

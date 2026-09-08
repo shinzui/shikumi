@@ -27,7 +27,7 @@ Resuming a reasoning-enabled agent must either send the original continuation in
 
 - [x] (2026-09-08 17:49Z) Milestone 1: Separate audit data, safe summaries and replayable history.
 - [x] (2026-09-08 17:49Z) Milestone 2: Bind persisted continuation to its origin and validate after routing.
-- [ ] Milestone 3: Provide an explicit fresh conversation and migration documentation.
+- [x] (2026-09-08) Milestone 3: Provide an explicit fresh conversation and migration documentation.
 
 
 ## Surprises & Discoveries
@@ -49,7 +49,13 @@ Resuming a reasoning-enabled agent must either send the original continuation in
 ## Outcomes & Retrospective
 
 
-The structural projection, version-2 reader/writer, pure restart, routing/cache/transport guards and focused regressions are implemented. Focused release-source tests passed (232 core, 127 tools, 28 cache). Final composition and immutable legacy fixture checks, full workspace validation, and final distillation remain.
+Completed in `c24aa15`. Version-2 sessions preserve exact opaque continuation and public request origin, reject incompatible targets and protected prefixes, and retain version-1 decoding without inventing provenance. Automatic compaction defers for retained opaque state; forced overflow fails before summarization or another invalid proposal. Structural summaries omit opaque payloads and unknown rich extensions, and explicit restart creates a separate unbound conversation. ADR-6 now records the durable boundary. All three milestones are complete.
+
+Validation used GHC 9.12.4 and the temporary project descriptor documented below, without modifying `cabal.project.local`. `plan.json` identifies Baikai core/Claude/OpenAI 0.7.0.0 and Effectful 0.4.0.1 as Hackage `repo-tar` sources. The full workspace build passed. Focused tests passed, then the final full workspace run passed all 13 suites: 232 core, 128 tools, 29 cache, 131 optimizer, 47 evaluator, 31 trace, 6 trace-otel, 22 compile, 18 OKF, 10 CLI, 6 testing and 2 PostgreSQL tests. Redis explicitly ran zero tests; live provider and embedding checks were skipped. These skips are not integration evidence. Formatting, whitespace checks and strict ADR profile/log enforcement passed.
+
+The regressions cover separate Claude and Responses continuation shapes, lossless resume, actual summary-request sentinel exclusion, bounded overflow with tool counters, unknown-origin legacy rejection, an immutable version-1 fixture, pure restart, changed targets in both transport APIs, unchanged routing/cache composition, and a warm cache that cannot bypass origin validation. The cache fixture initially used a blank API and therefore correctly had unknown origin; setting a concrete API made the intended rejection regression meaningful.
+
+Public additions and the new `Error ShikumiError` constraints on routing/memoization need PVP review at release. Explicit startup stores only public identity; full compatibility settings and credentials remain runtime-owned through routing. Custom interpreters must implement the documented guard and response-echo contract. No release or live provider call was performed.
 
 
 ## Context and Orientation
@@ -136,8 +142,10 @@ Checkpoint changes are additive readers plus a new writer version. Keep immutabl
 ## Interfaces and Dependencies
 
 
-Shikumi.Agent.History owns the checkpoint version, opaque-state classifier, summary projection, origin record and pure compaction assessment; keep its constructor opaque. Proposed public operations are `renderSessionSummaryInput :: ReActSession -> Text` and `restartSessionFromSummary :: Text -> ReActSession -> Either HistoryError ReActSession`, plus the explicit-model start operation in Shikumi.Agent.ReAct. Shikumi.LLM.Continuation owns `validateRequestContinuation :: Model -> Context -> Options -> Either ShikumiError ()` and final private-metadata removal. Session-specific structures stay out of core; core consumes a minimal validated expectation encoded in private metadata. Model identity is checked after routing; defaults change only request controls and cannot erase expectations. The existing error mapping may use ValidationFailure for a local incompatible-history error. Cross-plan updates to Routing.hs must preserve the shared order: route, validate continuation, defaults, cache/trace, final validation and stripping, transport.
+Shikumi.Agent.History owns the checkpoint version, summary projection, persisted origin and pure compaction assessment; its session constructor remains opaque. Core owns the shared RequestOrigin type and opaque-block classifier so routing and transport do not depend on tools. Public operations are `renderSessionSummaryInput :: ReActSession -> Text` and `restartSessionFromSummary :: Text -> ReActSession -> Either HistoryError ReActSession`, plus `startSessionWithModel` in Shikumi.Agent.ReAct. The explicit constructor stores only public request identity; callers use routing for full model compatibility settings and credentials. Shikumi.LLM.Continuation owns `validateRequestContinuation :: Model -> Context -> Options -> Either ShikumiError ()` and final private-metadata removal. Session-specific structures stay out of core; core consumes a minimal validated expectation encoded in private metadata. Model identity is checked after routing; defaults change only request controls and cannot erase expectations. The existing error mapping may use ValidationFailure for a local incompatible-history error. Cross-plan updates to Routing.hs must preserve the shared order: route, validate continuation, defaults, cache/trace, final validation and stripping, transport.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
 Revision (2026-09-08): Began EP-59; implemented continuation boundaries and recorded public constraint migration. Validation is pending.
+
+Revision (2026-09-08): Completed all milestones, recorded the full release-source validation and migration constraints, and distilled the persistent continuation and restart contract into ADR-6.
