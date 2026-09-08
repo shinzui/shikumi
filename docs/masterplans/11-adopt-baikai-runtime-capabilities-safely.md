@@ -42,7 +42,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 | 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Complete |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Complete |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Complete |
-| 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | In Progress |
+| 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | Complete |
 
 
 
@@ -86,12 +86,14 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 - [x] EP-61, milestone 2: Add explicit billing summaries alongside logical usage.
 - [x] EP-61, milestone 3: Record and export failure billing without corrupting replay.
 - [x] EP-61, milestone 4: Demonstrate an evaluation with retry, failure and cache hit.
-- [ ] EP-62, milestone 1: Exercise the released provider through a local server.
-- [ ] EP-62, milestone 2: Publish a compiled runnable example.
-- [ ] EP-62, milestone 3: Document the supported workflow and its limits.
+- [x] EP-62, milestone 1: Exercise the released provider through a local server.
+- [x] EP-62, milestone 2: Publish a compiled runnable example.
+- [x] EP-62, milestone 3: Document the supported workflow and its limits.
 
 
 ## Surprises & Discoveries
+
+2026-09-08: EP-62 verifies real released Responses requests. A content_filter failure frame maps to terminal OtherError in the released adapter; Shikumi preserves it without reclassification. Core cannot depend on its own internal harness without a package cycle, so core owns pure routing coverage and tools owns HTTP tests. Explicit worker termination/joining closes a cancellation cleanup gap in listener-only bracketing. ADR-9 records these durable test boundaries.
 
 2026-09-08: EP-61 exposes `Shikumi.LLM.Observation`, `runLLMWithObserver`, `LLMConfig.observer`, and package-qualified report/trace `attachBillingSummary` helpers. `newBillingCollector` is aggregate-only; `newBillingCollectorWithLimit n` enables bounded attempts. Format 3 persists billing separately from replay. Observe beneath cache; the tested sequential trace stack also requires an enclosing ProgramSpan. Memory-cache hits now clear old evidence. The integration fixture in `shikumi-trace-otel/test/BillingSpec.hs` proves $0.04 logical usage and $0.03 transport billing, and is a composition reference for EP-62. Observation errors retain classification only, while runtime callers still receive original typed errors.
 
@@ -117,7 +119,9 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 ## Outcomes & Retrospective
 
 
-EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. EP-59 is complete (`c24aa15`): version-2 continuation identity and protected-prefix validation, safe summaries, conservative compaction, and explicit restart are implemented. The full build and all 13 suites passed with release-source dependencies; Redis ran zero tests and live checks were skipped. ADR-6 captures the durable continuation boundary. EP-60 is complete: shared defaults, effective-option cache differentiation and evidence bypass are implemented (`661204c`), with a compiled offline stack and ADR-12. The full release-source build and all 13 suites passed; Redis ran zero tests and live checks were skipped. EP-61 is complete (`679c6f6` plus validation follow-up): bounded attempt collection, separate report/trace billing, format-3 persistence and honest observed-model export are implemented. The full release-source build and all 13 suites passed; Redis ran zero tests and live checks were skipped. ADR-13 captures the durable accounting boundary. Four of five child plans are complete; EP-62 is the next eligible child.
+EP-58 is complete (`360c6d4`): structured refusals are terminal in both APIs; original error records survive; legacy fallback, cancellation and failure-cost accounting are covered. The release-source build and all 13 test suites passed, with Redis running zero tests and live checks skipped. ADR-11 captures the durable boundary. EP-59 is complete (`c24aa15`): version-2 continuation identity and protected-prefix validation, safe summaries, conservative compaction, and explicit restart are implemented. The full build and all 13 suites passed with release-source dependencies; Redis ran zero tests and live checks were skipped. ADR-6 captures the durable continuation boundary. EP-60 is complete: shared defaults, effective-option cache differentiation and evidence bypass are implemented (`661204c`), with a compiled offline stack and ADR-12. The full release-source build and all 13 suites passed; Redis ran zero tests and live checks were skipped. EP-61 is complete (`679c6f6` plus validation follow-up): bounded attempt collection, separate report/trace billing, format-3 persistence and honest observed-model export are implemented. The full release-source build and all 13 suites passed; Redis ran zero tests and live checks were skipped. ADR-13 captures the durable accounting boundary. EP-62 is complete (`4846318` plus validation follow-up): the compiled offline Responses example, actual wire regressions, explicit live gates, user guides and all-16 CI smoke list are implemented. The final full build and all 13 suites passed against released Hackage sources; this time both backend suites ran under the required-backend gate (three Redis and two PostgreSQL tests). All 16 examples passed. Live-provider checks remained skipped, with no public calls or release publication. All five child plans and all sixteen milestones are complete.
+
+The final ADR distillation reviewed every child's Decision Log, Surprises & Discoveries, and Outcomes & Retrospective. ADR-6 owns reasoning/session continuity, ADR-11 error policy, ADR-12 defaults and evidence bypass, ADR-13 separate bounded billing, and extended ADR-9 the released-adapter fixture, lifecycle and live-mode boundaries. Release-specific mapper limitations and transient validation discoveries remain in the plans and user guides. Existing public sum/record/constraint changes still require the documented PVP review when releasing; this initiative does not publish a release.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
 
@@ -128,3 +132,5 @@ Revision (2026-09-08): Completed EP-59, recorded its shared continuation metadat
 Revision (2026-09-08): Completed EP-60, recorded its released-source validation and compiled example, and distilled defaults precedence and evidence cache bypass into ADR-12. EP-61 is next.
 
 Revision (2026-09-08): Completed EP-61 with full released-source validation and ADR-13. Recorded concrete billing interfaces and cache-evidence correction for EP-62, the sole remaining child.
+
+Revision (2026-09-08): Completed EP-62 and the master plan with released-source build/test evidence, all 16 example smokes, actual Redis/PostgreSQL execution and final ADR distillation.

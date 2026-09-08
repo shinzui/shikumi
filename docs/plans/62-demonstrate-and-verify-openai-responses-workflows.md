@@ -27,7 +27,7 @@ A user should have a compiled example showing how to register OpenAI Responses, 
 
 - [x] Milestone 1: Exercise the released provider through a local server.
 - [x] Milestone 2: Publish a compiled runnable example.
-- [ ] Milestone 3: Document the supported workflow and its limits.
+- [x] Milestone 3: Document the supported workflow and its limits.
 
 
 ## Surprises & Discoveries
@@ -49,7 +49,13 @@ A user should have a compiled example showing how to register OpenAI Responses, 
 ## Outcomes & Retrospective
 
 
-Focused real-adapter tests pass (eight Responses matches including the existing mixed-provider regression); the compiled default example prints a validated Paris answer, one tool execution, 75 logical tokens and three completed transport attempts with explicit billing uncertainty. Full release-source validation and documentation gates remain in progress. No public-provider calls have been made.
+Completed in implementation commit `4846318` and the validation follow-up. The compiled default example prints a validated Paris answer, one tool execution, 75 logical tokens and three completed transport attempts with explicit billing uncertainty. Seven new real-adapter tests prove exact native schemas, streaming terminals, opaque checkpoint replay and original call IDs, one tool dispatch, pre-HTTP origin/option rejection, terminal failure classification, retry/cache accounting and timeout/cancellation cleanup. The core suite separately proves pure schema routing without a dependency cycle.
+
+Validation used GHC 9.12.4 with a temporary project descriptor excluding the workstation sibling override. Hackage was refreshed; plan.json identifies Baikai core/Claude/OpenAI 0.7.0.0 and Effectful 0.4.0.1 as repo-tar sources. Full `cabal build all --enable-tests` passed. Full `cabal test all --test-show-details=direct` passed all 13 suites: 243 core, 135 tools, 131 optimizer, 47 evaluator, 32 trace, 9 trace-otel, 33 cache, 22 compile, 18 OKF, 10 CLI, 6 testing, 2 PostgreSQL and 3 Redis tests. The backend-required gate was enabled with an isolated temporary Redis socket; both backend suites actually ran, and Redis was shut down afterward. Provider and embedding live checks were skipped.
+
+All 16 CI example executables exited zero, including Responses with its required output labels. Negative CLI checks reject absent live opt-in, absent credentials, an unknown catalog model and invalid arguments before transport. No live-provider calls were made. `nix fmt`, `git diff --check`, the commit treefmt hook and strict `just check-adr` passed. ADR-9 now records released-adapter fixture ownership and bounded lifecycle; the release-specific OtherError mapping remains documented implementation evidence, not a new classifier. New HTTP dependencies are confined to the internal harness, which published libraries do not depend on. No package versions were bumped or releases published.
+
+The final master-plan ADR distillation reviewed all five child living sections against ADR-6 and ADR-9/11/12/13. Continuation boundaries, request defaults, provider classification and billing ownership are already durable there; EP-62 adds the independent transport proof and explicit live gates to ADR-9. No work remains in this child plan.
 
 
 ## Context and Orientation
