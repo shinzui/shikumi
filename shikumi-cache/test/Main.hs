@@ -27,11 +27,12 @@ import Baikai
     user,
     userAt,
   )
+import Baikai qualified as B
 import Baikai.Cost qualified as BC
 import Baikai.Speed (Speed (..))
 import Baikai.Usage qualified as BU
 import Control.Exception (bracket)
-import Control.Lens ((&), (.~))
+import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Result (..), Value (..), eitherDecode, encode, fromJSON, object, toJSON, (.=))
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
@@ -46,6 +47,7 @@ import Database.SQLite3 qualified as SQL
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Error.Static (runErrorNoCallStack)
 import Shikumi.Cache
   ( CacheKey (..),
     CachedResponse (..),
@@ -63,14 +65,17 @@ import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned, stripMessageTimestamps)
 import Shikumi.Cache.ResponseJSON ()
 import Shikumi.Effect.Time (runTime)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
+import Shikumi.LLM.Continuation (contextIdentity, requestOrigin, stampContinuation)
+import Shikumi.Routing (routeLLM, runRouting)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process (CreateProcess (env), proc, readCreateProcessWithExitCode)
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -323,11 +328,36 @@ memoizeTests :: TestTree
 memoizeTests =
   testGroup
     "memoize"
-    [ testCase "same request twice contacts the provider once with equal outputs" $ do
+    [ testCase "routing then guarded cache preserves a compatible warm hit" $ do
         tv <- newMemoryCache
         ref <- newIORef 0
-        (r1, r2) <-
-          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+        let model = B.mkModel B.AnthropicMessages "test" "https://provider.example"
+            ctx = fixCtx & #messages .~ V.fromList [B.user "ping", B.AssistantMessage (stubResponse ^. #message & #content .~ V.singleton (B.AssistantThinking (B.ThinkingContent "" (Just "signature") False Nothing)))]
+            opts = stampContinuation (requestOrigin model) (Just (contextIdentity ctx)) fixOpts
+        result <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runRouting model . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM . routeLLM $ do
+          a <- complete emptyModel ctx opts
+          b <- complete emptyModel ctx opts
+          pure (a == b)
+        result @?= Right True
+        readIORef ref >>= (@?= 1),
+      testCase "warm cache cannot bypass changed continuation origin or prefix" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        let expected = fixModel & #api .~ B.AnthropicMessages & #baseUrl .~ "https://original.example"
+            actual = expected & #modelId .~ "different"
+            opts = stampContinuation (requestOrigin expected) (Just (contextIdentity fixCtx)) fixOpts
+            key = cacheKey actual fixCtx opts
+        runEff . runConcurrent . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
+        result <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete actual fixCtx opts
+        case result of
+          Left (ValidationFailure _) -> pure ()
+          _ -> assertFailure "cache bypassed continuation guard"
+        readIORef ref >>= (@?= 0),
+      testCase "same request twice contacts the provider once with equal outputs" $ do
+        tv <- newMemoryCache
+        ref <- newIORef 0
+        Right (r1, r2) <-
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             a <- complete fixModel fixCtx fixOpts
             b <- complete fixModel fixCtx fixOpts
             pure (a, b)
@@ -338,7 +368,7 @@ memoizeTests =
         tv <- newMemoryCache
         ref <- newIORef 0
         _ <-
-          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ do
             _ <- complete fixModel fixCtx fixOpts
             complete fixModel fixCtx (fixOpts & #temperature .~ Just 0.7)
         n <- readIORef ref
@@ -348,7 +378,7 @@ memoizeTests =
         ref <- newIORef 0
         let errResp = stubResponse & #message . #stopReason .~ ErrorReason
         _ <-
-          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref errResp . cachedLLM $ do
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref errResp . cachedLLM $ do
             _ <- complete fixModel fixCtx fixOpts
             complete fixModel fixCtx fixOpts
         n <- readIORef ref
@@ -361,10 +391,10 @@ memoizeTests =
         runEff . runConcurrent . runCacheMemory tv $
           storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
         _ <-
-          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
             complete fixModel fixCtx fixOpts
         _ <-
-          runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
+          runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLMWith cfg $
             complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 1
@@ -379,7 +409,7 @@ versioningTests =
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
         runEff . runConcurrent . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime currentKeyVersion)
-        _ <- runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        _ <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 0,
       testCase "an entry with a foreign keyVersion is ignored (MISS, provider called)" $ do
@@ -387,7 +417,7 @@ versioningTests =
         ref <- newIORef 0
         let key = cacheKey fixModel fixCtx fixOpts
         runEff . runConcurrent . runCacheMemory tv $ storeCache key (CachedResponse stubResponse someTime "shikumi-cache/v0")
-        _ <- runEff . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
+        _ <- runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runTime . runCacheMemory tv . runCountingLLM ref stubResponse . cachedLLM $ complete fixModel fixCtx fixOpts
         n <- readIORef ref
         n @?= 1,
       testCase "bumping the namespace version changes the hashed bytes" $

@@ -20,7 +20,9 @@
 -- @Options.responseFormat@ from the stamped schema and swaps the marker @Context@
 -- (system prompt + demo assistant turns) for the stamped native-format alternative;
 -- sets @Options.temperature@ when stamped; and in all cases strips the private keys
--- before forwarding the call to the real @LLM@ interpreter beneath it.
+-- before forwarding the call to the real @LLM@ interpreter beneath it. Continuation
+-- expectations survive routing and are validated here, then again before cache
+-- lookup and final transport; only the transport boundary removes them.
 --
 -- Install order (mirroring @runTrace . runKeyedLLM . tracedLLM@): 'runRouting' is
 -- /outer/ of the real @LLM@ interpreter, which is /outer/ of 'routeLLM' (the
@@ -54,6 +56,7 @@ import Data.Text (Text)
 import Data.Vector qualified as V
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, send)
+import Effectful.Error.Static (Error, throwError)
 import Shikumi.Adapter
   ( ModelCapability (..),
     capabilityFor,
@@ -62,7 +65,9 @@ import Shikumi.Adapter
     metaResponseSchemaKey,
     metaTemperatureKey,
   )
+import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), complete, stream)
+import Shikumi.LLM.Continuation (validateRequestContinuation)
 
 -- | The ambient model-routing effect. Its single operation reads the model every
 -- 'Predict' node should dispatch against. It is supplied by an interpreter at the
@@ -90,23 +95,25 @@ runRouting m = interpret (\_ CurrentModel -> pure m)
 -- one for native-capable models) and stripped. The two operations are rewritten
 -- identically through the single 'translateForWire', so a streamed call gets the
 -- same real model id and wire options a blocking call does.
-routeLLM :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a
+routeLLM :: (Routing :> es, LLM :> es, Error ShikumiError :> es) => Eff es a -> Eff es a
 routeLLM = interpose $ \_ -> \case
   Complete _placeholder ctx opts -> do
     m <- currentModel
     let (ctx', opts') = translateForWire m ctx opts
+    either throwError pure (validateRequestContinuation m ctx' opts')
     complete m ctx' opts'
   Stream _placeholder ctx opts -> do
     m <- currentModel
     let (ctx', opts') = translateForWire m ctx opts
+    either throwError pure (validateRequestContinuation m ctx' opts')
     stream m ctx' opts'
 
 -- | Realize the private request-metadata channel against the real model. For a
 -- native-capable model: attach the native @responseFormat@ from the stamped
 -- schema, and swap the marker-format 'Context' (system prompt + demo assistant
 -- turns) for the stamped native-format alternative. In all cases: set
--- @temperature@ when one was stamped, and strip every private @shikumi.*@ key so
--- nothing private reaches the transport. Fallback-capability models keep the
+-- @temperature@ when one was stamped, and strip the four rendering keys.
+-- Continuation expectations remain available for later boundary checks. Fallback-capability models keep the
 -- marker 'Context' unchanged; non-'Predict' @Complete@ calls (no stamps) are never
 -- rewritten.
 translateForWire :: Model -> Context -> Options -> (Context, Options)

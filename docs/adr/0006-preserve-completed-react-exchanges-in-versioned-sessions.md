@@ -5,7 +5,7 @@ description: Keep rich tool results and full assistant exchanges in validated ch
 docId: ADR-6
 status: Accepted
 date: 2026-09-06
-timestamp: 2026-09-07T04:26:19Z
+timestamp: 2026-09-08T17:47:40Z
 generated:
   by: process:codex
   at: 2026-09-07T04:26:19Z
@@ -58,6 +58,33 @@ These are completed-turn checkpoints, not exactly-once execution across crashes:
 if a tool or a later operation fails before the checkpoint returns, the caller
 must reconcile any effects before retrying. The per-user iteration limit resets
 on continuation while the cumulative exchange count remains available.
+
+Version 2 adds public resolved-request origin and an exact protected request
+prefix. Origin consists of provider, API, model and endpoint, never headers or
+API keys; credential-shaped endpoints remain unknown. Response model identity
+is the echoed request, not provider attestation. Responses replay scope must
+match that request identity before tool dispatch. Version-1 histories decode
+with unknown origin; opaque legacy histories require an explicit restart.
+An explicit-model constructor establishes a requested identity, while the runtime
+supplies credentials and compatibility settings outside persistence.
+
+`Shikumi.LLM.Continuation` owns pure, idempotent validation and reserved private
+metadata. Routing validates after selecting/translating the target. Memoization
+validates before lookup; bare and resilient interpreters validate again and strip
+the private metadata before transport. The system prompt, ordered tools and
+protected ordered message prefix must agree exactly except for construction
+timestamps. Intermediate wrappers must preserve the expectation. Custom
+interpreters must enforce this contract themselves; no global session state or
+provider attestation is implied.
+
+Opaque reasoning includes signatures, redacted thinking and replay state, even
+with empty visible text. Defer proactive compaction when a retained opaque block
+would lose its prefix; forced context recovery fails actionably without a summary
+call or second invalid request. Structural summary projection excludes opaque
+reasoning, images and uninterpreted tool extensions while keeping readable text,
+arguments and structured results. Preserve the lossless audit independently.
+`restartSessionFromSummary` is a pure, explicit, separate unbound conversation
+from caller-approved text; it never edits the original archive or runs old tools.
 
 ## Consequences
 

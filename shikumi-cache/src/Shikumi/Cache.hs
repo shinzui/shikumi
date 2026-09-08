@@ -37,11 +37,14 @@ import Data.Maybe (isNothing)
 import Data.Time.Clock (NominalDiffTime, diffUTCTime)
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, passthrough, send)
+import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
 import Shikumi.Cache.Key (CacheKey (..), cacheKey, currentKeyVersion)
 import Shikumi.Cache.Types (CachedResponse (..))
 import Shikumi.Effect.Time (Time, getCurrentTime)
+import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), complete)
+import Shikumi.LLM.Continuation (validateRequestContinuation)
 
 -- | The cache storage effect: look an entry up by key, or store one.
 data Cache :: Effect where
@@ -87,7 +90,7 @@ defaultCacheConfig = CacheConfig {entryTTL = Nothing}
 -- stores are idempotent upserts keyed by content. The streaming op is passed
 -- through unchanged — streams are not cached.
 cachedLLM ::
-  (Cache :> es, LLM :> es, Time :> es) =>
+  (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) =>
   Eff es a ->
   Eff es a
 cachedLLM = cachedLLMWith defaultCacheConfig
@@ -95,12 +98,13 @@ cachedLLM = cachedLLMWith defaultCacheConfig
 -- | A configured variant of 'cachedLLM'. See 'CacheConfig' for the shared TTL
 -- policy.
 cachedLLMWith ::
-  (Cache :> es, LLM :> es, Time :> es) =>
+  (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) =>
   CacheConfig ->
   Eff es a ->
   Eff es a
 cachedLLMWith cfg = interpose $ \env -> \case
   Complete model ctx opts -> do
+    either throwError pure (validateRequestContinuation model ctx opts)
     let key = cacheKey model ctx opts
     hit <- lookupCache key
     now <- getCurrentTime

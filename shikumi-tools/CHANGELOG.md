@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Write version-2 reasoning-safe checkpoints while reading version 1. Add safe summary rendering, explicit-model startup and pure restart; defer unsafe compaction and reject incompatible continuation before dispatch. Public API additions require a PVP review at release.
+
 - Preserve structured refusals in defensive ReAct response checks and use shared error rendering for tool observations; partial refused tool calls never dispatch.
 
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`. Preserve cost basis and usage availability in agent checkpoints, including exact rational costs and legacy checkpoint decoding.

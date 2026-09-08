@@ -5,6 +5,7 @@ module Main (main) where
 import AdapterSpec qualified
 import CombinatorSpec qualified
 import ConstraintSpec qualified
+import ContinuationSpec qualified
 import EndToEndSpec qualified
 import ErrorSpec qualified
 import LLMSpec qualified
@@ -32,7 +33,8 @@ main =
   defaultMain $
     testGroup
       "shikumi"
-      [ ErrorSpec.tests,
+      [ ContinuationSpec.tests,
+        ErrorSpec.tests,
         SchemaSpec.tests,
         SignatureSpec.tests,
         AdapterSpec.tests,

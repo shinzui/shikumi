@@ -23,6 +23,7 @@ import Shikumi.Agent.History (decodeSession, encodeSession, sessionTurns)
 import Shikumi.Agent.ReAct
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..))
+import Shikumi.LLM.Continuation (validateRequestContinuation)
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool (mkDynTool, mkRegistry)
@@ -46,14 +47,16 @@ example :: IO (Either ShikumiError (Text, Int))
 example = do
   let registry = mkRegistry [mkDynTool "lookup" "Return the stored city." (object []) (\_ -> pure (Right (textToolOutput "Paris")))]
       cfg = defaultReActConfig {protocol = ProtocolNative}
-      response callId name args = B.emptyResponse & #message . #content .~ V.singleton (B.AssistantToolCall (B.ToolCall callId name args))
+      model = B.mkModel (B.Custom "session-example") "example" "https://example.invalid"
+      response callId name args = B.emptyResponse & #model .~ model & #message . #content .~ V.singleton (B.AssistantToolCall (B.ToolCall callId name args))
       script = [response "call-A" "lookup" (object []), response "final-A" finalToolName (object ["answer" .= ("Paris, France" :: Text)])]
   replies <- newIORef script
   runEff
     . runErrorNoCallStack
     . interpret
       ( \_ -> \case
-          Complete {} -> do
+          Complete m ctx opts -> do
+            either throwError pure (validateRequestContinuation m ctx opts)
             next <-
               liftIO
                 ( atomicModifyIORef'
@@ -67,7 +70,7 @@ example = do
           Stream {} -> pure []
       )
     $ do
-      initial <- startSession signature registry cfg (Question "Which city is stored?")
+      initial <- startSessionWithModel model signature registry cfg (Question "Which city is stored?")
       first <- advanceSession signature registry cfg initial
       checkpoint <- case first of
         SessionPaused s -> pure s

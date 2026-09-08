@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add continuation origin/prefix guards shared by routing and transport. `routeLLM` now requires `Error ShikumiError`; this public constraint change requires a PVP major review at release.
+
 - Preserve structured transport failures in `ProviderError BaikaiError` and expose `renderShikumiError`. Blocking and streaming calls retry only typed rate limits/transient failures; refusals, auth, unavailable-provider, process and unknown failures are terminal. Legacy `ProviderFailure` and malformed stream terminals retain retry behavior. The added public sum constructor requires a PVP major bump at release; exhaustive downstream matches must handle it.
 
 - Upgrade the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.0.0 && <0.8`. Require the Claude and OpenAI providers at `0.7.0.0` and Effectful at `0.4.0.1`; recognize OpenAI Responses as native structured-output capable.

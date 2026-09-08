@@ -39,6 +39,7 @@ library
     Shikumi.Error
     Shikumi.LLM
     Shikumi.LLM.Budget
+    Shikumi.LLM.Continuation
     Shikumi.Module
     Shikumi.Multimodal
     Shikumi.Prelude
@@ -82,6 +83,7 @@ test-suite shikumi-test
     AdapterSpec
     CombinatorSpec
     ConstraintSpec
+    ContinuationSpec
     EndToEndSpec
     ErrorSpec
     Fixtures

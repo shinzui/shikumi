@@ -25,19 +25,23 @@ Resuming a reasoning-enabled agent must either send the original continuation in
 ## Progress
 
 
-- [ ] Milestone 1: Separate audit data, safe summaries and replayable history.
-- [ ] Milestone 2: Bind persisted continuation to its origin and validate after routing.
+- [x] (2026-09-08 17:49Z) Milestone 1: Separate audit data, safe summaries and replayable history.
+- [x] (2026-09-08 17:49Z) Milestone 2: Bind persisted continuation to its origin and validate after routing.
 - [ ] Milestone 3: Provide an explicit fresh conversation and migration documentation.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+2026-09-08: Routing strips only its four existing keys, so continuation expectations survive naturally to cache and transport. Adding typed validation requires Error ShikumiError on both memoizers and routeLLM; update consumers and review these breaking constraints under PVP. Source comparison against the registered dependency release tag showed no differences in Content.hs or Model.hs.
 
 
 ## Decision Log
 
+
+2026-09-08: Persist only provider/API/model/endpoint request identity. Explicit startup stores this minimal identity; callers supply full capabilities and credentials through routing. Credential-shaped endpoints remain unknown. This avoids persisting credentials or treating an echoed request model as provider attestation.
+
+2026-09-08: Omit images and uninterpreted tool extensions from summaries alongside provider reasoning metadata. Native text, tool arguments and structured results remain readable; the audit stays lossless.
 
 2026-09-08: Conservatively refuse to replay opaque continuation across a changed prefix or unknown origin. Defer automatic compaction rather than mutate signed exchanges; require explicit fresh-session creation for a reset. Protect summary inputs structurally and preserve the independent audit.
 
@@ -45,7 +49,7 @@ Resuming a reasoning-enabled agent must either send the original continuation in
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+The structural projection, version-2 reader/writer, pure restart, routing/cache/transport guards and focused regressions are implemented. Focused release-source tests passed (232 core, 127 tools, 28 cache). Final composition and immutable legacy fixture checks, full workspace validation, and final distillation remain.
 
 
 ## Context and Orientation
@@ -135,3 +139,5 @@ Checkpoint changes are additive readers plus a new writer version. Keep immutabl
 Shikumi.Agent.History owns the checkpoint version, opaque-state classifier, summary projection, origin record and pure compaction assessment; keep its constructor opaque. Proposed public operations are `renderSessionSummaryInput :: ReActSession -> Text` and `restartSessionFromSummary :: Text -> ReActSession -> Either HistoryError ReActSession`, plus the explicit-model start operation in Shikumi.Agent.ReAct. Shikumi.LLM.Continuation owns `validateRequestContinuation :: Model -> Context -> Options -> Either ShikumiError ()` and final private-metadata removal. Session-specific structures stay out of core; core consumes a minimal validated expectation encoded in private metadata. Model identity is checked after routing; defaults change only request controls and cannot erase expectations. The existing error mapping may use ValidationFailure for a local incompatible-history error. Cross-plan updates to Routing.hs must preserve the shared order: route, validate continuation, defaults, cache/trace, final validation and stripping, transport.
 
 Revision (2026-09-08): Linked this plan to the shared initiative intention created with `mina ci --json`, as requested. Scope and dependencies are unchanged.
+
+Revision (2026-09-08): Began EP-59; implemented continuation boundaries and recorded public constraint migration. Validation is pending.

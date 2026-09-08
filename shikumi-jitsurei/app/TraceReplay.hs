@@ -71,7 +71,7 @@ main = withSystemTempDirectory "shikumi-jitsurei" $ \dir -> do
           pure (responder c)
         Stream {} -> pure []
   cached <-
-    runEff . runConcurrent . runTime . runCacheMemory cache . counting . cachedLLM . runErrorNoCallStack @ShikumiError $ do
+    runEff . runConcurrent . runTime . runCacheMemory cache . counting . runErrorNoCallStack @ShikumiError . cachedLLM $ do
       a <- runProgram qa input
       b <- runProgram qa input
       pure (a, b)

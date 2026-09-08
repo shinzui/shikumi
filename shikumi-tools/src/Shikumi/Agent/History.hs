@@ -4,6 +4,14 @@ module Shikumi.Agent.History
     HistoryError (..),
     HistoryEntry (..),
     newSession,
+    sessionOrigin,
+    sessionPrefix,
+    bindSessionOrigin,
+    protectSession,
+    compactionSafe,
+    renderSummaryEntry,
+    renderSessionSummaryInput,
+    restartSessionFromSummary,
     sessionProtocol,
     sessionFingerprint,
     sessionTools,
@@ -33,13 +41,15 @@ import Control.Monad (foldM, unless, when)
 import Data.Aeson
 import Data.Aeson.Types (Parser, parseEither)
 import Data.Bifunctor (first)
+import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.Ratio (denominator, numerator, (%))
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Vector qualified as V
+import Shikumi.LLM.Continuation (RequestOrigin, contextIdentity, hasOpaqueContinuation)
 import Shikumi.Tool.Output
 
 newtype HistoryError = HistoryError Text deriving stock (Eq, Show)
@@ -60,13 +70,15 @@ data ReActSession = ReActSession
     sessionFinished :: !Bool,
     auditHistory :: ![HistoryEntry],
     compactedThrough :: !Int,
-    summary :: !(Maybe Text)
+    summary :: !(Maybe Text),
+    sessionOrigin :: !(Maybe RequestOrigin),
+    sessionPrefix :: !(Maybe Value)
   }
   deriving stock (Eq, Show)
 
 newSession :: Text -> Value -> Value -> Text -> Either HistoryError ReActSession
 newSession proto fingerprint tools input = do
-  let s = ReActSession proto fingerprint tools 0 0 False [userEntry input] 0 Nothing
+  let s = ReActSession proto fingerprint tools 0 0 False [userEntry input] 0 Nothing Nothing Nothing
   validateSession s
   pure s
 
@@ -171,16 +183,64 @@ promptMessages s = concatMap (entryMessages (sessionProtocol s)) (promptEntries 
 -- | Replace only an old prefix of complete entries; the full audit is unchanged.
 compactSession :: Int -> Text -> ReActSession -> Either HistoryError ReActSession
 compactSession through text s = do
+  ensure (compactionSafe through s) "compaction would change the prefix of opaque reasoning; explicitly restart from a caller-approved summary"
   ensure (through > compactedThrough s) "compaction must advance"
   let next = s {compactedThrough = through, summary = Just text}
   validateSession next
   pure next
 
+-- | Any retained opaque exchange still depends on the original prefix.
+compactionSafe :: Int -> ReActSession -> Bool
+compactionSafe through s = not (hasOpaqueContinuation (concatMap (entryMessages (sessionProtocol s)) (drop through (auditHistory s))))
+
+bindSessionOrigin :: Maybe RequestOrigin -> ReActSession -> ReActSession
+bindSessionOrigin origin s = s {sessionOrigin = origin}
+
+-- | Capture the exact request view after completing the exchange. This is
+-- compatibility data, not an authenticity proof for untrusted checkpoints.
+protectSession :: B.Context -> ReActSession -> ReActSession
+protectSession ctx s = s {sessionPrefix = if hasOpaqueContinuation (promptMessages s) then Just (contextIdentity ctx) else Nothing}
+
+-- | Structural projection: provider-owned reasoning and unknown rich extensions
+-- never enter a summarizer request. The full audit retains all original bytes.
+renderSummaryEntry :: HistoryEntry -> Text
+renderSummaryEntry (UserTurn p) = T.intercalate "\n" [case b of B.UserText (B.TextContent t) -> t; B.UserImage _ -> "[image omitted]" | b <- V.toList (p ^. #content)]
+renderSummaryEntry (Exchange p outputs correction) = T.intercalate "\n" (map block (V.toList (p ^. #content)) <> map output outputs <> maybe [] (\t -> ["Correction: " <> t]) correction)
+  where
+    block (B.AssistantText (B.TextContent t)) = t
+    block (B.AssistantThinking t)
+      | t ^. #redacted = "[redacted reasoning omitted]"
+      | otherwise = t ^. #thinking <> "\n[reasoning continuation omitted]"
+    block (B.AssistantToolCall c) = c ^. #name <> " " <> jsonText (c ^. #arguments)
+    output (c, o) =
+      c ^. #name
+        <> ": "
+        <> T.intercalate
+          "\n"
+          ( (if result o ^. #isError then ["Tool error"] else [])
+              <> [case b of B.ToolResultText (B.TextContent t) -> t; B.ToolResultImage _ -> "[image omitted]" | b <- V.toList (result o ^. #content)]
+              <> maybe [] (\v -> ["Structured JSON: " <> jsonText v]) (structuredContent o)
+              <> ["[extension blocks omitted]" | not (null (extensionBlocks o))]
+          )
+    jsonText = decodeUtf8 . LBS.toStrict . encode
+
+renderSessionSummaryInput :: ReActSession -> Text
+renderSessionSummaryInput = T.intercalate "\n" . map renderSummaryEntry . auditHistory
+
+-- | A separate, unbound conversation; no IO and no old native exchanges.
+restartSessionFromSummary :: Text -> ReActSession -> Either HistoryError ReActSession
+restartSessionFromSummary text s = do
+  validateSession s
+  ensure (not (T.null (T.strip text))) "restart summary must not be empty"
+  newSession (sessionProtocol s) (sessionFingerprint s) (sessionTools s) ("Earlier conversation summary: " <> text)
+
 -- The transfer format is local and explicit, independent of Baikai's Message JSON.
 encodeSession :: ReActSession -> Value
 encodeSession s =
   object
-    [ "version" .= (1 :: Int),
+    [ "version" .= (2 :: Int),
+      "origin" .= sessionOrigin s,
+      "protectedPrefix" .= sessionPrefix s,
       "protocol" .= sessionProtocol s,
       "fingerprint" .= sessionFingerprint s,
       "tools" .= sessionTools s,
@@ -201,7 +261,7 @@ decodeSession value = do
 parseSession :: Value -> Parser ReActSession
 parseSession = withObject "ReActSession" $ \o -> do
   version <- o .: "version"
-  unless (version == (1 :: Int)) (fail "unknown checkpoint version")
+  unless (version `elem` [1, 2 :: Int]) (fail "unknown checkpoint version")
   ReActSession
     <$> o .: "protocol"
     <*> o .: "fingerprint"
@@ -212,6 +272,8 @@ parseSession = withObject "ReActSession" $ \o -> do
     <*> (o .: "history" >>= traverse parseEntry)
     <*> o .: "compactedThrough"
     <*> o .: "summary"
+    <*> (if version == 1 then pure Nothing else o .: "origin")
+    <*> (if version == 1 then pure Nothing else o .: "protectedPrefix")
 
 encodeEntry :: HistoryEntry -> Value
 encodeEntry (UserTurn p) = object ["kind" .= String "user", "content" .= (p ^. #content), "timestamp" .= (p ^. #timestamp)]

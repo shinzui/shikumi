@@ -39,7 +39,7 @@ Upstream context was read through Mori at `mori://shinzui/baikai`: project-relat
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 58 | Preserve provider refusal classification and retry semantics | [58-preserve-provider-refusal-classification-and-retry-semantics.md](../plans/58-preserve-provider-refusal-classification-and-retry-semantics.md) | None | None | Complete |
-| 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | Not Started |
+| 59 | Guard reasoning state across session compaction and model changes | [59-guard-reasoning-state-across-session-compaction-and-model-changes.md](../plans/59-guard-reasoning-state-across-session-compaction-and-model-changes.md) | None | EP-60 | In Progress |
 | 60 | Apply shared request defaults across programs and agent calls | [60-apply-shared-request-defaults-across-programs-and-agent-calls.md](../plans/60-apply-shared-request-defaults-across-programs-and-agent-calls.md) | None | None | Not Started |
 | 61 | Expose billing quality and failed-call usage in reports and traces | [61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md](../plans/61-expose-billing-quality-and-failed-call-usage-in-reports-and-traces.md) | EP-58 | EP-60 | Not Started |
 | 62 | Demonstrate and verify OpenAI Responses workflows | [62-demonstrate-and-verify-openai-responses-workflows.md](../plans/62-demonstrate-and-verify-openai-responses-workflows.md) | EP-58, EP-59, EP-60, EP-61 | None | Not Started |
@@ -61,6 +61,8 @@ The error vocabulary belongs to plan 58: ProviderError retains the released Baik
 
 The request order shared by plans 59, 60 and 61 is route the model, validate continuation, fill missing defaults, consult cache/trace, validate again and strip private metadata at final dispatch, then transport. Plan 59 owns the validation helper/private expectation format and adds cache checks before lookup. Plan 60 owns the finite fill-only defaults vocabulary and the memoizer bypass for evidence-requesting calls, because a cache hit cannot provide evidence of a new provider crossing. Plan 61 observes attempts after all those layers, so cache hits produce no attempt. Tests must prove the documented wrapper composition, not rely on informal left/right ordering language.
 
+Plan 59 defines the shared `RequestOrigin` and pure context projection in `Shikumi.LLM.Continuation`; History persists these values. The origin is request identity, not observed provider evidence. Routing and cache memoizers now require `Error ShikumiError`.
+
 Plan 59 owns checkpoint version 2 and the rule for unknown-origin legacy histories. It preserves audit bytes, uses a structurally safe summary projection, and makes reset explicit. Plan 62 consumes separate transport-valid Claude/Responses fixtures and never turns mixed metadata persistence tests into claims of wire compatibility.
 
 Plan 61 owns the distinction between logical usage and transport billing, the bounded collector, and the shared summary type below evaluation/tracing. Evaluation owns report presentation; trace owns optional persisted billing detail and its format version; trace-otel owns export. No child may invent per-node attribution or make failed attempts replayable. The final example attaches these views explicitly.
@@ -74,8 +76,8 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 - [x] EP-58, milestone 1: Preserve the structured transport failure.
 - [x] EP-58, milestone 2: Use one classification for blocking and streaming retries.
 - [x] EP-58, milestone 3: Document the error boundary and downstream behavior.
-- [ ] EP-59, milestone 1: Separate audit data, safe summaries and replayable history.
-- [ ] EP-59, milestone 2: Bind persisted continuation to its origin and validate after routing.
+- [x] EP-59, milestone 1: Separate audit data, safe summaries and replayable history.
+- [x] EP-59, milestone 2: Bind persisted continuation to its origin and validate after routing.
 - [ ] EP-59, milestone 3: Provide an explicit fresh conversation and migration documentation.
 - [ ] EP-60, milestone 1: Define an explicit default merge.
 - [ ] EP-60, milestone 2: Apply defaults at the effective request boundary.
@@ -91,6 +93,8 @@ The shared harness remains internal per ADR-9. Each child owns its focused consu
 
 ## Surprises & Discoveries
 
+
+2026-09-08: EP-59 preserves the reserved `shikumi.continuation.v1` expectation through routing and cache, stripping it only at transport. EP-60 must retain it when filling defaults. Explicit startup persists a minimal public model identity; callers use routing for full model capabilities and credentials. Unknown opaque version-1 histories require explicit restart.
 
 2026-09-08: EP-58 confirms that typed unknown/process failures must remain terminal and that legacy malformed stream fixtures remain retryable. ReAct also checks raw responses from custom interpreters; it now preserves structured failures before any tool dispatch. EP-61 should consume `ProviderError` directly and keep attempt billing separate.
 

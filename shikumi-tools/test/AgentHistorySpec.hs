@@ -28,6 +28,7 @@ import Shikumi.Agent.ReAct
 import Shikumi.Compaction (CompactionConfig (..))
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
+import Shikumi.LLM.Continuation qualified as C
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature, setInstruction)
 import Shikumi.Testing (mkTextResponse, mkToolCallResponse, mkToolCallsResponse)
@@ -74,11 +75,12 @@ recording script action = do
       . runErrorNoCallStack
       . interpret
         ( \_ -> \case
-            Complete _ ctx _ -> case ctx ^. #systemPrompt of
+            Complete model ctx opts -> case ctx ^. #systemPrompt of
               Just sys | "dispatch:" `T.isPrefixOf` sys -> do
                 liftIO (modifyIORef' dispatches (<> [T.drop 9 sys]))
                 pure (mkTextResponse "done")
               _ -> do
+                either throwError pure (C.validateRequestContinuation model ctx opts)
                 liftIO (modifyIORef' contexts (<> [ctx]))
                 next <-
                   liftIO
@@ -159,6 +161,126 @@ tests =
         case result of
           Right s -> (eitherDecode (encode (encodeSession s)) >>= either (Left . show) Right . decodeSession) @?= Right s
           Left e -> assertFailure (show e),
+      testCase "separate Claude and Responses continuations survive resume exactly" $ do
+        mapM_
+          ( \(model, thinking) -> do
+              let response = firstTurn & #model .~ model & #message . #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
+              (answer, requests, dispatched) <- recording [Right response, Right (finalTurn & #model .~ model)] $ do
+                s <- startSessionWithModel model weatherSignature registry cfg weatherQuestion >>= advanceSession weatherSignature registry cfg >>= paused >>= restored
+                advanceSession weatherSignature registry cfg s
+              assertFinished answer
+              dispatched @?= ["A", "B"]
+              case requests of
+                [_, ctx] -> assertBool "exact assistant" (B.AssistantMessage (response ^. #message) `elem` V.toList (ctx ^. #messages))
+                _ -> assertFailure "wrong requests"
+          )
+          reasoningFixtures,
+      testCase "safe summary excludes opaque sentinels while audit preserves them" $ do
+        let thinking = B.ThinkingContent "SECRET-REDACTED" (Just "SECRET-SIGNATURE") True (Just (B.ThinkingReplay B.OpenAIResponses "m" (V.singleton (String "SECRET-REPLAY"))))
+            payload = firstTurn ^. #message & #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
+            built = newSession "native" (object []) (object []) "question" >>= appendExchange payload [(B.ToolCall "call-A" "A" (object []), rich), (B.ToolCall "call-B" "B" (object []), rich)] Nothing False
+        case built of
+          Left e -> assertFailure (show e)
+          Right s -> do
+            let rendered = renderSessionSummaryInput s
+                audit = show (encodeSession s)
+            mapM_
+              ( \secret -> do
+                  assertBool "absent from summary" (not (secret `T.isInfixOf` rendered))
+                  assertBool "present in audit" (secret `T.isInfixOf` T.pack audit)
+              )
+              ["SECRET-REDACTED", "SECRET-SIGNATURE", "SECRET-REPLAY"]
+            assertBool "tool names retained" ("A" `T.isInfixOf` rendered)
+            decodeSession (encodeSession s) @?= Right s,
+      testCase "opaque compaction defers proactively and overflow makes no summary call" $ do
+        let (model, thinking) = claudeFixture
+            compactCfg = cfg {compaction = CompactionConfig 0 1 True}
+            response = firstTurn & #model .~ (model & #contextWindow .~ 10) & #message . #usage . #inputTokens .~ 10 & #message . #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
+        (result, requests, dispatched) <- recording [Right response, Left (ContextWindowExceeded "full")] $ do
+          s <- startSessionWithModel model weatherSignature registry compactCfg weatherQuestion >>= advanceSession weatherSignature registry compactCfg >>= paused
+          if sessionCompactedThrough s == 0 then pure () else throwError (ValidationFailure "unexpected compaction")
+          advanceSession weatherSignature registry compactCfg s
+        case result of
+          Left (ValidationFailure message) -> assertBool "actionable" ("restart" `T.isInfixOf` message)
+          _ -> assertFailure (show result)
+        length requests @?= 2
+        dispatched @?= ["A", "B"],
+      testCase "automatic summary requests contain no discarded opaque payload" $ do
+        mapM_
+          ( \(model, thinking) -> do
+              let compactCfg = cfg {compaction = CompactionConfig 0 1 True}
+                  response = firstTurn & #model .~ model & #message . #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
+                  later = mkToolCallResponse "call-C" "A" (object []) & #model .~ (model & #contextWindow .~ 10) & #message . #usage . #inputTokens .~ 10
+              (result, requests, dispatched) <- recording [Right response, Right later, Right (mkTextResponse "safe summary")] $ do
+                s <- startSessionWithModel model weatherSignature registry compactCfg weatherQuestion >>= advanceSession weatherSignature registry compactCfg >>= paused
+                advanceSession weatherSignature registry compactCfg s >>= paused
+              case result of
+                Left e -> assertFailure (show e)
+                Right s -> do
+                  sessionCompactedThrough s @?= 2
+                  length (auditHistory s) @?= 3
+              dispatched @?= ["A", "B", "A"]
+              case reverse requests of
+                summaryRequest : _ -> do
+                  let rendered = T.pack (show (toJSON summaryRequest))
+                  mapM_ (\secret -> assertBool "opaque absent from actual summary request" (not (secret `T.isInfixOf` rendered))) ["signature-bytes", "encrypted-bytes", "redacted-secret"]
+                _ -> assertFailure "no summary request"
+              length requests @?= 3
+          )
+          (reasoningFixtures <> [(B.mkModel B.AnthropicMessages "claude-test" "https://claude.example", B.ThinkingContent "redacted-secret" Nothing True Nothing)]),
+      testCase "response request mismatch rejects before tool dispatch" $ do
+        let (model, _) = claudeFixture
+        (result, requests, dispatched) <- recording [Right (firstTurn & #model .~ (model & #modelId .~ "changed"))] $ do
+          s <- startSessionWithModel model weatherSignature registry cfg weatherQuestion
+          advanceSession weatherSignature registry cfg s
+        assertBool "mismatch rejected" (isLeft result)
+        length requests @?= 1
+        dispatched @?= [],
+      testCase "legacy opaque origin is unknown; explicit restart leaves audit unchanged" $ do
+        let (model, thinking) = claudeFixture
+            response = firstTurn & #model .~ model & #message . #content .~ V.cons (B.AssistantThinking thinking) (firstTurn ^. #message . #content)
+        (built, _, _) <- recording [Right response] (startSessionWithModel model weatherSignature registry cfg weatherQuestion >>= advanceSession weatherSignature registry cfg >>= paused)
+        case built of
+          Left e -> assertFailure (show e)
+          Right old -> do
+            let legacy = mutate "version" (Number 1) (encodeSession old)
+            case decodeSession legacy of
+              Left e -> assertFailure (show e)
+              Right unknown -> do
+                sessionOrigin unknown @?= Nothing
+                (rejected, requests, dispatched) <- recording [] (advanceSession weatherSignature registry cfg unknown)
+                assertBool "legacy rejected" (isLeft rejected)
+                requests @?= []
+                dispatched @?= []
+                case restartSessionFromSummary "Caller approved summary" unknown of
+                  Left e -> assertFailure (show e)
+                  Right fresh -> do
+                    sessionOrigin fresh @?= Nothing
+                    sessionTurns fresh @?= 0
+                    length (auditHistory fresh) @?= 1
+                    assertBool "no native old messages" (not (C.hasOpaqueContinuation (promptMessages fresh)))
+                    length (auditHistory unknown) @?= 2
+                    decodeSession (encodeSession old) @?= Right old
+                    (answer, freshRequests, freshDispatch) <- recording [Right finalTurn] (advanceSession weatherSignature registry cfg fresh)
+                    assertFinished answer
+                    length freshRequests @?= 1
+                    freshDispatch @?= [],
+      testCase "immutable version-one checkpoint reads and upgrades losslessly" $ do
+        let bytes = "{\"version\":1,\"protocol\":\"prompt\",\"fingerprint\":{},\"tools\":{},\"turns\":0,\"iterations\":0,\"finished\":false,\"history\":[{\"kind\":\"user\",\"content\":[{\"type\":\"user_text\",\"data\":{\"text\":\"question\"}}],\"timestamp\":null}],\"compactedThrough\":0,\"summary\":null}"
+        (eitherDecode bytes >>= either (Left . show) Right . decodeSession) @?= either (Left . show) Right (newSession "prompt" (object []) (object []) "question"),
+      testCase "version-one plain session binds only after a resolved response" $ do
+        (result, _, _) <- recording [] start
+        case result of
+          Left e -> assertFailure (show e)
+          Right initial -> case decodeSession (mutate "version" (Number 1) (encodeSession initial)) of
+            Left e -> assertFailure (show e)
+            Right legacy -> do
+              sessionOrigin legacy @?= Nothing
+              let (model, _) = claudeFixture
+              (answer, _, _) <- recording [Right (firstTurn & #model .~ model)] (advanceSession weatherSignature registry cfg legacy >>= paused)
+              case answer of
+                Right bound -> sessionOrigin bound @?= C.requestOrigin model
+                Left e -> assertFailure (show e),
       testCase "all invalid native proposals are audit-only and dispatch nothing" $ do
         let invalid =
               [ mkToolCallsResponse [("", "A", object []), ("ok", "B", object [])],
@@ -193,7 +315,7 @@ tests =
         (result, _, _) <- recording [Right firstTurn] (start >>= advanceSession weatherSignature registry cfg >>= paused)
         case result of
           Right s -> do
-            assertBool "version" (isLeft (decodeSession (mutate "version" (Number 2) (encodeSession s))))
+            assertBool "version" (isLeft (decodeSession (mutate "version" (Number 99) (encodeSession s))))
             let corruptResults (Object o) = case KM.lookup "history" o of
                   Just (Array entries) ->
                     Object
@@ -383,3 +505,13 @@ tests =
   where
     isLeft (Left _) = True
     isLeft _ = False
+
+-- Separate API-valid shapes; neither mixes Claude signatures and Responses items.
+reasoningFixtures :: [(B.Model, B.ThinkingContent)]
+reasoningFixtures =
+  [ claudeFixture,
+    (B.mkModel B.OpenAIResponses "responses-test" "https://responses.example", B.ThinkingContent "" Nothing False (Just (B.ThinkingReplay B.OpenAIResponses "responses-test" (V.singleton (object ["type" .= String "reasoning", "id" .= String "rs_1", "encrypted_content" .= String "encrypted-bytes", "summary" .= ([] :: [Value])])))))
+  ]
+
+claudeFixture :: (B.Model, B.ThinkingContent)
+claudeFixture = (B.mkModel B.AnthropicMessages "claude-test" "https://claude.example", B.ThinkingContent "" (Just "signature-bytes") False Nothing)

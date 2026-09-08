@@ -39,6 +39,7 @@ module Shikumi.Agent.ReAct
     SessionResult (..),
     finalToolName,
     startSession,
+    startSessionWithModel,
     advanceSession,
     continueSession,
     runSession,
@@ -77,7 +78,7 @@ import Baikai
   )
 import Baikai qualified as B
 import Control.Lens ((&), (.~), (^.))
-import Data.Aeson (Value (..), eitherDecodeStrict, encode, object, toJSON, (.=))
+import Data.Aeson (Value (..), eitherDecodeStrict, encode, object, (.=))
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
@@ -98,6 +99,7 @@ import Shikumi.Agent.History qualified as H
 import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
 import Shikumi.Error (ShikumiError (..), fromBaikaiError)
 import Shikumi.LLM (LLM, complete)
+import Shikumi.LLM.Continuation qualified as C
 import Shikumi.Program (Program (FMap), embed)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, fromModelChecked, parseOutput, toSchema)
 import Shikumi.Signature (Signature, getInstruction)
@@ -636,6 +638,15 @@ startSession sig reg cfg input = do
   checkSession sig reg cfg s
   pure s
 
+-- | Bind a requested target before the first call. Use a router to supply
+-- credentials and model capabilities; checkpoints retain only public identity.
+startSessionWithModel :: (ToPrompt i, ToSchema o, Error ShikumiError :> es) => Model -> Signature i o -> ToolRegistry -> ReActConfig -> i -> Eff es ReActSession
+startSessionWithModel model sig reg cfg input = do
+  s <- startSession sig reg cfg input
+  case C.requestOrigin model of
+    Nothing -> throwError (ValidationFailure "Explicit session model needs a provider, API, model and credential-free endpoint")
+    Just origin -> pure (H.bindSessionOrigin (Just origin) s)
+
 -- | Append a new user turn to a validated checkpoint, resetting its iteration budget.
 -- This never dispatches old exchanges. Use 'runSession' or 'advanceSession' next.
 continueSession :: (ToPrompt i, ToSchema o, Error ShikumiError :> es) => Signature i o -> ToolRegistry -> ReActConfig -> i -> ReActSession -> Eff es ReActSession
@@ -654,14 +665,24 @@ advanceSession sig reg cfg original = do
       if H.sessionIterations original >= max 0 (maxIters cfg)
         then pure (SessionPaused original)
         else do
-          (s, resp) <- requestRecover original
+          (requestedSession, resp) <- requestRecover original
+          let resolved = C.requestOrigin (resp ^. #model)
+              s = H.bindSessionOrigin resolved requestedSession
           let payload = resp ^. #message
-              reject reason = SessionPaused <$> historyOrThrow (H.appendExchange payload [] (Just reason) False s)
+              reject reason = SessionPaused . seal <$> historyOrThrow (H.appendExchange payload [] (Just reason) False s)
           if payload ^. #stopReason == B.ErrorReason
             then throwError $ case resp ^. #errorInfo of
               Just err -> fromBaikaiError err
               Nothing -> ProviderFailure (maybe "Model response failed" id (payload ^. #errorMessage))
             else pure ()
+          -- A conforming response echoes the resolved request identity. Never
+          -- bless old unknown opaque history using a newly selected target.
+          case H.sessionOrigin requestedSession of
+            Just expected | resolved /= Just expected -> throwError (ValidationFailure "ReAct response request identity differs from session target")
+            _ -> pure ()
+          case resolved of
+            Just _ -> either throwError pure (C.validateReplayOrigin (resp ^. #model) [B.AssistantMessage payload])
+            Nothing -> pure ()
           case parseCalls s resp of
             Left reason -> reject reason
             Right calls -> case H.validateCalls (priorIds s) calls of
@@ -673,7 +694,7 @@ advanceSession sig reg cfg original = do
                       Left err -> reject ("Invalid final submission: " <> T.pack (show err))
                       Right answer -> do
                         finished <- historyOrThrow (H.appendExchange payload [(call, textToolOutput "Final submission accepted.")] Nothing True s)
-                        pure (SessionFinished answer finished)
+                        pure (SessionFinished answer (seal finished))
                     _ -> reject "Final submission cannot be mixed with other calls."
                 | otherwise -> do
                     outputs <-
@@ -686,8 +707,8 @@ advanceSession sig reg cfg original = do
                     next <- historyOrThrow (H.appendExchange payload outputs Nothing False s)
                     compacted <-
                       if usageExceedsWindow (compaction cfg) (resp ^. #model) (payload ^. #usage)
-                        then forceCompact next
-                        else pure next
+                        then if H.compactionSafe (boundary next) next then forceCompact (seal next) else pure (seal next)
+                        else pure (seal next)
                     pure (SessionPaused compacted)
   where
     priorIds s = [c ^. #id_ | H.Exchange _ results Nothing <- H.auditHistory s, (c, _) <- results]
@@ -697,7 +718,7 @@ advanceSession sig reg cfg original = do
       | otherwise = do
           actions <- either (\(H.HistoryError t) -> Left t) Right (H.parsePromptActions (responseText resp))
           pure [B.ToolCall ("prompt-" <> T.pack (show (H.sessionTurns s + 1)) <> "-" <> T.pack (show n)) name args | (n, (name, args)) <- zip [1 :: Int ..] actions]
-    request s = do
+    requestContext s =
       let native = H.sessionProtocol s == "native"
           finalTool = B.emptyTool & #name .~ finalToolName & #description .~ "Submit the final validated answer, alone." & #parameters .~ toSchema (Proxy @o)
           sys =
@@ -706,8 +727,18 @@ advanceSession sig reg cfg original = do
               <> encodeText (toSchema (Proxy @o))
               <> if native then "" else "\n" <> toolMenu reg <> "\nReply with JSON {\"calls\":[{\"tool\":\"<name>\",\"args\":{...}}]}. Use the same form for shikumi_submit_final."
           ctx = buildCtx sys (H.promptMessages s) (if native then registryBaikai reg <> V.singleton finalTool else V.empty) Nothing
-          opts = emptyOptions & #toolChoice .~ (if native then Just ToolChoiceAuto else Nothing)
-      complete emptyModel ctx opts
+       in ctx
+    seal s = H.protectSession (requestContext s) s
+    request s = do
+      let ctx = requestContext s
+          model = maybe emptyModel C.originModel (H.sessionOrigin s)
+          opts = C.stampContinuation (H.sessionOrigin s) (H.sessionPrefix s) (emptyOptions & #toolChoice .~ (if H.sessionProtocol s == "native" then Just ToolChoiceAuto else Nothing))
+      -- Unknown opaque checkpoints fail even for custom interpreters. Resolved
+      -- target checks also run after routing and at built-in boundaries.
+      if C.hasOpaqueContinuation (H.promptMessages s) && H.sessionOrigin s == Nothing
+        then throwError (ValidationFailure "ReAct opaque history has unknown origin; explicitly restart from a caller-approved summary")
+        else pure ()
+      complete model ctx opts
     requestRecover s =
       catchError
         ((s,) <$> request s)
@@ -717,17 +748,21 @@ advanceSession sig reg cfg original = do
               (compacted,) <$> request compacted
             err -> throwError err
         )
+    boundary s = length (H.auditHistory s) - max 0 (keepRecent (compaction cfg))
     forceCompact s = do
+      if H.compactionSafe (boundary s) s
+        then pure ()
+        else historyOrThrow (Left (H.HistoryError "context recovery would change opaque reasoning prefix; explicitly restart from a caller-approved summary"))
       let entries = H.promptEntries s
           keep = max 0 (keepRecent (compaction cfg))
           through = length (H.auditHistory s) - keep
-          render entry = encodeText (toJSON (H.entryMessages (H.sessionProtocol s) entry))
+          render = H.renderSummaryEntry
       if length entries <= keep || through <= H.sessionCompactedThrough s
         then pure s
         else do
           texts <- compactTail (compaction cfg) emptyModel id id (map render entries)
           case texts of
-            t : _ -> historyOrThrow (H.compactSession through t s)
+            t : _ -> seal <$> historyOrThrow (H.compactSession through t s)
             [] -> pure s
 
 -- | Advance until validated final submission or the per-user-turn iteration limit.

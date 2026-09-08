@@ -7,7 +7,7 @@
 --
 -- The effect exposes two operations ('Complete', 'Stream'). The bare interpreters
 -- 'runLLM' / 'runLLMWith' map baikai's 'BaikaiError' into 'ShikumiError' and do
--- nothing else. The resilient interpreter 'runLLMResilient' adds the production
+-- validate continuation compatibility before transport. The resilient interpreter 'runLLMResilient' adds the production
 -- features baikai deliberately omits: retries with exponential backoff, an
 -- in-flight rate limit, and a US-dollar budget ceiling.
 --
@@ -79,6 +79,7 @@ import Effectful.Error.Static (Error, catchError, throwError)
 import Effectful.Exception (bracket_, try)
 import Shikumi.Error (ShikumiError (..), fromBaikaiError, isTransient)
 import Shikumi.LLM.Budget (Budget, admitCall, recordCost)
+import Shikumi.LLM.Continuation
 
 -- | The provider-neutral LM effect. 'Complete' is a blocking completion;
 -- 'Stream' returns the assembled list of typed events so callers that need
@@ -141,9 +142,12 @@ bareHandler ::
   Eff es a
 bareHandler = \case
   Complete m c o -> do
-    res <- try @BaikaiError (BE.complete m c o)
+    either throwError pure (validateRequestContinuation m c o)
+    res <- try @BaikaiError (BE.complete m c (stripContinuationMetadata o))
     either (throwError . fromBaikaiError) raiseResponseError res
-  Stream m c o -> BE.streamCollect m c o >>= raiseStreamError
+  Stream m c o -> do
+    either throwError pure (validateRequestContinuation m c o)
+    BE.streamCollect m c (stripContinuationMetadata o) >>= raiseStreamError
 
 -- ---------------------------------------------------------------------------
 -- Resilience: retries, rate limiting, budget
@@ -208,7 +212,8 @@ runLLMResilient ::
 runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
   Complete m c o ->
     withBudget mb . withRateLimit mr . retrying rp $ do
-      res <- try @BaikaiError (BE.complete m c o)
+      either throwError pure (validateRequestContinuation m c o)
+      res <- try @BaikaiError (BE.complete m c (stripContinuationMetadata o))
       case res of
         Left be -> throwError (fromBaikaiError be)
         Right resp -> do
@@ -218,7 +223,8 @@ runLLMResilient cfg = reinterpret_ (runBaikaiWith (registry cfg)) $ \case
           raiseResponseError resp
   Stream m c o ->
     withBudget mb . withRateLimit mr . retrying rp $ do
-      evs <- BE.streamCollect m c o
+      either throwError pure (validateRequestContinuation m c o)
+      evs <- BE.streamCollect m c (stripContinuationMetadata o)
       -- Charge from the terminal payload (success /or/ error) before raising: a
       -- failed stream may still have consumed billable tokens.
       liftIO (chargeBudgetFromEvents mb evs)

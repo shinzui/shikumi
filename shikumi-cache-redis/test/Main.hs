@@ -24,6 +24,7 @@ import Data.Vector qualified as V
 import Database.Redis qualified as R
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Error.Static (runErrorNoCallStack)
 import Shikumi.Cache
   ( CacheKey (unCacheKey),
     CachedResponse (..),
@@ -41,6 +42,7 @@ import Shikumi.Cache.Backend.Redis
     runCacheRedis,
   )
 import Shikumi.Effect.Time (runTime)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
@@ -129,8 +131,8 @@ tests ci cache =
     [ testCase "memoize: first request MISS (provider once), repeat is a Redis HIT" $ do
         -- Two identical requests in one run: provider hit exactly once.
         refA <- newIORef 0
-        (r1, r2) <-
-          runEff . runTime . runCacheRedis cache . runCountingLLM refA stubResponse . cachedLLM $ do
+        Right (r1, r2) <-
+          runEff . runErrorNoCallStack @ShikumiError . runTime . runCacheRedis cache . runCountingLLM refA stubResponse . cachedLLM $ do
             a <- complete fixModel fixCtx fixOpts
             b <- complete fixModel fixCtx fixOpts
             pure (a, b)
@@ -140,7 +142,7 @@ tests ci cache =
         -- A fresh run (fresh counter) now finds the entry already in Redis → HIT.
         refB <- newIORef 0
         _ <-
-          runEff . runTime . runCacheRedis cache . runCountingLLM refB stubResponse . cachedLLM $
+          runEff . runErrorNoCallStack @ShikumiError . runTime . runCacheRedis cache . runCountingLLM refB stubResponse . cachedLLM $
             complete fixModel fixCtx fixOpts
         nB <- readIORef refB
         nB @?= 0,

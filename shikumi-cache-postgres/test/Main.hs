@@ -21,10 +21,12 @@ import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, IOE, liftIO, runEff, type (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Error.Static (runErrorNoCallStack)
 import EphemeralPg qualified as Pg
 import Shikumi.Cache (CachedResponse (..), cacheKey, cachedLLM, currentKeyVersion, lookupCache, storeCache)
 import Shikumi.Cache.Backend.Postgres (PostgresCache, closePostgresCache, openPostgresCache, runCachePostgres)
 import Shikumi.Effect.Time (runTime)
+import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), complete)
 import System.Environment (lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
@@ -95,8 +97,8 @@ tests openCache cache =
         "shikumi-cache-postgres"
         [ testCase "memoize: first request MISS (provider once), repeat is a Postgres HIT" $ do
             refA <- newIORef 0
-            (r1, r2) <-
-              runEff . runTime . runCachePostgres cache . runCountingLLM refA stubResponse . cachedLLM $ do
+            Right (r1, r2) <-
+              runEff . runErrorNoCallStack @ShikumiError . runTime . runCachePostgres cache . runCountingLLM refA stubResponse . cachedLLM $ do
                 a <- complete fixModel fixCtx fixOpts
                 b <- complete fixModel fixCtx fixOpts
                 pure (a, b)
@@ -106,7 +108,7 @@ tests openCache cache =
             -- A fresh run (fresh counter) now finds the row already in Postgres → HIT.
             refB <- newIORef 0
             _ <-
-              runEff . runTime . runCachePostgres cache . runCountingLLM refB stubResponse . cachedLLM $
+              runEff . runErrorNoCallStack @ShikumiError . runTime . runCachePostgres cache . runCountingLLM refB stubResponse . cachedLLM $
                 complete fixModel fixCtx fixOpts
             nB <- readIORef refB
             nB @?= 0,
