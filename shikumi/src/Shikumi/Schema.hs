@@ -7,13 +7,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 -- | The schema engine: derive a provider JSON Schema from a Haskell record
--- ('ToSchema' / 'deriveSchema'), and totally decode a provider JSON reply back
+-- ([ToSchema]("Shikumi.Schema#t:ToSchema") / 'deriveSchema'), and totally decode a provider JSON reply back
 -- into a record ('FromModel' / 'parseOutput'), where every failure becomes a
--- precise, located 'Shikumi.Error.ShikumiError'.
+-- precise, located t'Shikumi.Error.ShikumiError'.
 --
--- Both directions are hand-rolled on 'GHC.Generics' (the schema we emit is the
+-- Both directions are hand-rolled on "GHC.Generics" (the schema we emit is the
 -- small subset OpenAI/Anthropic structured-output endpoints accept). Per-field
--- descriptions flow from the 'Field' wrapper's type-level 'Symbol'.
+-- descriptions flow from the t'Field' wrapper's type-level 'Symbol'.
 module Shikumi.Schema
   ( -- * Forward: record -> JSON Schema
     ToSchema (..),
@@ -123,7 +123,7 @@ instance (Selector s, FieldSchema t) => GRecordFields (S1 s (K1 R t)) where
 
 -- | Per-field schema and whether the field is required. The general
 -- (overlappable) case is "required, no description"; 'Maybe' is
--- required-but-nullable (see below); 'Field' attaches the description and
+-- required-but-nullable (see below); t'Field' attaches the description and
 -- preserves the inner required-ness.
 --
 -- A 'Maybe' field is /required/ in the JSON Schema and expresses its optionality
@@ -146,7 +146,7 @@ instance (KnownSymbol d, FieldSchema a) => FieldSchema (Field d a) where
     let (s, req) = fieldSchema (Proxy @a)
      in (withDescription (T.pack (symbolVal (Proxy @d))) s, req)
 
--- | A 'Constrained' field emits its constraints' JSON-Schema keywords onto the
+-- | A t'Constrained' field emits its constraints' JSON-Schema keywords onto the
 -- inner type's schema, preserving the inner required-ness (EP-26).
 instance forall cs a. (ReflectConstraints cs a, FieldSchema a) => FieldSchema (Constrained cs a) where
   fieldSchema _ =
@@ -228,7 +228,7 @@ instance (FromModel a) => FromModel (Maybe a) where
 instance (FromModel a) => FromModel (Field d a) where
   fromModelP path v = Field <$> fromModelP path v
 
--- | A 'Constrained' field decodes its inner value, then enforces the constraints
+-- | A t'Constrained' field decodes its inner value, then enforces the constraints
 -- (EP-26). A violation becomes a 'ValidationFailure' located at the field, so the
 -- check composes with any record-level 'Validatable' rule with no change to
 -- 'fromModelChecked'. (@FromField (Constrained cs a)@ is covered by the
@@ -276,7 +276,7 @@ instance (Selector s, FromField t) => GFromRecord (S1 s (K1 R t)) where
      in M1 . K1 <$> fromField (pushField nm path) nm o
 
 -- | Look a field up in the JSON object. The general (overlappable) case requires
--- the field; 'Maybe' and a missing key succeed as 'Nothing'; 'Field' delegates.
+-- the field; 'Maybe' and a missing key succeed as 'Nothing'; t'Field' delegates.
 class FromField t where
   fromField :: FieldPath -> Text -> Object -> Either ShikumiError t
 
@@ -340,7 +340,7 @@ class Validatable a where
 -- 'Shikumi.Schema.Types.Constrained') to (a) a schema-decorating function that
 -- inserts the matching JSON-Schema keywords and (b) a runtime validator over the
 -- decoded leaf value. The vocabulary is a small, closed set
--- ('Shikumi.Schema.Types.Constraint'); instances cover the five constructors over
+-- ([Constraint]("Shikumi.Schema.Types#t:Constraint")); instances cover the five constructors over
 -- 'Text' and the numeric leaves.
 class ReflectConstraints (cs :: [Constraint]) a where
   -- | Compose all keyword inserts onto the inner type's schema.
@@ -413,7 +413,7 @@ instance (KnownSymbol s, KnownSymbols ss) => KnownSymbols (s ': ss) where
 -- @MinVal "abc"@) no longer crashes the process at schema-derivation time; instead
 -- the schema keyword is silently omitted and every decode of the field fails with a
 -- located 'ValidationFailure' naming the bad symbol (see the @MinVal@/@MaxVal@
--- 'ReflectConstraints' instances).
+-- t'ReflectConstraints' instances).
 parseBound :: forall s. (KnownSymbol s) => Proxy s -> Maybe Sci.Scientific
 parseBound _ = readMaybe (symbolVal (Proxy @s))
 
@@ -424,8 +424,8 @@ tshow = T.pack . show
 -- Shared field-metadata traversal (also used by Shikumi.Signature)
 -- ---------------------------------------------------------------------------
 
--- | Collect 'FieldMeta' (name + optional description) for every record field of a
--- type, recovering descriptions from 'Field' wrappers.
+-- | Collect t'FieldMeta' (name + optional description) for every record field of a
+-- type, recovering descriptions from t'Field' wrappers.
 fieldMetasOf :: forall a. (GFieldMetas (Rep a)) => [FieldMeta]
 fieldMetasOf = gFieldMetas (Proxy @(Rep a))
 
@@ -453,7 +453,7 @@ instance (Selector s, FieldDoc t) => GFieldMetas (S1 s (K1 R t)) where
         }
     ]
 
--- | The description of a field's type, if it is a 'Field' wrapper.
+-- | The description of a field's type, if it is a t'Field' wrapper.
 class FieldDoc t where
   fieldDoc :: Proxy t -> Maybe Text
 

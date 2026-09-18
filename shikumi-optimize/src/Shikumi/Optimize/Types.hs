@@ -1,12 +1,12 @@
 {-# LANGUAGE RankNTypes #-}
 
--- | The central abstractions of the optimizer framework (EP-10): the 'Optimizer'
--- strategy object, the search 'Budget', and the 'Scored' candidate wrapper.
+-- | The central abstractions of the optimizer framework (EP-10): the t'Optimizer'
+-- strategy object, the search t'Budget', and the t'Scored' candidate wrapper.
 --
--- An 'Optimizer' is a /search procedure/: given a training 'Dataset', a 'Metric',
--- and a starting 'Program', it proposes new node parameters (instructions and
+-- An t'Optimizer' is a /search procedure/: given a training 'Dataset', a 'Metric',
+-- and a starting t'Program', it proposes new node parameters (instructions and
 -- few-shot demonstrations), scores each candidate by running the program over the
--- dataset, and returns the best-scoring 'CompiledProgram' it found. An optimizer
+-- dataset, and returns the best-scoring t'CompiledProgram' it found. An optimizer
 -- normally changes parameters while preserving boundary types.
 --
 -- The additive 'Shikumi.Optimize.Structure.structureSearchWith' API selects among
@@ -37,9 +37,9 @@
 -- /is/ a call to @evaluate@ (via 'Shikumi.Optimize.scoreOn'). This is wider than
 -- the plan's original @(LLM :> es)@ sketch: the delivered EP-8 runner threads
 -- 'Concurrent' (bounded parallelism), 'Time' (monotonic per-example latency via
--- the 'Shikumi.Effect.Time' effect), and 'Prim' (the usage-accounting 'IORef' in
--- 'Shikumi.Eval.Usage.withUsageTotals'). 'IOE' is no longer required — it is
--- supplied only at the discharge edge by 'runEff' under 'runTime'/'runPrim'. See
+-- the "Shikumi.Effect.Time" effect), and 'Prim' (the usage-accounting 'Data.IORef.IORef' in
+-- 'Shikumi.Eval.Usage.withUsageTotals'). 'Effectful.IOE' is no longer required — it is
+-- supplied only at the discharge edge by 'Effectful.runEff' under 'Shikumi.Effect.Time.runTime'/'Effectful.Prim.runPrim'. See
 -- the plan's Decision Log.
 module Shikumi.Optimize.Types
   ( Optimizer (..),

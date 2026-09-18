@@ -1,6 +1,6 @@
 -- | Small prompt/parse helpers shared by the code-execution modules
--- ('Shikumi.CodeExec.ProgramOfThought', 'Shikumi.CodeExec.CodeAct'). These mirror
--- the equivalents in 'Shikumi.Agent.ReAct' (which keeps its own copies private);
+-- ("Shikumi.CodeExec.ProgramOfThought", "Shikumi.CodeExec.CodeAct"). These mirror
+-- the equivalents in "Shikumi.Agent.ReAct" (which keeps its own copies private);
 -- they are factored here to avoid duplicating the few small helpers across the two
 -- code-execution modules (EP-27).
 module Shikumi.CodeExec.Prompt
@@ -29,9 +29,9 @@ simpleContext sys userMsg =
     emptyOptions
   )
 
--- | Strip a leading/trailing Markdown code fence (@```@ / @```json … ```@), if any,
+-- | Strip a leading\/trailing Markdown code fence (@```@ \/ @```json … ```@), if any,
 -- so a fenced reply still decodes. Falls back to the trimmed input. (Same logic as
--- 'Shikumi.Agent.ReAct'\'s private @stripFences@.)
+-- "Shikumi.Agent.ReAct"\'s private @stripFences@.)
 stripFences :: Text -> Text
 stripFences t =
   let trimmed = T.strip t

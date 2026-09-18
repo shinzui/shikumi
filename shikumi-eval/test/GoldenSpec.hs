@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 -- | A golden test for a stub program, run deterministically and offline under a
--- constant mock LM. The committed @test/golden/qa-program.golden@ pins the
+-- constant mock LM. The committed @test\/golden\/qa-program.golden@ pins the
 -- transcript; the plan records the fail-before/pass-after demonstration.
 module GoldenSpec (tests) where
 

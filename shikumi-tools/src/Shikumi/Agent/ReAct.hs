@@ -8,14 +8,14 @@
 -- finished. The runtime executes the selected tool (via "Shikumi.Tool"), records the
 -- result as an /observation/, and asks the model again — until the model finishes or
 -- a @maxIters@ bound is hit. A final /extract/ step turns the finished
--- 'Trajectory' into the typed output the caller wanted.
+-- t'Trajectory' into the typed output the caller wanted.
 --
 -- The whole loop is wrapped in 'Shikumi.Program.Embed', so @react@ is an ordinary
--- @'Program' i o@: it runs under 'Shikumi.Program.runProgram' (the body needs only
+-- @t'Program' i o@: it runs under 'Shikumi.Program.runProgram' (the body needs only
 -- @LLM@ + @Error ShikumiError@, integration point #4's exact row), is structurally
 -- inspectable, and composes with every other shikumi program and combinator.
 --
--- Two tool /protocols/ are supported behind one internal interface ('ProtocolImpl'),
+-- Two tool /protocols/ are supported behind one internal interface ([ProtocolImpl]("Shikumi.Agent.ReAct#t:ProtocolImpl")),
 -- selected by a 'ToolProtocol' value ('ProtocolAuto' resolves per model via
 -- "Shikumi.Adapter"'s 'capabilityFor'): a provider-native function-calling path
 -- (baikai @Context.tools@ + @Options.toolChoice@, parsing @AssistantToolCall@ blocks)
@@ -124,7 +124,7 @@ data Action
 
 -- | One recorded (thought, action, observation) step. @observation@ is 'Nothing'
 -- for 'Finish'; for a tool call it is the tool result text or the rendered
--- 'Shikumi.Tool.ToolError'.
+-- t'Shikumi.Tool.ToolError'.
 data Step = Step
   { thought :: !Text,
     action :: !Action,
@@ -135,7 +135,7 @@ data Step = Step
 -- | Why the loop stopped. 'TerminatedBudget' is retained for forward
 -- compatibility; the loop itself produces only 'TerminatedFinish' and
 -- 'TerminatedMaxIters' (the budget ceiling is enforced one layer down by the
--- resilient @LLM@ interpreter, surfacing as a 'ShikumiError').
+-- resilient @LLM@ interpreter, surfacing as a t'ShikumiError').
 data Termination
   = TerminatedFinish
   | TerminatedMaxIters !Int
@@ -181,7 +181,7 @@ defaultReActConfig =
 -- Building agents
 -- ---------------------------------------------------------------------------
 
--- | Build a ReAct agent as a @'Program' i o@ that returns the typed answer and
+-- | Build a ReAct agent as a @t'Program' i o@ that returns the typed answer and
 -- drops the trajectory. The ergonomic default.
 react ::
   forall i o.
@@ -192,7 +192,7 @@ react ::
   Program i o
 react sig reg cfg = FMap fst (reactWithTrajectory sig reg cfg)
 
--- | Build a ReAct agent that also returns the recorded 'Trajectory', for
+-- | Build a ReAct agent that also returns the recorded t'Trajectory', for
 -- evaluators/optimizers and tests that assert on the steps. When compaction ran,
 -- the trajectory contains 'Summarized' steps whose observations carry the summary.
 reactWithTrajectory ::
@@ -204,7 +204,7 @@ reactWithTrajectory ::
   Program i (o, Trajectory)
 reactWithTrajectory sig reg cfg = embed (reactLoop sig reg cfg)
 
--- | The agent loop, embedded into a 'Program' by 'reactWithTrajectory'. Runs in
+-- | The agent loop, embedded into a t'Program' by 'reactWithTrajectory'. Runs in
 -- exactly 'Shikumi.Program.runProgram'\'s effect row.
 reactLoop ::
   forall i o es.
@@ -241,7 +241,7 @@ reactLoop sig reg cfg i = do
               loop (iter + 1) acc''
 
     -- The final extract call: render, issue, decode into @o@ (a decode failure
-    -- here is the agent's final-answer failure, surfaced as a 'ShikumiError').
+    -- here is the agent's final-answer failure, surfaced as a t'ShikumiError').
     extract :: Trajectory -> Eff es (o, Trajectory)
     extract traj = do
       let (ctx, opts) = renderExtract impl i traj
@@ -365,7 +365,7 @@ resolveProtocolKind ProtocolAuto m = case capabilityFor m of
   NativeSchema -> ProtocolNative
   PromptFallback -> ProtocolPrompt
 
--- | Build the concrete 'ProtocolImpl' for a model, choosing the native or prompt
+-- | Build the concrete t'ProtocolImpl' for a model, choosing the native or prompt
 -- renderers from 'resolveProtocolKind'.
 resolveProtocol ::
   forall i o.
@@ -569,7 +569,7 @@ actionToProposal (th, CallTool nm args) = (th, ProposeCalls ((nm, args) :| []))
 actionToProposal (_, Summarized) =
   error "internal invariant violated: Summarized is never parsed from model output"
 
--- | Strip a leading/trailing Markdown code fence (```… / ```json … ```), if any,
+-- | Strip a leading\/trailing Markdown code fence (```… \/ ```json … ```), if any,
 -- so a fenced JSON reply still decodes. Falls back to the input unchanged.
 stripFences :: Text -> Text
 stripFences t =

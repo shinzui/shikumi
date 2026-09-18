@@ -1,8 +1,8 @@
--- | Persisting a 'TraceTree' to a stable on-disk JSON format, and deriving the
+-- | Persisting a t'TraceTree' to a stable on-disk JSON format, and deriving the
 -- replay index from it (EP-7, M2).
 --
--- A trace file is a single JSON document — a 'TraceFile' carrying a
--- @formatVersion@ integer and the whole 'TraceTree'. Persisting the tree as a
+-- A trace file is a single JSON document — a t'TraceFile' carrying a
+-- @formatVersion@ integer and the whole t'TraceTree'. Persisting the tree as a
 -- tree (rather than a flat event log) keeps replay a simple key lookup and keeps
 -- the file inspectable with @jq@ (e.g. @jq '.tree.spans | length'@).
 --
@@ -12,7 +12,7 @@
 -- does not understand rather than producing wrong outputs.
 --
 -- 'replayIndex' projects the tree into the @Map CacheKey Value@ the replay
--- interpreter ('Shikumi.Trace.Replay') consults: each LM-call span's EP-6
+-- interpreter ("Shikumi.Trace.Replay") consults: each LM-call span's EP-6
 -- 'Shikumi.Cache.Key.CacheKey' mapped to its recorded response JSON.
 module Shikumi.Trace.Store
   ( TraceFile (..),

@@ -1,10 +1,10 @@
--- | The core deliverable: @evaluate@ runs a 'Program' over a typed 'Dataset',
+-- | The core deliverable: @evaluate@ runs a t'Program' over a typed 'Dataset',
 -- scores each example with a metric, and returns a 'Report' summarising the
 -- aggregate score, the per-example breakdown, token usage, cost, and latency.
 --
 -- Examples run with __bounded__ concurrency ('pooledForConcurrentlyN', worker
 -- count from 'concurrency'), which preserves dataset order in the result. Each
--- example sits inside a per-example error boundary: a 'ShikumiError' from
+-- example sits inside a per-example error boundary: a t'ShikumiError' from
 -- 'runProgram' becomes a 'ProgramError', one from an effectful metric becomes a
 -- 'MetricError', and the 'FailurePolicy' decides whether that example is scored
 -- and the run continues ('FailScore') or the whole run aborts ('FailAbort').
@@ -154,7 +154,7 @@ scoreExecution policy project runner metric = do
       FailAbort -> throwError e
       FailScore s -> pure (s, Just reason)
 
--- | Build a 'Prediction' by running the program @numSamples@ times (at least
+-- | Build a t'Prediction' by running the program @numSamples@ times (at least
 -- once); a single sample yields a one-element prediction.
 buildPrediction ::
   (LLM :> es, Error ShikumiError :> es) =>
@@ -173,7 +173,7 @@ buildPrediction cfg prog inp =
   where
     n = max 1 (numSamples cfg)
 
--- | Run an action, catching a 'ShikumiError' into a 'Left'.
+-- | Run an action, catching a t'ShikumiError' into a 'Left'.
 tryShikumi :: (Error ShikumiError :> es) => Eff es a -> Eff es (Either ShikumiError a)
 tryShikumi act = (Right <$> act) `catchError` \_ e -> pure (Left e)
 

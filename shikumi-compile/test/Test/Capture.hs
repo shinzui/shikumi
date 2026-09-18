@@ -9,8 +9,8 @@
 -- key; the whole suite is a deterministic @cabal test@.
 --
 -- The captured text is the JSON encoding of the whole 'Baikai.Context' (system
--- prompt + messages + tools). The instruction/reasoning cue/retrieved context live
--- in the system prompt; few-shot demos render as user/assistant /messages/ — both
+-- prompt + messages + tools). The instruction\/reasoning cue\/retrieved context live
+-- in the system prompt; few-shot demos render as user\/assistant /messages/ — both
 -- are present in the JSON, so a substring assertion finds either.
 module Test.Capture
   ( runWithCapture,

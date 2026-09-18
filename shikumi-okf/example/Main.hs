@@ -4,7 +4,7 @@
 -- fixture. It builds a small two-program manifest — one typed @Predict@ program and
 -- one opaque @Embed@ program (the shape an agent runtime such as shikigami produces)
 -- — and writes the bundle to the directory given as the first argument (default
--- @./out@, i.e. @shikumi-okf/example/out@ when run from the package directory).
+-- @.\/out@, i.e. @shikumi-okf\/example\/out@ when run from the package directory).
 --
 -- Run it with:
 --

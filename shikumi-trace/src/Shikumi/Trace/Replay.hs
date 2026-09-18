@@ -7,13 +7,13 @@
 -- 'Shikumi.LLM.complete' from a recorded trace. It computes the EP-6
 -- content-addressed 'Shikumi.Cache.Key.cacheKey' of the request, looks it up in a
 -- replay index (built by 'Shikumi.Trace.Store.replayIndex'), and returns the
--- recorded 'Baikai.Response' — decoded via the 'Shikumi.Trace.ResponseJSON'
+-- recorded t'Baikai.Response.Response' — decoded via the "Shikumi.Trace.ResponseJSON"
 -- instances. Because it replaces the @LLM@ effect at the /same boundary/, the rest
 -- of the program (modules, combinators, decoding) runs exactly as in live mode, so
 -- the typed outputs are identical; only the leaf LM calls are redirected.
 --
 -- Divergence is __fail-closed and loud__: a request whose key is not in the trace
--- raises a typed 'ReplayDivergence' carrying the key, the model id, and a redacted
+-- raises a typed t'ReplayDivergence' carrying the key, the model id, and a redacted
 -- prompt summary. It never falls through to the network and never fabricates a
 -- response. (There is no registry in this interpreter at all, so "zero provider
 -- calls" is structural, not merely policy.)
@@ -53,10 +53,10 @@ data ReplayDivergence = ReplayDivergence
   deriving anyclass (Exception)
 
 -- | Interpret the @LLM@ effect by lookup in a replay index instead of calling a
--- provider. A hit returns the recorded response; a miss raises 'ReplayDivergence'.
+-- provider. A hit returns the recorded response; a miss raises t'ReplayDivergence'.
 -- Streaming completions are not replayable and raise a divergence naming the key.
 --
--- No @IOE@ is required: the lookup and decode are pure, and 'ReplayDivergence' is
+-- No @IOE@ is required: the lookup and decode are pure, and t'ReplayDivergence' is
 -- raised with @effectful@'s pure-in-@Eff@ 'throwIO'. The contract the plan sketched
 -- as @(IOE :> es)@ is therefore satisfied with a strictly weaker constraint.
 runLLMReplay :: Map CacheKey Value -> Eff (LLM : es) a -> Eff es a
@@ -74,7 +74,7 @@ runLLMReplay idx = interpret $ \_ -> \case
     throwIO $
       (divergence (cacheKey m c o) m c) & #promptSummary .~ "replay does not support streaming completions"
 
--- | Build a 'ReplayDivergence' for a request.
+-- | Build a t'ReplayDivergence' for a request.
 divergence :: CacheKey -> Model -> Context -> ReplayDivergence
 divergence key m c =
   ReplayDivergence

@@ -64,7 +64,7 @@ storeCache k v = send (StoreCache k v)
 -- | Policy knobs for 'cachedLLMWith', shared by every backend.
 --
 -- 'entryTTL' is the maximum age of a usable entry, measured against
--- 'CachedResponse.storedAt' at lookup time. 'Nothing' (the default) means
+-- 'Shikumi.Cache.Types.storedAt' at lookup time. 'Nothing' (the default) means
 -- entries never expire, which is the uniform default across Memory, SQLite,
 -- Redis, and Postgres. Expiry is enforced here, at the policy layer, so it
 -- behaves identically no matter which backend interprets the 'Cache' effect; an
@@ -97,7 +97,7 @@ cachedLLM ::
   Eff es a
 cachedLLM = cachedLLMWith defaultCacheConfig
 
--- | A configured variant of 'cachedLLM'. See 'CacheConfig' for the shared TTL
+-- | A configured variant of 'cachedLLM'. See t'CacheConfig' for the shared TTL
 -- policy.
 cachedLLMWith ::
   (Cache :> es, LLM :> es, Time :> es, Error ShikumiError :> es) =>

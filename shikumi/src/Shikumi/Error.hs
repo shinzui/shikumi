@@ -3,7 +3,7 @@
 --
 -- This module owns part of the MasterPlan's integration point #1: every later
 -- ExecPlan (signatures, caching, tracing, tools) MUST surface failures through
--- 'ShikumiError' rather than inventing its own error type.
+-- t'ShikumiError' rather than inventing its own error type.
 module Shikumi.Error
   ( ShikumiError (..),
     fromBaikaiError,

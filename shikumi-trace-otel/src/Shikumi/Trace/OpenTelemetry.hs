@@ -2,11 +2,11 @@
 --
 -- Unlike baikai's @baikai-trace-otel@ (one flat span per provider call),
 -- 'exportTree' preserves the tree's parent/child nesting: it walks from the root
--- depth-first and creates each child span in a 'Context' carrying its parent span
+-- depth-first and creates each child span in a t'OpenTelemetry.Context.Context' carrying its parent span
 -- (via 'OpenTelemetry.Context.insertSpan'), the explicit-context approach for
 -- reconstructing a recorded tree rather than discovering it from the live call
--- stack. Each span's start time comes from the recorded 'startedAt'. Closed
--- spans end at their recorded 'endedAt'; never-closed spans end at their own
+-- stack. Each span's start time comes from the recorded 'Shikumi.Trace.startedAt'. Closed
+-- spans end at their recorded 'Shikumi.Trace.endedAt'; never-closed spans end at their own
 -- start time and carry @shikumi.incomplete = true@.
 --
 -- LM-call spans carry GenAI semantic-convention attributes
@@ -54,7 +54,7 @@ import Shikumi.Trace (Span, SpanAttrs, SpanKind (..), TraceTree, childrenOf)
 import Shikumi.Trace.Node (renderNodePath)
 
 -- | Export a finished trace tree to a tracer as a forest of nested spans. Pure
--- structural ('ProgramSpan' / 'ModuleSpan' / 'CombinatorSpan') and LM-call
+-- structural ('ProgramSpan' \/ 'ModuleSpan' \/ 'CombinatorSpan') and LM-call
 -- ('LlmCallSpan') nodes alike become spans; nesting is preserved.
 exportTree :: (MonadIO m) => Otel.Tracer -> TraceTree -> m ()
 exportTree tracer tree = liftIO $ do
@@ -124,8 +124,8 @@ endTimeOf :: Span -> UTCTime
 endTimeOf s = fromMaybe (s ^. #startedAt) (s ^. #endedAt)
 
 -- | Status for an exported span. A recorded response that reports an in-band
--- provider failure becomes 'Otel.Error'; all other spans are explicitly marked
--- 'Otel.Ok'.
+-- provider failure becomes 'OpenTelemetry.Trace.Core.Error'; all other spans are explicitly marked
+-- 'OpenTelemetry.Trace.Core.Ok'.
 statusFor :: Span -> Otel.SpanStatus
 statusFor s
   | maybe False isErrorResponse (s ^. #attrs . #response) =

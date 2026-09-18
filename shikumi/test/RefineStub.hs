@@ -3,10 +3,11 @@
 -- | Hermetic, network-free fixtures and deterministic stub @LLM@ interpreters for
 -- the EP-18 self-refinement spec ('Shikumi.Refine').
 --
--- The whole point of a self-refinement test is that __a later attempt scores
--- better than the first__. So the stub is not a constant: it inspects the rendered
--- request and the per-sample temperature ('Options.temperature', made live by the
--- router installed above it) and answers by a rule:
+-- The whole point of a self-refinement test is that
+-- __a later attempt scores better than the first__. So the stub is not a constant:
+-- it inspects the rendered request and the per-sample temperature
+-- ('Options.temperature', made live by the router installed above it) and answers by
+-- a rule:
 --
 --   * a /classify/ call answers a label chosen by the request's temperature
 --     (@< 0.5@ → @low@, @< 1.0@ → @mid@, else @high@), so 'Shikumi.Refine.bestOfN'

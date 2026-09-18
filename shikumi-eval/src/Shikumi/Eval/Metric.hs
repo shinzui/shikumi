@@ -232,7 +232,7 @@ instance ToPrompt Grade
 instance Validatable Grade
 
 -- | The judge program: a single structured-output predictor that returns a
--- 'Grade'. The @rubricText@ becomes the signature instruction.
+-- t'Grade'. The @rubricText@ becomes the signature instruction.
 judgeProgram :: Text -> Program JudgeInput Grade
 judgeProgram rubricText = predict (judgeSig rubricText)
 
@@ -247,7 +247,7 @@ judgeSig rubricText =
 -- | LLM-as-judge: ask a model to grade the prediction against the expected
 -- output. The rubric is supplied as text; the model returns a numeric grade,
 -- decoded through the structured-output path. A decode failure surfaces as a
--- 'ShikumiError' (the per-example boundary in @evaluate@ turns it into a
+-- t'ShikumiError' (the per-example boundary in @evaluate@ turns it into a
 -- 'Shikumi.Eval.Report.MetricError'). Threads @Error ShikumiError@ because
 -- 'runProgram' does (EP-4): decode failures throw typed errors.
 modelJudge ::

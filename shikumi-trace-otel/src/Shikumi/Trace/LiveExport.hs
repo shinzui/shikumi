@@ -1,8 +1,8 @@
 -- | Live OpenTelemetry export of a shikumi 'TraceTree' (EP-17).
 --
 -- 'Shikumi.Trace.OpenTelemetry.exportTree' turns a finished tree into nested OTel
--- spans against a 'Otel.Tracer', but a bare tracer exports nothing on its own — it
--- needs a 'TracerProvider' holding a span processor that wraps an exporter. This
+-- spans against a t'OpenTelemetry.Trace.Core.Tracer', but a bare tracer exports nothing on its own — it
+-- needs a t'OpenTelemetry.Trace.Core.TracerProvider' holding a span processor that wraps an exporter. This
 -- module supplies that orchestration:
 --
 --   * 'exportTreeWith' builds a provider from a given 'SpanProcessor', makes a
@@ -35,7 +35,7 @@ import OpenTelemetry.Trace.Core qualified as Otel
 import Shikumi.Trace (TraceTree)
 import Shikumi.Trace.OpenTelemetry (exportTree)
 
--- | Build a 'TracerProvider' around the given processor, export the tree
+-- | Build a t'OpenTelemetry.Trace.Core.TracerProvider' around the given processor, export the tree
 -- through the shared 'exportTree' walker, then flush and shut the provider
 -- down. The shutdown runs under 'bracket', so an exception thrown while
 -- exporting still flushes buffered spans and releases the provider before

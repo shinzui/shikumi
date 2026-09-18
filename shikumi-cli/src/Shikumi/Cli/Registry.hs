@@ -3,13 +3,13 @@
 -- | How typed programs reach the name-based CLI.
 --
 -- A shikumi @Program i o@ is a typed value, so the CLI cannot load one from a
--- string at runtime. Instead a user registers /tasks/ in a 'Registry' keyed by
--- name; each 'Task' bundles a program with its dataset, metric, a canonical input
+-- string at runtime. Instead a user registers /tasks/ in a t'Registry' keyed by
+-- name; each t'Task' bundles a program with its dataset, metric, a canonical input
 -- (for trace/replay), the offline stub responder that makes it deterministic, and
 -- the named optimizers it supports — all sharing one @i@/@o@ behind an
 -- existential. A subcommand looks a task up by name and dispatches with every type
 -- recovered by pattern-matching, so there is no cross-existential @Typeable@
--- reunification (the EP-12 sketch's separate program/dataset/metric maps would
+-- reunification (the EP-12 sketch's separate program\/dataset\/metric maps would
 -- have needed it; bundling avoids it — see the plan's Decision Log).
 module Shikumi.Cli.Registry
   ( Task (..),
@@ -36,7 +36,7 @@ import Shikumi.Program (Program)
 data Task where
   Task ::
     (ToJSON i, ToJSON o) =>
-    -- | the program to run/evaluate/optimize/replay
+    -- | the program to run\/evaluate\/optimize\/replay
     Program i o ->
     -- | its labelled dataset
     Dataset i o ->

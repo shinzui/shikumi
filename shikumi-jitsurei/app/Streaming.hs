@@ -6,10 +6,10 @@
 -- /still returns the fully-decoded typed output/, identical to what @runProgram@
 -- would return. The blocking contract is untouched; streaming is additive surface.
 --
--- Offline, a stub streaming interpreter scripts the wire events @["Hel", "lo"]@
+-- Offline, a stub streaming interpreter scripts the wire events @[\"Hel\", "lo"]@
 -- followed by a terminal structured reply. Running a single-@Predict@ program shows
 -- the callback receive, in order: an @LmStart@ status, two field chunks, an @LmEnd@
--- status; and @streamProgram@ returns the typed @Answer "Hello"@.
+-- status; and @streamProgram@ returns the typed @Answer \"Hello\"@.
 module Main (main) where
 
 import Baikai

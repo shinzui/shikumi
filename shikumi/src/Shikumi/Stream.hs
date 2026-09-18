@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | Program-level streaming (EP-25). A new, additive entry point 'streamProgram'
--- runs a 'Program' and delivers a sequence of 'StreamEvent's to a caller-supplied
+-- runs a t'Program' and delivers a sequence of 'StreamEvent's to a caller-supplied
 -- callback as execution proceeds, while still returning the fully-decoded typed
 -- output — identical to what 'Shikumi.Program.runProgram' would return for the same
 -- input. 'runProgram'\'s blocking contract (MasterPlan integration point #4) is
@@ -18,7 +18,7 @@
 --     the fallback adapter. Native whole-JSON field chunking is /not/ promised (a
 --     JSON blob is only parseable once whole).
 --   * a __status message__ — a human-readable signal that a phase started or ended
---     ("LM call started/finished", "tool started/finished", "node started/finished").
+--     ("LM call started\/finished", "tool started\/finished", "node started\/finished").
 --     Status brackets every node, including composites; aggregating combinators
 --     ('Shikumi.Program.Map', 'Shikumi.Program.Parallel',
 --     'Shikumi.Program.MajorityVote', 'Shikumi.Program.Ensemble') and opaque
@@ -178,8 +178,8 @@ firstTextEnd evs = listToMaybe [c | TextEnd (BlockEndPayload _ c) <- evs]
 --
 -- The 'EventError' branch is retained for robustness against third-party @LLM@
 -- interpreters, but is /unreachable through shikumi's own interpreters/: they now
--- convert a terminal 'EventError' to an out-of-band 'ShikumiError' before the event
--- list ever reaches here (see 'Shikumi.LLM' — @raiseStreamError@), so a streamed
+-- convert a terminal 'EventError' to an out-of-band t'ShikumiError' before the event
+-- list ever reaches here (see "Shikumi.LLM" — @raiseStreamError@), so a streamed
 -- program fails with the real transport error, not a decode of a partial body.
 reassemble :: [AssistantMessageEvent] -> Response
 reassemble evs = case terminalPayloads of
@@ -205,10 +205,10 @@ synthResponse t =
 -- program runs under the same interpreters as a blocking one.
 --
 -- A leaf 'Predict' streams its first output field's chunks bracketed by
--- @LmStart@/@LmEnd@. Composites are bracketed by @NodeStart@/@NodeEnd@:
+-- @LmStart@\/@LmEnd@. Composites are bracketed by @NodeStart@\/@NodeEnd@:
 -- 'Compose'/'FMap' and the single-result control nodes
--- ('Retry'/'RetryWhen'/'Validate') recurse so their leaf predicts still stream;
--- the aggregating combinators ('Map'/'Parallel'/'MajorityVote'/'Ensemble') and the
+-- ('Retry'\/'RetryWhen'\/'Validate') recurse so their leaf predicts still stream;
+-- the aggregating combinators ('Map'\/'Parallel'\/'MajorityVote'\/'Shikumi.Program.Ensemble') and the
 -- opaque 'Embed' body run blocking and emit node-boundary status only (field chunks
 -- come from leaf LM calls on the single-result path).
 streamProgram ::

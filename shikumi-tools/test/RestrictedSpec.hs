@@ -1,5 +1,5 @@
 -- | EP-27 M1: the hermetic restricted-DSL evaluator behind 'restrictedInterpreter'.
--- Pure unit tests over 'runRestricted': it computes arithmetic/string/list results
+-- Pure unit tests over 'runRestricted': it computes arithmetic\/string\/list results
 -- and returns a @Left@ error message for division by zero, a parse error, or an
 -- unknown function — the recoverable errors the @programOfThought@ loop feeds back.
 module RestrictedSpec (tests) where

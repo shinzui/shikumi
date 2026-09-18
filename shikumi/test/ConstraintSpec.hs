@@ -58,7 +58,7 @@ instance FromModel BadBound
 
 instance Validatable BadBound
 
--- | Drill into @properties.<field>@ of a record schema 'Value'.
+-- | Drill into @properties.\<field\>@ of a record schema 'Value'.
 propOf :: Text -> Value -> Maybe Value
 propOf name (Object o) = do
   Object props <- KM.lookup "properties" o

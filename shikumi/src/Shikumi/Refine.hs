@@ -4,21 +4,21 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | Reward-driven self-refinement modules (EP-18): three ways to wrap an existing
--- 'Program' so its re-runs are /steered by how good the answer is/.
+-- t'Program' so its re-runs are /steered by how good the answer is/.
 --
 --   * 'bestOfN' — run the inner program @N@ times at spread temperatures, score
---     each output with a 'Reward', and keep the best (short-circuiting on a pass).
+--     each output with a t'Reward', and keep the best (short-circuiting on a pass).
 --   * 'refine' — run the inner program; on a sub-threshold output, ask an LM to
 --     write a textual critique ("advice") and feed it into the next attempt.
 --   * 'multiChainComparison' — run @M@ reasoning attempts, then make one final LM
 --     call shown all @M@ candidates and asked to synthesize a consensus answer.
 --
--- Each module is itself an ordinary 'Program' built from the existing 'embed'
+-- Each module is itself an ordinary t'Program' built from the existing 'embed'
 -- ('Shikumi.Program.Embed') leaf — /no new GADT constructor/ — so it runs under the
--- unchanged 'runProgram'/'runProgramConc', composes with every combinator, holds no
+-- unchanged 'runProgram'/'Shikumi.Program.runProgramConc', composes with every combinator, holds no
 -- optimizable 'Shikumi.Program.Params' of its own (it serializes as
 -- 'Shikumi.Program.ShapeEmbed', exactly like @FMap@), and needs no edit to
--- @paramsTraversal@/@programShape@/@setProgramParams@. This is the same pattern V1's
+-- @paramsTraversal@\/@programShape@\/@setProgramParams@. This is the same pattern V1's
 -- ReAct agent uses. The cost, accepted: the inner program's per-node params are not
 -- visible to an optimizer /through/ the wrapper (the @Embed@ body is opaque) — fine
 -- for inference-time selection\/retry modules.
@@ -94,7 +94,7 @@ import Shikumi.Signature (Signature (..), mkSignature)
 defaultSpread :: TempSchedule
 defaultSpread = TempSpread 0.7 0.6
 
--- | Run an effect that may throw a 'ShikumiError', recovering the error as a
+-- | Run an effect that may throw a t'ShikumiError', recovering the error as a
 -- 'Left' instead of propagating it (so a single failed attempt does not abort the
 -- whole loop).
 tryShikumi :: (Error ShikumiError :> es) => Eff es a -> Eff es (Either ShikumiError a)
@@ -302,7 +302,7 @@ appendHint adv ctx =
 -- | The synthesis input: the original input plus the @M@ candidate
 -- @(reasoning, answer)@ attempts. Its instances are hand-written (not
 -- @Generic@-derived) because @attempts@ is polymorphic in @o@ — the same reason
--- 'WithReasoning'\'s instances are hand-written.
+-- t'WithReasoning'\'s instances are hand-written.
 data MultiChainInput i o = MultiChainInput
   { original :: !i,
     -- | length @M@; each rendered as "Student Attempt #k"
@@ -310,7 +310,7 @@ data MultiChainInput i o = MultiChainInput
   }
 
 -- | Render the original input, then each attempt as a "Student Attempt #k" line:
--- @"I tried to <reasoning>; my answer is <answer>"@ (mirroring DSPy's rendering).
+-- @"I tried to \<reasoning\>; my answer is \<answer\>"@ (mirroring DSPy's rendering).
 instance (ToPrompt i, ToPrompt o) => ToPrompt (MultiChainInput i o) where
   toPromptFields mci =
     toPromptFields (original mci)
@@ -325,7 +325,7 @@ instance (ToPrompt i, ToPrompt o) => ToPrompt (MultiChainInput i o) where
   imageFields _ = []
   imageFieldNames _ = []
 
--- | A 'MultiChainInput' is only ever an /input/ to the synthesis 'predict' node,
+-- | A t'MultiChainInput' is only ever an /input/ to the synthesis 'predict' node,
 -- so this decoder exists to satisfy the 'Shikumi.Program.Predict' constraint (used
 -- when decoding demos, of which the synthesis node has none).
 instance (FromModel i, FromModel o) => FromModel (MultiChainInput i o) where
@@ -345,7 +345,7 @@ getField path nm o = case KM.lookup (Key.fromText nm) o of
   Just v -> fromModelP (pushField nm path) v
 
 -- | Build a synthesis signature for 'multiChainComparison'. The input is rendered
--- via 'MultiChainInput'\'s 'ToPrompt' (so the input-field metadata is empty); the
+-- via t'MultiChainInput'\'s t'ToPrompt' (so the input-field metadata is empty); the
 -- output-field metadata is derived from @o2@ so the output guide and demo
 -- rendering name the right fields.
 multiChainSig ::

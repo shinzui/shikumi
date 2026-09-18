@@ -8,12 +8,12 @@
 -- | Multimodal /input/ field types for signatures (EP-24).
 --
 -- Shikumi's V1 is text-in, text-out: every input field renders to prompt text.
--- This module adds a typed 'Image' field that lowers to baikai's native inline
+-- This module adds a typed t'Image' field that lowers to baikai's native inline
 -- image block ('Baikai.Content.ImageContent' / 'Baikai.Content.UserImage'), so a
 -- provider actually /sees/ the picture instead of receiving base64 buried in the
 -- running prose.
 --
--- 'Image' stores /decoded/ bytes plus a MIME type. base64 is purely a wire
+-- t'Image' stores /decoded/ bytes plus a MIME type. base64 is purely a wire
 -- concern that baikai handles itself (its @ToJSON ImageContent@ base64-encodes
 -- under a @data@ key), so 'imageToContent' is a direct field copy — no encoding
 -- happens here.
@@ -21,8 +21,8 @@
 -- Scope (honesty about provider limits): baikai's @UserContent@ models exactly
 -- @UserText@ and @UserImage@ today, so this module ships __image only__. Audio and
 -- document fields are upstream-gated on a new @Baikai.Content@ constructor; see the
--- EP-24 plan's "Audio and document: upstream-gated future work" section. An 'Image'
--- is __input-only__: it has no 'Shikumi.Schema.ToSchema' instance, so putting one in
+-- EP-24 plan's "Audio and document: upstream-gated future work" section. An t'Image'
+-- is __input-only__: it has no t'Shikumi.Schema.ToSchema' instance, so putting one in
 -- an /output/ record is a clean compile error (a model cannot emit raw image bytes
 -- through the structured-decode path).
 module Shikumi.Multimodal
@@ -35,7 +35,7 @@ module Shikumi.Multimodal
     -- * Lowering to baikai
     imageToContent,
 
-    -- * Generic image-field discovery (drives "Shikumi.Adapter"\'s 'Shikumi.Adapter.ToPrompt' image methods)
+    -- * Generic image-field discovery (drives "Shikumi.Adapter"\'s t'Shikumi.Adapter.ToPrompt' image methods)
     GImageFields (..),
     GImageFieldNames (..),
   )
@@ -86,7 +86,7 @@ imageFromBase64 mime b64 =
   imageFromBytes mime
     <$> first (\e -> InvalidJSON ("image base64 decode: " <> T.pack e)) (Base64.decode (encodeUtf8 b64))
 
--- | Lower an 'Image' into baikai's wire image block. Bytes pass through decoded;
+-- | Lower an t'Image' into baikai's wire image block. Bytes pass through decoded;
 -- baikai base64-encodes them only when serialising to the wire.
 imageToContent :: Image -> ImageContent
 imageToContent img = ImageContent {imageData = bytes img, mimeType = mime img}
@@ -106,18 +106,18 @@ mimeForExtension ext = case T.toLower (T.pack ext) of
 -- Generic image-field discovery
 -- ---------------------------------------------------------------------------
 --
--- These generic walks back the 'Shikumi.Adapter.ToPrompt' image methods
+-- These generic walks back the t'Shikumi.Adapter.ToPrompt' image methods
 -- ('Shikumi.Adapter.imageFields' / 'Shikumi.Adapter.imageFieldNames'): the former
--- collects an input record's 'Image' values (so the adapter lowers them to baikai
+-- collects an input record's t'Image' values (so the adapter lowers them to baikai
 -- 'Baikai.Content.UserImage' blocks), the latter names those fields (so the text
 -- renderer drops them from the prompt body). A record with no image fields yields
 -- @[]@ from both, which is exactly the regression-safe text-only path. The methods
--- live on 'Shikumi.Adapter.ToPrompt' (not a separate class) so that the single
--- @ToPrompt i@ constraint already threaded through @predict@/@Predict@/@adapterFor@
+-- live on t'Shikumi.Adapter.ToPrompt' (not a separate class) so that the single
+-- @ToPrompt i@ constraint already threaded through @predict@\/@Predict@\/@adapterFor@
 -- carries them with no new constraint anywhere; the generic defaults mean any
 -- @Generic@ input record gets both for free.
 
--- | A leaf field's images: a bare 'Image' is one image, a 'Field'-wrapped 'Image'
+-- | A leaf field's images: a bare t'Image' is one image, a t'Field'-wrapped t'Image'
 -- unwraps, and every other leaf type contributes none. This single check drives
 -- both the value collector and the field-name collector.
 class ImageLeaf t where
@@ -132,7 +132,7 @@ instance ImageLeaf Image where
 instance (ImageLeaf a) => ImageLeaf (Field d a) where
   imageLeaf (Field a) = imageLeaf a
 
--- | Collect the 'Image' values of a record's generic representation, in field
+-- | Collect the t'Image' values of a record's generic representation, in field
 -- order.
 class GImageFields (f :: Type -> Type) where
   gImageFields :: f p -> [Image]
@@ -158,7 +158,7 @@ instance GImageFields (l :+: r) where
   gImageFields _ = []
 
 -- | Collect the /names/ of a record's image fields, in field order. Emits a
--- selector's name iff its field type is an 'Image' (bare or 'Field'-wrapped).
+-- selector's name iff its field type is an t'Image' (bare or t'Field'-wrapped).
 class GImageFieldNames (f :: Type -> Type) where
   gImageFieldNames :: f p -> [Text]
 

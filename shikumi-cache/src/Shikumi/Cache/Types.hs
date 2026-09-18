@@ -2,7 +2,7 @@
 -- operational metadata needed to age and version-guard an entry.
 --
 -- The in-memory backend stores this Haskell value directly (no serialization).
--- The persistent backends (SQLite/Redis/Postgres) store its JSON encoding; the
+-- The persistent backends (SQLite\/Redis\/Postgres) store its JSON encoding; the
 -- @ToJSON@/@FromJSON@ for the baikai 'Response' graph that baikai itself does not
 -- ship in full come from "Shikumi.Cache.ResponseJSON" (imported here for their
 -- instances). Decoding an entry whose 'keyVersion' does not match the live

@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- | The 'Adapter' seam between a typed 'Signature' + input and the wire.
+-- | The t'Adapter' seam between a typed 'Signature' + input and the wire.
 -- @render@ builds a baikai @Context@+@Options@; @parse@ decodes a baikai
 -- @Response@ into the typed output via "Shikumi.Schema".
 --
@@ -14,7 +14,7 @@
 -- bounded nested decoding and offer legacy or structured demonstration rendering.
 --
 -- Native structured output is wired through a private /metadata channel/ (EP-14).
--- Because a 'Program' renders before the ambient model is known (the model is
+-- Because a t'Shikumi.Program.Program' renders before the ambient model is known (the model is
 -- supplied by an interpreter below 'Shikumi.Program.runProgram' — see
 -- "Shikumi.Routing"), 'render' cannot itself decide native-vs-fallback or build the
 -- final @responseFormat@. Instead, 'attachSchema' stamps the derived JSON schema
@@ -165,7 +165,7 @@ instance (PromptValue a) => PromptValue [a] where
 instance (PromptValue a) => PromptValue (Maybe a) where
   promptValue = maybe "" promptValue
 
--- | A 'Constrained' field renders as its inner value (the constraint is a
+-- | A t'Constrained' field renders as its inner value (the constraint is a
 -- compile-time/decode-time concern, not a prompt concern). EP-26.
 instance (PromptValue a) => PromptValue (Constrained cs a) where
   promptValue = promptValue . unConstrained
@@ -184,7 +184,7 @@ data Adapter i o = Adapter
 data ModelCapability = NativeSchema | PromptFallback
   deriving stock (Eq, Show)
 
--- | A pure capability check over a baikai 'Model'. OpenAI/Anthropic on their
+-- | A pure capability check over a baikai t'Model'. OpenAI/Anthropic on their
 -- non-CLI APIs are native-capable; CLI APIs and unknown @Custom@ hosts use the
 -- fallback. Refine as more models gain native support.
 capabilityFor :: Model -> ModelCapability
@@ -204,7 +204,7 @@ adapterFor m = case capabilityFor m of
   NativeSchema -> nativeAdapter
   PromptFallback -> fallbackAdapter
 
--- | The reserved 'Options.metadata' key under which 'attachSchema' stamps the
+-- | The reserved 'Baikai.Options.metadata' key under which 'attachSchema' stamps the
 -- derived JSON schema 'Value'. "Shikumi.Routing".@routeLLM@ reads it, turns it into
 -- @Options.responseFormat@ for native-capable models, and strips it before
 -- transport. Defined here (the lowest module both the adapter and the router share)
@@ -212,22 +212,22 @@ adapterFor m = case capabilityFor m of
 metaResponseSchemaKey :: Text
 metaResponseSchemaKey = "shikumi.responseSchema"
 
--- | The reserved 'Options.metadata' key under which 'stampTemperature' stamps a
+-- | The reserved 'Baikai.Options.metadata' key under which 'stampTemperature' stamps a
 -- per-sample temperature (a JSON number). The router reads it, sets
 -- @Options.temperature@, and strips it before transport.
 metaTemperatureKey :: Text
 metaTemperatureKey = "shikumi.temperature"
 
--- | Reserved 'Options.metadata' key carrying the full native-format system prompt
+-- | Reserved 'Baikai.Options.metadata' key carrying the full native-format system prompt
 -- (instruction + native output guide) as a JSON string. Stamped by
 -- 'Shikumi.Program.runPredict'; "Shikumi.Routing".@routeLLM@ swaps it into the
--- 'Context' for native-capable models and strips it before transport. Because
+-- t'Context' for native-capable models and strips it before transport. Because
 -- @runPredict@ renders model-agnostically (the marker prompt), this carries the
 -- native alternative so the router can install it once the real model is known.
 metaNativePromptKey :: Text
 metaNativePromptKey = "shikumi.native.systemPrompt"
 
--- | Reserved 'Options.metadata' key carrying the native-format demo assistant
+-- | Reserved 'Baikai.Options.metadata' key carrying the native-format demo assistant
 -- turns, in order, as a JSON array of strings. Same lifecycle as
 -- 'metaNativePromptKey'.
 metaNativeDemosKey :: Text
@@ -245,7 +245,7 @@ attachSchema schema opts =
 -- | Stamp the native-format system prompt and demo assistant turns onto a
 -- request's private metadata channel, under 'metaNativePromptKey' and
 -- 'metaNativeDemosKey'. Mirrors 'attachSchema': the router swaps these into the
--- 'Context' for native-capable models and strips the keys before transport.
+-- t'Context' for native-capable models and strips the keys before transport.
 attachNativeRender :: Text -> [Text] -> Options -> Options
 attachNativeRender sys demos opts =
   opts
@@ -266,7 +266,7 @@ nativeRenderPieces sig =
 
 -- | Stamp a per-sample temperature onto a request's private metadata channel under
 -- 'metaTemperatureKey'. Used by 'Shikumi.Program.runProgram' to thread a
--- 'Shikumi.Program.MajorityVote' sample's temperature down to its 'Predict' nodes;
+-- 'Shikumi.Program.MajorityVote' sample's temperature down to its 'Shikumi.Program.Predict' nodes;
 -- the router turns it into @Options.temperature@.
 stampTemperature :: Double -> Options -> Options
 stampTemperature t opts =
@@ -318,9 +318,9 @@ fallbackAdapter =
 -- ("Shikumi.Routing".@routeLLM@) picks between the native and fallback wire shapes
 -- from the model's detected 'ModelCapability' (native vs. prompt-fallback); XML is a
 -- caller choice, not a detectable capability, so 'adapterFor' never returns it. To
--- use it, hold the 'Adapter' value directly and render/parse with it inside an
+-- use it, hold the t'Adapter' value directly and render/parse with it inside an
 -- 'Shikumi.Program.embed' node — the same way 'Shikumi.Module.twoStep' drives
--- 'fallbackAdapter' by hand. A per-node adapter selector through the 'Program' GADT
+-- 'fallbackAdapter' by hand. A per-node adapter selector through the t'Shikumi.Program.Program' GADT
 -- was considered and deferred (see the parent MasterPlan's scope), as it is
 -- disproportionate to the need.
 xmlAdapter ::
@@ -337,7 +337,7 @@ xmlAdapter =
     }
 
 -- | Nested XML guides and faithful structured demonstrations (EP-55). Requires
--- 'Aeson.ToJSON' for outputs; inputs still use 'ToPrompt'. Supports generated
+-- [ToJSON]("Data.Aeson#t:ToJSON") for outputs; inputs still use t'ToPrompt'. Supports generated
 -- records, arrays, scalars and nullable schemas; other schema forms render an
 -- escaped JSON fallback. Parsing is shared with 'xmlAdapter'. Opt-in only.
 nestedXmlAdapter ::

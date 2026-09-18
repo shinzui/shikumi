@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | The content-addressed cache key (EP-6) — the MasterPlan's integration point
--- #7. A 'CacheKey' is a BLAKE3 256-bit digest (64 lowercase hex chars) over a
+-- #7. A t'CacheKey' is a BLAKE3 256-bit digest (64 lowercase hex chars) over a
 -- /canonical/ JSON serialization of everything about a request that can change
 -- the model's answer: the model routing identity including base URL, model
 -- default headers, and compat shim; per-call headers; the rendered prompt with
@@ -15,7 +15,7 @@
 -- 'currentKeyVersion'; a bump invalidates all cache entries and makes previously
 -- recorded @shikumi-trace@ files unreplayable, with replay failing closed via
 -- @ReplayDivergence@. The replay engine in
--- @docs/plans/7-hierarchical-tracing-observability-and-replay.md@ (EP-7) reuses
+-- @docs\/plans\/7-hierarchical-tracing-observability-and-replay.md@ (EP-7) reuses
 -- 'cacheKey' verbatim, so both plans agree byte-for-byte; the golden test in the
 -- test suite pins the exact hex for a fixed request to catch any drift.
 module Shikumi.Cache.Key
@@ -48,7 +48,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 
 -- | The current cache key-namespace version. Baked into every hashed request
--- (the @version@ field) and into 'Shikumi.Cache.Types.CachedResponse.keyVersion'.
+-- (the @version@ field) and into 'Shikumi.Cache.Types.keyVersion'.
 -- Bumping it changes every key, making all prior entries unreachable — a clean
 -- invalidation with no row deletion. Because @shikumi-trace@ stores cache keys
 -- in trace files and recomputes them during replay, a version bump also makes
@@ -113,7 +113,7 @@ requestToCanonicalValueVersioned version m ctx opts =
     toScientific = realToFrac
 
 -- | Delete the payload-level @timestamp@ of every message in a serialized
--- message vector. baikai's 'Baikai.Message.Message' encodes as
+-- message vector. baikai's t'Baikai.Message.Message' encodes as
 -- @{"tag": ..., "contents": {..., "timestamp": ...}}@; the timestamp records
 -- when the message value was built, never what the provider sees, so two
 -- requests differing only in it must share a cache key. Only the

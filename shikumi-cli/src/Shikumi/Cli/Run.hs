@@ -192,7 +192,7 @@ tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
 -- | The OTLP endpoint to name in the export-summary line. Echoes the same standard
--- variable the OTLP exporter itself reads ('OTEL_EXPORTER_OTLP_ENDPOINT'); the
+-- variable the OTLP exporter itself reads (@OTEL_EXPORTER_OTLP_ENDPOINT@); the
 -- actual endpoint resolution lives in the exporter, this is purely cosmetic.
 otlpEndpointForMessage :: IO Text
 otlpEndpointForMessage =

@@ -2,16 +2,16 @@
 
 -- | The two types this plan (EP-9) owns and the verbs over them.
 --
--- A 'Compiler' is a /pure/ @Program -> Program@ rewrite that bakes a prompting
+-- A t'Compiler' is a /pure/ @Program -> Program@ rewrite that bakes a prompting
 -- strategy into a program — it sets per-node parameters (zero-shot, few-shot) or
 -- rewrites structure (chain-of-thought, RAG). It is emphatically /not/ a search:
 -- it never calls the LM to try variations and keep the best (that is the optimizer,
--- @docs/plans/10-optimizer-framework.md@).
+-- @docs\/plans\/10-optimizer-framework.md@).
 --
--- A 'CompiledProgram' is the result of compilation — a phantom-marked 'Program'
+-- A t'CompiledProgram' is the result of compilation — a phantom-marked t'Program'
 -- that says "these parameters are intentional, this program is ready to
--- run/serialize/optimize". It is MasterPlan integration point #6: the optimizer
--- (EP-10) emits one and the CLI (EP-12) loads/runs/saves one.
+-- run\/serialize\/optimize". It is MasterPlan integration point #6: the optimizer
+-- (EP-10) emits one and the CLI (EP-12) loads\/runs\/saves one.
 --
 -- __Why a newtype, not a side table of frozen parameters.__ EP-4
 -- (@Shikumi.Program@) already stores each node's 'Shikumi.Program.Params' /inside/
@@ -38,14 +38,14 @@ import Shikumi.Program (Program, runProgram)
 -- | A pure rewrite of a program. The @forall i o@ is the key design move: a
 -- compiler must apply to /any/ program regardless of its input/output types
 -- (few-shot demos are type-agnostic JSON, an instruction string is type-agnostic,
--- the chain-of-thought rewrite is uniform), so a single 'Compiler' value
+-- the chain-of-thought rewrite is uniform), so a single t'Compiler' value
 -- ('identity', 'Shikumi.Compile.ZeroShot.zeroShot', …) is usable everywhere.
 -- @RankNTypes@ (on by default in GHC2024) makes the rank-2 field legal.
 newtype Compiler = Compiler
   { runCompiler :: forall i o. Program i o -> Program i o
   }
 
--- | A program that has been through a 'Compiler'. A newtype over 'Program' — the
+-- | A program that has been through a t'Compiler'. A newtype over t'Program' — the
 -- parameters live on the nodes (see the module header).
 newtype CompiledProgram i o = CompiledProgram
   { compiledProgram :: Program i o
@@ -58,10 +58,10 @@ newtype CompiledProgram i o = CompiledProgram
 compile :: Compiler -> Program i o -> CompiledProgram i o
 compile (Compiler f) = CompiledProgram . f
 
--- | Run a compiled program. Identical to running the wrapped 'Program', so it
+-- | Run a compiled program. Identical to running the wrapped t'Program', so it
 -- inherits EP-4's @runProgram@ constraint exactly (MasterPlan integration point
 -- #4): @(LLM :> es, Error ShikumiError :> es)@ — the decode path throws typed
--- 'ShikumiError's.
+-- t'ShikumiError's.
 runCompiled ::
   (LLM :> es, Error ShikumiError :> es) =>
   CompiledProgram i o ->

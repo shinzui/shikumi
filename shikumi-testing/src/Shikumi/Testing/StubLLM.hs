@@ -44,7 +44,7 @@ import Shikumi.Program (Program, runProgram)
 import Shikumi.Testing.Response (mkTextResponse)
 
 -- | The base @LLM@ interpreter: answer every completion from a deterministic
--- function of the request 'Context'. Stateless, so it needs no @IOE@. Pass
+-- function of the request t'Context'. Stateless, so it needs no @IOE@. Pass
 -- @const r@ for a constant answer, or branch on the request (see 'systemContains')
 -- to give a multi-stage pipeline a different answer per stage.
 runStubLLM :: (Context -> Response) -> Eff (LLM : es) a -> Eff es a
@@ -52,8 +52,8 @@ runStubLLM responder = interpret $ \_ -> \case
   Complete _ c _ -> pure (responder c)
   Stream {} -> pure []
 
--- | Run a single 'Program' against the stub LM, returning the typed output or a
--- typed 'ShikumiError'.
+-- | Run a single t'Program' against the stub LM, returning the typed output or a
+-- typed t'ShikumiError'.
 runStub :: (Context -> Response) -> Program i o -> i -> IO (Either ShikumiError o)
 runStub responder prog input =
   runEff . runErrorNoCallStack . runStubLLM responder $ runProgram prog input
@@ -61,7 +61,7 @@ runStub responder prog input =
 -- | Run an evaluation/optimization action offline against the stub LM. Provides
 -- exactly the effect row @evaluate@ / @optimize@ require
 -- (@LLM@, @Concurrent@, @Error ShikumiError@, @Time@, @IOE@). @Time@ is shikumi's
--- own clock effect ('Shikumi.Effect.Time'), discharged here by 'runTime' against
+-- own clock effect ("Shikumi.Effect.Time"), discharged here by 'runTime' against
 -- the real system clock — fine for an offline stub run because only latency
 -- timing reads it.
 runStubEval ::
@@ -88,7 +88,7 @@ runScriptLLM script act = do
     )
     act
 
--- | Run a 'Program' (typically a ReAct agent) against a scripted LM.
+-- | Run a t'Program' (typically a ReAct agent) against a scripted LM.
 runAgent :: [Response] -> Program i o -> i -> IO (Either ShikumiError o)
 runAgent script prog input =
   runEff . runErrorNoCallStack . runScriptLLM script $ runProgram prog input
@@ -152,7 +152,7 @@ pop ref = atomicModifyIORef' ref step
 
 -- | Answer every completion with a fixed 'Response', bumping a counter — the
 -- shape cache MISS/HIT tests assert against. (The cache backend suites carry a
--- private copy; see docs/plans/49-… Decision Log for why they are not migrated here.)
+-- private copy; see docs\/plans\/49-… Decision Log for why they are not migrated here.)
 runCountingLLM :: (IOE :> es) => IORef Int -> Response -> Eff (LLM : es) a -> Eff es a
 runCountingLLM ref resp = interpret $ \_ -> \case
   Complete {} -> liftIO (modifyIORef' ref (+ 1)) >> pure resp

@@ -1,5 +1,5 @@
 -- | The Pareto-frontier bookkeeping for GEPA (EP-22): a pure, effect-free module so
--- the frontier logic is trivially testable and reproducible. A 'Candidate' is a
+-- the frontier logic is trivially testable and reproducible. A t'Candidate' is a
 -- program identified by its node-parameter vector, carrying its per-example score
 -- vector and aggregate. Keeping the /frontier/ (rather than one global best)
 -- preserves candidates that win on some examples even if not best on average — the

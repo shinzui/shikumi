@@ -1,11 +1,11 @@
--- | The evaluation report and its aggregation. A 'Report' summarises a run over
+-- | The evaluation report and its aggregation. A t'Report' summarises a run over
 -- a dataset: the mean per-example score, pass/fail counts, summed token usage and
--- cost, summed per-example latency, and a per-example breakdown ('ExampleResult',
+-- cost, summed per-example latency, and a per-example breakdown ([ExampleResult]("Shikumi.Eval.Report#t:ExampleResult"),
 -- retained in dataset order for failure analysis). 'mkReport' is the pure aggregator;
 -- 'renderReportText' is a deterministic human-readable rendering reused by the
--- CLI (@docs/plans/12-cli-and-developer-experience.md@) and by golden tests.
+-- CLI (@docs\/plans\/12-cli-and-developer-experience.md@) and by golden tests.
 --
--- 'EvalConfig' carries the run knobs (bounded 'concurrency', the 'FailurePolicy'
+-- t'EvalConfig' carries the run knobs (bounded 'concurrency', the 'FailurePolicy'
 -- for per-example errors, optional per-example timeout, and 'numSamples' per example
 -- for multi-sample metrics); 'defaultEvalConfig' scores failures @0@ and keeps going.
 module Shikumi.Eval.Report
@@ -47,7 +47,7 @@ import Shikumi.LLM.Observation (BillingSummary, UsageRecord (..), renderBillingS
 
 -- | The reason an example did not complete normally.
 data FailureReason
-  = -- | @runProgram@ threw a 'Shikumi.Error.ShikumiError' (rendered to text)
+  = -- | @runProgram@ threw a t'Shikumi.Error.ShikumiError' (rendered to text)
     ProgramError !Text
   | -- | the metric itself failed (an effectful metric raised an error)
     MetricError !Text
@@ -84,7 +84,7 @@ data UsageTotals = UsageTotals
   }
   deriving stock (Eq, Show)
 
--- | The zero of 'UsageTotals'.
+-- | The zero of t'UsageTotals'.
 emptyUsageTotals :: UsageTotals
 emptyUsageTotals = UsageTotals 0 0 0 0 Nothing 0
 
@@ -118,7 +118,7 @@ instance Monoid UsageTotals where
 
 -- | Knobs for an evaluation run.
 data EvalConfig = EvalConfig
-  { -- | max examples evaluated at once (forced to @>= 1@ by 'evaluate')
+  { -- | max examples evaluated at once (forced to @>= 1@ by 'Shikumi.Eval.Evaluate.evaluate')
     concurrency :: !Int,
     failurePolicy :: !FailurePolicy,
     -- | wall-clock budget per example in milliseconds; 'Nothing' means no timeout
