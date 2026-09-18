@@ -218,7 +218,7 @@ renderElement name schema value = wrap name body
         | otherwise -> escape t
       _ -> escape (json value)
 
--- | Guide for generated record/array/scalar/nullable schemas. Other hand-written
+-- | Guide for generated record\/array\/scalar\/nullable schemas. Other hand-written
 -- schema forms use escaped JSON values and are checked by the typed decoder.
 xmlSchemaGuide :: [Text] -> Value -> Text
 xmlSchemaGuide names schema =

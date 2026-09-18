@@ -1,7 +1,7 @@
 -- | The shared search-state plumbing every concrete optimizer reuses: the pure
 -- 'selectBest' fold, the @evaluate@-backed 'scoreOn' scorer, and 'freezeProgram'.
 --
--- This module sits /below/ both 'Shikumi.Optimize' (which re-exports it) and the
+-- This module sits /below/ both "Shikumi.Optimize" (which re-exports it) and the
 -- four optimizer modules (which import it), so there is no import cycle: the
 -- optimizers depend on the plumbing, not on the public driver.
 --
@@ -92,7 +92,7 @@ tryCharge meter n =
       else (calls, False)
 
 -- | The predicted LM-call cost of scoring @p@ over @ds@ once: one call per
--- example per 'Predict' node. Wrappers that re-run the LM can spend more.
+-- example per 'Shikumi.Program.Predict' node. Wrappers that re-run the LM can spend more.
 scoringCost :: Dataset i o -> Program i o -> Int
 scoringCost ds p = datasetSize ds * max 1 (length (foldParams p))
 

@@ -2,10 +2,10 @@
 
 -- | The sandbox as a swappable /value/ (EP-27).
 --
--- A 'CodeInterpreter' takes a string of model-emitted code and returns either a
+-- A t'CodeInterpreter' takes a string of model-emitted code and returns either a
 -- recoverable error message (fed back to the model) or the code's textual output.
 -- It is captured in an 'Shikumi.Program.Embed' closure exactly as a
--- 'Shikumi.Tool.ToolRegistry' is — never added to the effect row — because the
+-- t'Shikumi.Tool.ToolRegistry' is — never added to the effect row — because the
 -- @Embed@ body is fixed to the row @(LLM, Error ShikumiError)@. The hermetic
 -- interpreters here are /pure/ (they ignore the effects and 'pure' their result), so
 -- they fit inside any row.
@@ -17,12 +17,12 @@
 -- and evaluates it purely — there is no syscall it can make, no filesystem, no
 -- network, no unbounded loop primitive (a step/expression-size cap bounds runtime and
 -- returns a typed error past it). The dangerous path is a real subprocess
--- interpreter (DSPy uses a @deno@/Pyodide sandbox); that is intentionally /not/
+-- interpreter (DSPy uses a @deno@\/Pyodide sandbox); that is intentionally /not/
 -- shipped here. A future, gated, non-CI @subprocessInterpreter@ (EP-27 M4) would have
 -- to enforce, at minimum: no network; no host filesystem access beyond a single fresh
--- scratch dir; no environment inheritance; CPU/memory/wall-clock limits (killing the
+-- scratch dir; no environment inheritance; CPU\/memory\/wall-clock limits (killing the
 -- child and surfacing a 'Shikumi.Error.Timeout'); and loud failure (any limit breach
--- becomes a 'Shikumi.Error.ShikumiError', never a silent empty result). The effect
+-- becomes a t'Shikumi.Error.ShikumiError', never a silent empty result). The effect
 -- row does not type-enforce purity: the built-in tool environments already perform
 -- real IO inside the same row via 'Shikumi.Tool.Env.toolIO' and
 -- 'Shikumi.Tool.Web.httpIO'. The hermeticity of the shipped interpreters is a
@@ -34,7 +34,7 @@
 --
 -- A single expression (optionally prefixed @result = @), built from: integer and
 -- rational literals, unary minus, and @+ - * /@ with parentheses; string literals
--- with @\"@, @\\@, @\n@, and @\t@ escapes plus @++@ concatenation and the functions
+-- with @\\"@, @\\\\@, @\\n@, and @\\t@ escapes plus @++@ concatenation and the functions
 -- @len@, @upper@, @lower@; and list literals @[a, b, …]@ with @sum@, @length@,
 -- @concat@. The value of the expression is rendered to text as the output. A parse
 -- error, an unknown identifier/function, a type error, division by zero, or
@@ -66,7 +66,7 @@ import Text.Read (readMaybe)
 -- | A sandbox as a plain value: run a code string, get back either a recoverable
 -- error message (@Left@, fed to the model) or the program's textual output
 -- (@Right@). A genuine infrastructure failure (e.g. a real subprocess dying) would
--- be thrown as a 'ShikumiError' from inside 'runCode'; the hermetic interpreters
+-- be thrown as a t'ShikumiError' from inside 'runCode'; the hermetic interpreters
 -- never do that.
 newtype CodeInterpreter = CodeInterpreter
   { runCode :: forall es. (LLM :> es, Error ShikumiError :> es) => Text -> Eff es (Either Text Text)

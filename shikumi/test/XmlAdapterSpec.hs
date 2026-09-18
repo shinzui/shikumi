@@ -58,7 +58,7 @@ xmlBody =
       "</note>"
     ]
 
--- | The same body with the @<bullets>@ tag omitted (required field missing).
+-- | The same body with the @\<bullets\>@ tag omitted (required field missing).
 xmlBodyNoBullets :: Text
 xmlBodyNoBullets =
   T.intercalate

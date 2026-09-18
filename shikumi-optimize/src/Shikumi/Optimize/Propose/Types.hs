@@ -2,8 +2,8 @@
 -- field-metadata accessor (integration point #3), the instruction-history vocabulary,
 -- and the proposer's request/result records.
 --
--- This is the contract MIPROv2 (@docs/plans/20-miprov2-optimizer.md@) and COPRO
--- (@docs/plans/21-copro-instruction-optimizer.md@) both consume, so it lives in its
+-- This is the contract MIPROv2 (@docs\/plans\/20-miprov2-optimizer.md@) and COPRO
+-- (@docs\/plans\/21-copro-instruction-optimizer.md@) both consume, so it lives in its
 -- own module — neither optimizer drags in @instructionSearch@'s loop to use it.
 module Shikumi.Optimize.Propose.Types
   ( -- * Per-node field metadata (integration point #3)
@@ -26,8 +26,8 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Shikumi.Program (NodeFields (NodeFields), Program, nodeFieldsIndexed)
 
--- | A node's input/output field names, recovered structurally. A 'Predict' node
--- hides its @i@/@o@ types existentially, so this carries the field /names/ (plain
+-- | A node's input/output field names, recovered structurally. A 'Shikumi.Program.Predict' node
+-- hides its @i@\/@o@ types existentially, so this carries the field /names/ (plain
 -- 'Text'), never a typed @Signature@ — exactly what EP-16's @nodeFieldsIndexed@
 -- returns.
 data NodeFieldNames = NodeFieldNames
@@ -36,7 +36,7 @@ data NodeFieldNames = NodeFieldNames
   }
   deriving stock (Eq, Show, Generic)
 
--- | One 'NodeFieldNames' per 'Predict' node, in @foldParams@/@mapParamsAt@ order
+-- | One t'NodeFieldNames' per 'Shikumi.Program.Predict' node, in @foldParams@/@mapParamsAt@ order
 -- (integration point #3). Delegates to EP-16's @nodeFieldsIndexed@; the count and
 -- ordering align with @foldParams@ by construction, so
 -- @programFieldNames prog !! k@ describes the node @mapParamsAt k@ edits.
@@ -62,7 +62,7 @@ data PastInstruction = PastInstruction
   }
   deriving stock (Eq, Show, Generic)
 
--- | Render the instruction history as lines @"score 0.83 :: <instruction>"@, capped
+-- | Render the instruction history as lines @"score 0.83 :: \<instruction\>"@, capped
 -- at @maxInHistory@ entries. Empty history renders as @"No previous instructions."@
 -- so the proposal prompt is always well-formed.
 renderHistory :: Int -> [PastInstruction] -> Text

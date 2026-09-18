@@ -1,12 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 -- | The signal-gatherers of the grounded proposer (EP-19) that are themselves typed
--- Shikumi 'Program's — preserving V1's "the optimizer is written in the framework it
+-- Shikumi t'Program's — preserving V1's "the optimizer is written in the framework it
 -- optimizes" pattern. Each mirrors a DSPy proposer sub-module:
 --
 --   * 'renderProgramPseudo' / 'programDescriber' — DSPy's @DescribeProgram@: render
 --     the whole program as deterministic pseudo-code and describe what it does.
---   * 'datasetDescriber' / 'observationSummarizer' / 'datasetSummary' — DSPy's
+--   * 'datasetDescriber' \/ 'observationSummarizer' \/ 'datasetSummary' — DSPy's
 --     @DatasetDescriptor@ + @ObservationSummarizer@: observe patterns across sampled
 --     rows, then condense them into a 2-3 sentence summary.
 --   * 'moduleDescriber' — DSPy's @DescribeModule@: describe one node's role within
@@ -68,7 +68,7 @@ import Shikumi.Signature (mkSignature)
 -- ---------------------------------------------------------------------------
 
 -- | Render a program as a short, deterministic, human-readable outline: one line
--- per node and combinator, with 'Predict' nodes shown as @predict(inputs) ->
+-- per node and combinator, with 'Shikumi.Program.Predict' nodes shown as @predict(inputs) ->
 -- outputs@ (using 'programFieldNames') and combinators shown by name. Shikumi's
 -- analogue of DSPy's @get_dspy_source_code@. Deterministic, so tests can assert on it.
 renderProgramPseudo :: Program i o -> Text
@@ -95,11 +95,11 @@ renderProgramPseudo prog = T.intercalate "\n" (fst (go (programShape prog) (prog
        in ((name <> ":") : map ("  " <>) lns, rest)
     commas xs = if null xs then "?" else T.intercalate ", " xs
 
--- | Render a single dataset example as @<input-json> => <expected-json>@.
+-- | Render a single dataset example as @\<input-json\> => \<expected-json\>@.
 renderExampleRow :: (ToJSON i, ToJSON o) => Example i o -> Text
 renderExampleRow (Example i o) = encodeJsonText i <> " => " <> encodeJsonText o
 
--- | Encode any 'ToJSON' value to compact 'Text'.
+-- | Encode any t'ToJSON' value to compact 'Text'.
 encodeJsonText :: (ToJSON a) => a -> Text
 encodeJsonText = TL.toStrict . encodeToLazyText
 

@@ -2,9 +2,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | @codeAct@ (EP-27): a multi-turn loop where each /action/ is a code snippet that
--- may call provided tools, accumulating a 'Trajectory', then extracting the typed
+-- may call provided tools, accumulating a t'Trajectory', then extracting the typed
 -- answer. It mirrors DSPy's @CodeAct@ (a ReAct loop whose action is code) and reuses
--- 'Shikumi.Agent.ReAct'\'s @Trajectory@/@Step@/@Termination@ data model.
+-- "Shikumi.Agent.ReAct"\'s @Trajectory@\/@Step@\/@Termination@ data model.
 --
 -- The hermetic restricted interpreter does not itself call host functions, so tool
 -- use is handled at the /protocol/ level: a snippet of the exact form
@@ -74,7 +74,7 @@ codeAct ::
   Program i o
 codeAct sig reg = FMap fst (codeActWithTrajectory defaultCodeActConfig sig reg)
 
--- | Build a @codeAct@ agent that also returns the recorded 'Trajectory'.
+-- | Build a @codeAct@ agent that also returns the recorded t'Trajectory'.
 codeActWithTrajectory ::
   (ToPrompt i, ToSchema o, FromModel o, Validatable o) =>
   CodeActConfig ->
@@ -184,7 +184,7 @@ codeActLoop cfg sig reg i = do
     turnSys = getInstruction sig <> "\n\n" <> toolMenu reg <> "\n\n" <> codeActGuide
     extractSys = getInstruction sig <> "\n\n" <> schemaInstruction (toSchema (Proxy @o))
 
--- | Parse a model turn @{"code": "...", "finished": <bool>}@ (fences stripped).
+-- | Parse a model turn @{"code": "...", "finished": \<bool\>}@ (fences stripped).
 parseCodeReply :: Text -> Either Text (Text, Bool)
 parseCodeReply raw = case eitherDecodeStrict (encodeUtf8 (stripFences raw)) of
   Left e -> Left ("not valid JSON: " <> T.pack e)
@@ -199,7 +199,7 @@ parseCodeReply raw = case eitherDecodeStrict (encodeUtf8 (stripFences raw)) of
     pure (code, fin)
   Right _ -> Left "expected a JSON object"
 
--- | Recognize a tool-call snippet @call("name", <argsJSON>)@, decoding the name and
+-- | Recognize a tool-call snippet @call("name", \<argsJSON\>)@, decoding the name and
 -- arguments. Anything else returns 'Nothing' (it is handed to the sandbox).
 parseCall :: Text -> Maybe (Text, Value)
 parseCall code = do

@@ -5,19 +5,19 @@
 -- | Typed tools and their lowering to baikai's wire tool — the MasterPlan's
 -- integration point #8, owned here and nowhere else.
 --
--- A @'Tool' i o@ is a named function from an input record @i@ to an output @o@,
+-- A @t'Tool' i o@ is a named function from an input record @i@ to an output @o@,
 -- runnable in any effect stack that has the @LLM@ and @Error ShikumiError@
 -- capabilities (so a tool body may itself call sub-models and may signal failure
 -- through the typed error channel — see the plan's Decision Log on why the row is
 -- @(LLM, Error ShikumiError)@ rather than @IOE@). From a tool shikumi derives the
--- JSON Schema of @i@ (reusing 'Shikumi.Schema'), lowers it to baikai's untyped
+-- JSON Schema of @i@ (reusing "Shikumi.Schema"), lowers it to baikai's untyped
 -- @Baikai.Tool { name, description, parameters }@, decodes the model's argument
--- JSON into a typed @i@ (or a 'ToolError', never a crash), runs the body, and
+-- JSON into a typed @i@ (or a t'ToolError', never a crash), runs the body, and
 -- encodes the @o@ result back to observation text.
 --
--- Heterogeneity is handled by the 'SomeTool' existential: it hides @i@/@o@ while
--- retaining, at wrap time, the schema/decode/encode dictionaries the wire boundary
--- needs. A 'ToolRegistry' is a name-keyed map of 'SomeTool's that a ReAct loop
+-- Heterogeneity is handled by the t'SomeTool' existential: it hides @i@/@o@ while
+-- retaining, at wrap time, the schema\/decode\/encode dictionaries the wire boundary
+-- needs. A t'ToolRegistry' is a name-keyed map of t'SomeTool's that a ReAct loop
 -- dispatches against by the tool name the model emits at run time.
 module Shikumi.Tool
   ( -- * Typed tools
@@ -87,8 +87,8 @@ data Tool i o = Tool
   }
 
 -- | Build a tool from a name, a description, and an effectful body. A pure tool is
--- just @\\i -> pure (f i)@. The schema/decode/encode dictionaries are not needed
--- here — they are captured later, at 'SomeTool' wrap time.
+-- just @\\i -> pure (f i)@. The schema\/decode\/encode dictionaries are not needed
+-- here — they are captured later, at t'SomeTool' wrap time.
 mkTool ::
   Text ->
   Text ->
@@ -159,7 +159,7 @@ lowerSomeTool (DynTool n d s _) = emptyTool & #name .~ n & #description .~ d & #
 
 -- | Run an erased tool against a raw JSON arguments object: decode to the hidden
 -- @i@, run the body, encode the @o@ to text. A decode failure becomes
--- 'ToolArgsInvalid', a body that throws a recoverable 'ShikumiError' becomes
+-- 'ToolArgsInvalid', a body that throws a recoverable t'ShikumiError' becomes
 -- 'ToolRunFailed', and a body that throws an infrastructure error
 -- ('isInfraToolError') rethrows to abort the caller's loop.
 runErased ::
@@ -216,17 +216,17 @@ registryTools (ToolRegistry m) = Map.elems m
 -- | A tool-call failure carried as a /value/. The agent feeds the rendered text
 -- back to the model as an observation so it can recover, and records it in the
 -- trajectory; infrastructure faults ('isInfraToolError': budget and
--- context-window exhaustion) bubble up as a 'ShikumiError' and abort the loop.
+-- context-window exhaustion) bubble up as a t'ShikumiError' and abort the loop.
 data ToolError
   = -- | the model named a tool the registry does not have
     ToolNotFound !Text
   | -- | tool name, decode-error message: the arguments did not match @i@
     ToolArgsInvalid !Text !Text
-  | -- | tool name, failure message: the body signalled a 'ShikumiError'
+  | -- | tool name, failure message: the body signalled a t'ShikumiError'
     ToolRunFailed !Text !Text
   deriving stock (Show, Eq)
 
--- | Render a 'ToolError' as the observation text fed back to the model.
+-- | Render a t'ToolError' as the observation text fed back to the model.
 renderToolError :: ToolError -> Text
 renderToolError = \case
   ToolNotFound nm -> "Error: no such tool \"" <> nm <> "\"."
@@ -262,7 +262,7 @@ encodeText = decodeUtf8 . LBS.toStrict . encode
 shikumiErrorText :: ShikumiError -> Text
 shikumiErrorText = renderShikumiError
 
--- | Which 'ShikumiError's must escape the agent loop rather than become
+-- | Which t'ShikumiError's must escape the agent loop rather than become
 -- observations. Budget and context-window exhaustion are infrastructure faults:
 -- the model cannot recover from them by reading an observation, and continuing
 -- the loop would either overspend (budget) or deterministically re-fail

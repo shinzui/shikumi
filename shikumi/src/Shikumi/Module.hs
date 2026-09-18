@@ -3,9 +3,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | The two foundational /modules/ of shikumi (EP-4): @predict@ and
--- @chainOfThought@. These are ordinary functions that build 'Program' values out
+-- @chainOfThought@. These are ordinary functions that build t'Program' values out
 -- of the three core constructors — not new constructors. This is the pattern the
--- combinators in @docs/plans/5-module-combinators-and-control-flow.md@ follow.
+-- combinators in @docs\/plans\/5-module-combinators-and-control-flow.md@ follow.
 --
 -- @chainOfThought@ extends the output signature with a leading @reasoning@ field
 -- (DSPy's @ChainOfThought@), producing a @Program i (WithReasoning o)@, then
@@ -14,7 +14,7 @@
 -- node, so its instruction and demos are visible to @paramsTraversal@ like any
 -- other node — the optimizer tunes a chain-of-thought node with no special casing.
 --
--- @WithReasoning@'s schema/decode/prompt instances are hand-written rather than
+-- @WithReasoning@'s schema\/decode\/prompt instances are hand-written rather than
 -- @Generic@-derived: its @value@ field is polymorphic in @o@, and the schema
 -- classes' overlappable per-field instances cannot be resolved for an abstract
 -- type variable. EP-3 exposes no @withReasoningField@, so the (nested) augmentation
@@ -112,12 +112,12 @@ instance (FromModel o) => FromModel (WithReasoning o) where
         <*> getField path "value" o
     _ -> Left (SchemaMismatch (renderPath path <> ": expected object"))
 
--- Render without leaning on @o@'s @Show@: reuse @o@'s own 'ToPrompt'.
+-- Render without leaning on @o@'s @Show@: reuse @o@'s own t'ToPrompt'.
 instance (ToPrompt o) => ToPrompt (WithReasoning o) where
   toPromptFields wr = ("reasoning", reasoning wr) : toPromptFields (value wr)
 
   -- @value@ is polymorphic in @o@, so the generic image walk cannot resolve; a
-  -- 'WithReasoning' is a text-only output wrapper and carries no image fields.
+  -- t'WithReasoning' is a text-only output wrapper and carries no image fields.
   imageFields _ = []
   imageFieldNames _ = []
 
@@ -151,7 +151,7 @@ chainOfThoughtRaw sig = Predict (withReasoningField sig) emptyParams
 -- | Augment a signature's output with a leading @reasoning@ field and amend its
 -- instruction to ask for step-by-step reasoning before the answer. The input
 -- field metadata is carried over from the source signature; the output metadata is
--- the two fields of 'WithReasoning' (matching its hand-written schema).
+-- the two fields of t'WithReasoning' (matching its hand-written schema).
 --
 -- Note: signature-level demos are /not/ carried onto the reasoning-augmented
 -- node (@demos = []@), because a @Demo i o@ cannot be turned into a

@@ -4,7 +4,7 @@
 --
 -- The model writes code, a sandbox runs it, and the result feeds back into a typed
 -- answer. Both are ordinary @Program@s (built on @embed@), runnable offline against
--- the hermetic 'restrictedInterpreter' (a tiny arithmetic/string/list DSL — no
+-- the hermetic 'restrictedInterpreter' (a tiny arithmetic\/string\/list DSL — no
 -- network, no filesystem, no syscalls).
 --
 --   * @programOfThought@ asks for a snippet that /computes/ the answer, runs it, and

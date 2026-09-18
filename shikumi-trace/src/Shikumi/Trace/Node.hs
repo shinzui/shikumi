@@ -2,7 +2,7 @@
 
 -- | Node identity for the trace (EP-16, M1).
 --
--- A 'NodePath' names a 'Shikumi.Program.Program' node's structural position as the
+-- A t'NodePath' names a t'Shikumi.Program.Program' node's structural position as the
 -- list of branch steps from the program root. 'programNodePaths' enumerates the
 -- path of every @Predict@ node in /exactly/ the left-to-right depth-first order
 -- 'Shikumi.Program.foldParams' yields their @Params@ — so @programNodePaths p !! n@
@@ -43,7 +43,7 @@ import Shikumi.Program
   )
 
 -- | One structural step from a parent node to a child, naming which branch was
--- taken. The labels mirror the 'Shikumi.Program.Program' constructors so a path is
+-- taken. The labels mirror the t'Shikumi.Program.Program' constructors so a path is
 -- human-readable and shape-stable: two programs of the same shape yield identical
 -- paths.
 data NodeStep
@@ -72,14 +72,14 @@ data NodeStep
   deriving stock (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | The structural position of a node within a 'Shikumi.Program.Program', as the
+-- | The structural position of a node within a t'Shikumi.Program.Program', as the
 -- list of steps from the program root to that node, outermost first. A bare
 -- root @Predict@ has the empty path.
 newtype NodePath = NodePath [NodeStep]
   deriving stock (Eq, Ord, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
 
--- | Enumerate the 'NodePath' of every @Predict@ node, in the same left-to-right
+-- | Enumerate the t'NodePath' of every @Predict@ node, in the same left-to-right
 -- depth-first order as 'Shikumi.Program.foldParams'. Reuses that identical descent
 -- so length and node order agree by construction.
 programNodePaths :: Program i o -> [NodePath]
@@ -100,7 +100,7 @@ programNodePaths = go []
     go prefix (Ensemble ps _) = concat (zipWith (\i p -> go (StepEnsemble i : prefix) p) [0 ..] ps)
     go _ (Embed _) = []
 
--- | Render a 'NodePath' to a short, stable string (e.g. @compose.0/predict@-style
+-- | Render a t'NodePath' to a short, stable string (e.g. @compose.0/predict@-style
 -- slash-joined steps), suitable as a trace/OTel attribute value. The empty path
 -- renders as @\"root\"@.
 renderNodePath :: NodePath -> Text
@@ -120,8 +120,8 @@ renderNodePath (NodePath steps) = T.intercalate "/" (map stepLabel steps)
       StepMajorityVote -> "majorityVote"
       StepEnsemble i -> "ensemble." <> T.pack (show i)
 
--- | Associate each @Predict@ node's 'NodePath' with its input/output field names.
--- A consumer with a 'NodePath' from a trace span zips against this to map
+-- | Associate each @Predict@ node's t'NodePath' with its input/output field names.
+-- A consumer with a t'NodePath' from a trace span zips against this to map
 -- path → field metadata; one with a @foldParams@ index uses
 -- 'Shikumi.Program.nodeFieldsIndexed' directly.
 nodeFields :: Program i o -> [(NodePath, NodeFields)]

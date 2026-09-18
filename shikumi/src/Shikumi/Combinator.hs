@@ -1,5 +1,5 @@
 -- | The ergonomic combinator surface (EP-5): operators and smart constructors
--- that assemble small typed 'Program's into larger ones. The runtime behaviour
+-- that assemble small typed t'Program's into larger ones. The runtime behaviour
 -- lives in the GADT constructors owned by "Shikumi.Program" (so every node stays
 -- runnable, traversable by the optimizer, and serializable); this module is the
 -- thin, user-facing layer over them.
@@ -23,7 +23,7 @@
 -- built here runs sequentially under 'Shikumi.Program.runProgram' and
 -- concurrently (honouring 'mapP' widths) under
 -- 'Shikumi.Program.runProgramConc'. See the plan's Decision Log for why
--- 'Concurrent' is kept off @runProgram@'s constraint (MasterPlan integration
+-- 'Effectful.Concurrent.Concurrent' is kept off @runProgram@'s constraint (MasterPlan integration
 -- point #4).
 module Shikumi.Combinator
   ( -- * Pipeline
@@ -83,9 +83,9 @@ infixr 1 >>>
 -- @pipeline@\/@Compose@; this n-ary helper is restricted to a single carried type
 -- because the GADT has no identity node to seed an empty fold.)
 --
--- The argument is a 'NonEmpty' — there is no identity 'Program' to seed an empty
+-- The argument is a 'NonEmpty' — there is no identity t'Program' to seed an empty
 -- fold, so emptiness is unrepresentable rather than a runtime crash. Write
--- @chain (a ':|' [b, c])@ (or @chain (NE.fromList [a, b, c])@).
+-- @chain (a :| [b, c])@ (or @chain (NE.fromList [a, b, c])@).
 chain :: NonEmpty (Program a a) -> Program a a
 chain ps = foldr1 (>>>) (NE.toList ps)
 
@@ -122,7 +122,7 @@ parallelN ps = Ensemble ps id
 -- ---------------------------------------------------------------------------
 
 -- | Re-run a program up to @n@ total attempts, returning the first success or
--- the last error. Retries on any 'ShikumiError'.
+-- the last error. Retries on any t'ShikumiError'.
 retry :: Int -> Program i o -> Program i o
 retry = Retry
 
@@ -159,7 +159,7 @@ majorityVote k sched = MajorityVote k sched modal
 
 -- | Sample a program @K@ times and fold the @K@ (non-empty) outputs with a custom
 -- reducer, for outputs that are not usefully 'Eq'. Like 'majorityVote' it applies
--- the 'TempSchedule' per sample and exposes the sub-program's 'Params' once (not
+-- the 'TempSchedule' per sample and exposes the sub-program's t'Shikumi.Program.Params' once (not
 -- @K@ times) — the samples are runs of a single node, not @K@ distinct 'ensemble'
 -- members.
 majorityVoteBy :: Int -> TempSchedule -> ([o] -> o) -> Program i o -> Program i o

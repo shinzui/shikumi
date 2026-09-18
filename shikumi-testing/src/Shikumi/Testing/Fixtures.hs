@@ -4,8 +4,8 @@
 -- single-node-only programs, @TempFixed [0.0]@ schedules, and @**/@-only glob
 -- patterns. These fixtures occupy exactly those spots so any package can
 -- regression-test against them. The bug-exposing tests that consume them are
--- owned by docs/plans/32-fix-validatable-dispatch-in-program-runners.md and
--- docs/plans/36-fix-optimizer-instruction-seeding.md; the fixture SHAPES are
+-- owned by docs\/plans\/32-fix-validatable-dispatch-in-program-runners.md and
+-- docs\/plans\/36-fix-optimizer-instruction-seeding.md; the fixture SHAPES are
 -- owned here — extend, don't fork.
 module Shikumi.Testing.Fixtures
   ( -- * Task records
@@ -95,7 +95,7 @@ instance Validatable Answer where
 
 -- | A single-node signature whose instruction is NOT empty — the shape
 -- instruction-seeding tests need (contrast @sentimentSig = mkSignature \"\"@ in
--- shikumi-optimize/test/StubLM.hs).
+-- shikumi-optimize\/test\/StubLM.hs).
 instructedSig :: Signature Question Answer
 instructedSig =
   mkSignature "Answer the question in one short sentence and report a confidence between 0 and 1."
@@ -125,11 +125,11 @@ twoStageResponder ctx
   | systemContains "Draft a short answer" ctx = markerResponse [("draft", "It is forty-two.")]
   | otherwise = validAnswerResponse
 
--- | Decodes to an 'Answer' that passes 'validate'.
+-- | Decodes to an t'Answer' that passes 'validate'.
 validAnswerResponse :: Response
 validAnswerResponse = markerResponse [("answer", "It is forty-two."), ("confidence", "0.9")]
 
--- | Decodes structurally to an 'Answer' whose confidence 1.5 must be REJECTED
+-- | Decodes structurally to an t'Answer' whose confidence 1.5 must be REJECTED
 -- by 'validate' — the probe for validation dispatch.
 invalidAnswerResponse :: Response
 invalidAnswerResponse = markerResponse [("answer", "It is forty-two."), ("confidence", "1.5")]

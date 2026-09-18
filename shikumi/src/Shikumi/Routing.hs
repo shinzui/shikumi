@@ -9,11 +9,11 @@
 -- The mechanism is approach (a) from the parent MasterPlan: a re-interpreting
 -- router installed /below/ 'Shikumi.Program.runProgram' on the existing @LLM@
 -- effect — exactly the seam @cachedLLM@ ("Shikumi.Cache") and @tracedLLM@
--- ("Shikumi.Trace") already use. 'runProgram' renders each 'Predict' node
+-- ("Shikumi.Trace") already use. 'Shikumi.Program.runProgram' renders each 'Shikumi.Program.Predict' node
 -- model-agnostically against the inert placeholder model and stamps its intentions
 -- (the derived JSON schema, any per-sample temperature, and the native-format render
 -- alternative — system prompt + JSON demos) onto the private request-metadata
--- channel ('Shikumi.Adapter.attachSchema' / 'Shikumi.Adapter.stampTemperature' /
+-- channel ('Shikumi.Adapter.attachSchema' \/ 'Shikumi.Adapter.stampTemperature' \/
 -- 'Shikumi.Adapter.attachNativeRender'). 'routeLLM' then reads the /ambient/ model
 -- supplied by 'runRouting', overwrites the placeholder with it, and calls
 -- 'translateForWire', which for a native-capable model sets
@@ -26,7 +26,7 @@
 --
 -- Install order (mirroring @runTrace . runKeyedLLM . tracedLLM@): 'runRouting' is
 -- /outer/ of the real @LLM@ interpreter, which is /outer/ of 'routeLLM' (the
--- innermost, closest to 'runProgram'). For example:
+-- innermost, closest to 'Shikumi.Program.runProgram'). For example:
 --
 -- @
 -- runEff
@@ -70,7 +70,7 @@ import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.LLM.Continuation (validateRequestContinuation)
 
 -- | The ambient model-routing effect. Its single operation reads the model every
--- 'Predict' node should dispatch against. It is supplied by an interpreter at the
+-- 'Shikumi.Program.Predict' node should dispatch against. It is supplied by an interpreter at the
 -- bottom of the stack ('runRouting'), exactly as @LLM@ and @Error@ already are, so
 -- it never appears in 'Shikumi.Program.runProgram'\'s constraint row.
 data Routing :: Effect where
@@ -91,7 +91,7 @@ runRouting m = interpret (\_ CurrentModel -> pure m)
 -- 'Complete' and 'Stream' — is dispatched against the ambient model (overwriting
 -- the placeholder model the model-agnostic 'Shikumi.Program.runProgram' /
 -- 'Shikumi.Stream.streamProgram' passes), with the private metadata channel
--- translated to real wire options (and the marker 'Context' swapped for the native
+-- translated to real wire options (and the marker t'Context' swapped for the native
 -- one for native-capable models) and stripped. The two operations are rewritten
 -- identically through the single 'translateForWire', so a streamed call gets the
 -- same real model id and wire options a blocking call does.
@@ -110,11 +110,11 @@ routeLLM = interpose $ \_ -> \case
 
 -- | Realize the private request-metadata channel against the real model. For a
 -- native-capable model: attach the native @responseFormat@ from the stamped
--- schema, and swap the marker-format 'Context' (system prompt + demo assistant
+-- schema, and swap the marker-format t'Context' (system prompt + demo assistant
 -- turns) for the stamped native-format alternative. In all cases: set
 -- @temperature@ when one was stamped, and strip the four rendering keys.
 -- Continuation expectations remain available for later boundary checks. Fallback-capability models keep the
--- marker 'Context' unchanged; non-'Predict' @Complete@ calls (no stamps) are never
+-- marker t'Context' unchanged; non-'Shikumi.Program.Predict' @Complete@ calls (no stamps) are never
 -- rewritten.
 translateForWire :: Model -> Context -> Options -> (Context, Options)
 translateForWire m ctx opts =
@@ -144,7 +144,7 @@ translateForWire m ctx opts =
    in (ctx', opts')
 
 -- | Install the native-format system prompt and demo assistant turns into a
--- 'Context'. The assistant turns of a 'Predict'-rendered context are exactly the
+-- t'Context'. The assistant turns of a 'Shikumi.Program.Predict'-rendered context are exactly the
 -- demo outputs, in order; each is replaced (via baikai's deterministic 'assistant'
 -- constructor) with the corresponding stamped native text. Defensive: if the count
 -- of assistant turns differs from the stamped list length the messages are left

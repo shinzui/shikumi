@@ -6,7 +6,7 @@
 -- the @baikai-effectful@ package.
 --
 -- The effect exposes two operations ('Complete', 'Stream'). The bare interpreters
--- 'runLLM' / 'runLLMWith' map baikai's 'BaikaiError' into 'ShikumiError' and do
+-- 'runLLM' / 'runLLMWith' map baikai's 'BaikaiError' into t'ShikumiError' and do
 -- validate continuation compatibility before transport. The resilient interpreter 'runLLMResilient' adds the production
 -- features baikai deliberately omits: retries with exponential backoff, an
 -- in-flight rate limit, and a US-dollar budget ceiling.
@@ -93,9 +93,9 @@ import Shikumi.LLM.Observation qualified as O
 -- Stream-error contract (all shikumi interpreters): the returned event list
 -- never terminates with an @EventError@. A provider failure — which the
 -- policy-free @Baikai@ transport surfaces in-band as a terminal @EventError@ — is
--- converted to an out-of-band 'ShikumiError' thrown through @Error ShikumiError@,
+-- converted to an out-of-band t'ShikumiError' thrown through @Error ShikumiError@,
 -- so 'stream' failures are transient-retryable and reported exactly like
--- 'complete' failures.
+-- 'Shikumi.LLM.complete' failures.
 data LLM :: Effect where
   Complete :: Model -> Context -> Options -> LLM m Response
   Stream :: Model -> Context -> Options -> LLM m [AssistantMessageEvent]
@@ -116,7 +116,7 @@ stream m c o = send (Stream m c o)
 -- ---------------------------------------------------------------------------
 
 -- | Bare interpreter over baikai's process-global registry. Maps 'BaikaiError'
--- into 'ShikumiError' and adds no policy. Use 'runLLMWith' for an isolated
+-- into t'ShikumiError' and adds no policy. Use 'runLLMWith' for an isolated
 -- registry (tests do this).
 runLLM ::
   (IOE :> es, Error ShikumiError :> es) =>
@@ -142,7 +142,7 @@ runLLMWithObserver reg observer = reinterpret_ (runBaikaiWith reg) (bareHandler 
 -- in-band failure (an error-shaped 'Response') through 'raiseResponseError' — plus
 -- a defensive 'try' for any residual thrown 'BaikaiError' — and remaps it; the
 -- streaming path collects the events and, via 'raiseStreamError', converts a
--- terminal @EventError@ into the same out-of-band 'ShikumiError' — so callers of
+-- terminal @EventError@ into the same out-of-band t'ShikumiError' — so callers of
 -- 'stream' never receive an in-band error terminal and resilience/decoding treat
 -- both operations identically.
 bareHandler ::
@@ -237,7 +237,7 @@ defaultRetryPolicy :: RetryPolicy
 defaultRetryPolicy = RetryPolicy {maxAttempts = 3, baseDelayMs = 200, maxDelayMs = 5000}
 
 -- | A simple in-flight rate limiter: a counter of available permits. Build it
--- once with 'newRateLimiter' and store it in the 'LLMConfig' (not per call).
+-- once with 'newRateLimiter' and store it in the t'LLMConfig' (not per call).
 newtype RateLimiter = RateLimiter (TVar Int)
 
 -- | Create a rate limiter that allows at most @n@ concurrent calls.
@@ -358,11 +358,11 @@ raiseStreamError evs = case [tp | EventError tp <- evs] of
   (tp : _) -> throwError (streamTerminalError tp)
   [] -> pure evs
 
--- | Enforce the blocking-error posture, the 'complete' analogue of
+-- | Enforce the blocking-error posture, the 'Shikumi.LLM.complete' analogue of
 -- 'raiseStreamError'. Since baikai 0.3, 'BE.complete' does not throw on
--- provider/registry/CLI failure: it returns an error-shaped 'Response' whose
+-- provider\/registry\/CLI failure: it returns an error-shaped 'Response' whose
 -- 'responseError' is populated. Convert that in-band failure into the same
--- out-of-band 'ShikumiError' the rest of shikumi consumes, so an error response
+-- out-of-band t'ShikumiError' the rest of shikumi consumes, so an error response
 -- never masquerades as success and 'runLLMResilient' still retries transient
 -- failures (a classified error thrown /inside/ the retry loop). A success
 -- passes through unchanged.
@@ -372,7 +372,7 @@ raiseResponseError resp = case responseError resp of
   Just be -> throwError (fromBaikaiError be)
   Nothing -> pure resp
 
--- | Map a terminal 'EventError' payload to a 'ShikumiError'.
+-- | Map a terminal 'EventError' payload to a t'ShikumiError'.
 streamTerminalError :: TerminalPayload -> ShikumiError
 streamTerminalError tp = case tp ^. #errorInfo of
   Just err -> fromBaikaiError err

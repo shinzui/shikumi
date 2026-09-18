@@ -1,5 +1,5 @@
 -- | Bootstrap few-shot with random search (EP-23, DSPy's
--- @BootstrapFewShotWithRandomSearch@): run V1's 'bootstrapFewShot' several times with
+-- @BootstrapFewShotWithRandomSearch@): run V1's 'Shikumi.Optimize.Bootstrap.bootstrapFewShot' several times with
 -- different deterministic seeds — each shuffling the trainset and picking a random
 -- demo count — score each resulting program, and keep the best. A zero-shot baseline
 -- candidate is always included, so the search can never do worse than zero-shot.
@@ -65,7 +65,7 @@ sizeFor cfg seed =
         (x : _) -> lo + (x `mod` span')
         [] -> lo
 
--- | 'bootstrapRandomSearch' with explicit tunables. One 'Budget' covers all seed
+-- | 'bootstrapRandomSearch' with explicit tunables. One t'Budget' covers all seed
 -- bootstrap teacher runs and the final candidate scoring pass; when the meter is
 -- exhausted, later seeds or scoring candidates are skipped and the best scored
 -- candidate so far is returned.
@@ -93,7 +93,7 @@ bootstrapRandomSearchWith cfg teacher numCandidates budget = Optimizer $ \train 
     Just sc -> freezeProgram (candidate sc)
 
 -- | Run V1 bootstrap over @numCandidates@ random seeds plus a zero-shot baseline,
--- score each on the dataset, and keep the best-scoring 'CompiledProgram'.
+-- score each on the dataset, and keep the best-scoring t'Shikumi.Compile.Types.CompiledProgram'.
 bootstrapRandomSearch ::
   (ToJSON i, ToJSON o) =>
   Program i o ->

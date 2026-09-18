@@ -1,5 +1,5 @@
 -- | Unit tests for the pure metrics and combinators: exact match, normalized
--- string similarity (identical / near / disjoint), and the @threshold@,
+-- string similarity (identical \/ near \/ disjoint), and the @threshold@,
 -- @weightedMean@, and @invert@ combinators. All offline and deterministic.
 module MetricSpec (tests) where
 
@@ -50,7 +50,7 @@ tests =
       testCase "threshold fails a low score" $
         threshold 0.5 (constMetric 0.3) () (prediction ()) @?= scoreZero,
       testCase "weightedMean averages by weight" $
-        -- (1*0.2 + 3*0.6) / (1+3) = 2.0/4 = 0.5 (within float tolerance)
+        -- (1*0.2 + 3*0.6) \/ (1+3) = 2.0\/4 = 0.5 (within float tolerance)
         let s = unScore (weightedMean [(1, constMetric 0.2), (3, constMetric 0.6)] () (prediction ()))
          in assertBool ("expected ~0.5, got " <> show s) (abs (s - 0.5) < 1e-9),
       testCase "weightedMean of empty is zero" $

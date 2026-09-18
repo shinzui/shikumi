@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs #-}
 
 -- | M0 de-risking spike for EP-7
--- (@docs/plans/7-hierarchical-tracing-observability-and-replay.md@).
+-- (@docs\/plans\/7-hierarchical-tracing-observability-and-replay.md@).
 --
--- The one genuinely novel piece of the tracing plan is /how the span hierarchy is
--- formed/, since neither baikai nor EP-1's @LLM@ effect carries a parent\/child
--- relationship. This spike proves the mechanism the production effect (M1) is
--- built on:
+-- The one genuinely novel piece of the tracing plan is
+-- /how the span hierarchy is formed/, since neither baikai nor EP-1's @LLM@ effect
+-- carries a parent/child relationship. This spike proves the mechanism the
+-- production effect (M1) is built on:
 --
 --   * a manually-maintained __stack of span ids__ (an @IORef [SpanId]@), and
 --   * an __interpose__ over EP-1's @LLM@ effect that, on each 'Shikumi.LLM.complete',
@@ -14,13 +14,14 @@
 --     delegating to the real handler.
 --
 -- This is the same @interpose@ seam EP-6's @cachedLLM@ already uses, so the risk
--- is low; the spike confirms that the id on top of the stack /at the moment the
--- call is sent/ is the enclosing span, which is exactly what M1 needs.
+-- is low; the spike confirms that the id on top of the stack
+-- /at the moment the call is sent/ is the enclosing span, which is exactly what
+-- M1 needs.
 --
 -- Decision (EP-7, 2026-06-08): capture LM calls by interposing on the @LLM@
 -- effect rather than installing a baikai 'Baikai.Trace.Sink.TraceSink'. EP-1's
 -- interpreters expose no sink parameter, and @LLM.complete@ returns the full
--- baikai 'Baikai.Response' (latency, usage, cost, tool blocks) — strictly more
+-- baikai t'Baikai.Response.Response' (latency, usage, cost, tool blocks) — strictly more
 -- than baikai's flat @TraceEvent@. See the plan's Decision Log.
 module Shikumi.Trace.Internal.Spike
   ( SpanId (..),

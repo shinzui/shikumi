@@ -5,9 +5,9 @@
 --
 -- A shikumi @Program i o@ is a typed value with no name of its own, so the
 -- generator cannot discover programs by itself. Instead an application supplies a
--- 'ProgramManifest': a list of 'ProgramDoc' entries, each naming a program and
+-- t'ProgramManifest': a list of t'ProgramDoc' entries, each naming a program and
 -- carrying the human-authored metadata that documents it. The program itself is
--- held behind the constraint-free existential 'SomeProgram' — every function the
+-- held behind the constraint-free existential t'SomeProgram' — every function the
 -- generator runs on it ('Shikumi.Program.programShape',
 -- 'Shikumi.Program.nodeFieldsIndexed') is fully polymorphic in @i@/@o@, so no
 -- class dictionaries are needed. That is what lets the manifest hold both a typed
@@ -62,7 +62,7 @@ newtype ProgramManifest = ProgramManifest
   }
 
 -- | The owning application's identity. Used to build the @Shikumi App@ concept and
--- the @shikumi://\<namespace\>/\<app\>@ resource URIs that tie every program
+-- the @shikumi:\/\/\<namespace\>\/\<app\>@ resource URIs that tie every program
 -- concept back to its application.
 data AppInfo = AppInfo
   { appNamespace :: !Text,

@@ -3,9 +3,10 @@
 -- | Shared, network-free fixtures and a deterministic stub @LLM@ interpreter for
 -- the EP-10 optimizer suite.
 --
--- The whole point of an optimizer test is that __changing a program's parameters
--- changes its score__ — otherwise an optimizer cannot demonstrably improve
--- anything. So the stub is not a constant: it inspects the rendered request
+-- The whole point of an optimizer test is that
+-- __changing a program's parameters changes its score__ — otherwise an optimizer
+-- cannot demonstrably improve anything. So the stub is not a constant: it inspects
+-- the rendered request
 -- (system prompt + messages) and answers accordingly, by a rule that is monotone
 -- in parameter quality. The task is binary sentiment classification of a
 -- 'Sentence' into a 'Label' (@"positive"@ / @"negative"@). The ground-truth rule

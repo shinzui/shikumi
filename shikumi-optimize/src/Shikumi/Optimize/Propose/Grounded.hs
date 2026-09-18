@@ -47,7 +47,7 @@ import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (mkSignature)
 
 -- | The grounded proposer's input: every signal about the optimization target,
--- rendered into the prompt under its field name by the generic 'ToPrompt'.
+-- rendered into the prompt under its field name by the generic t'ToPrompt'.
 data GenerateInstructionIn = GenerateInstructionIn
   { datasetDescription :: !Text,
     programCode :: !Text,

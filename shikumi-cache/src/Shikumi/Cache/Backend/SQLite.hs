@@ -1,15 +1,15 @@
 -- | The SQLite cache backend (EP-6) — a durable, embedded, single-file store.
 --
--- Unlike the in-memory backend (which holds the Haskell 'CachedResponse'
+-- Unlike the in-memory backend (which holds the Haskell t'CachedResponse'
 -- directly), SQLite persists the entry as JSON in a file, so a cache written by
 -- one process is read back by a later process: run a program, kill it, restart,
 -- and an identical request is served from disk with no provider call. The JSON
 -- round-trip for baikai's 'Baikai.Response.Response' graph comes from
--- "Shikumi.Cache.ResponseJSON" (re-exported through 'CachedResponse''s
--- 'Data.Aeson.ToJSON'/'Data.Aeson.FromJSON').
+-- "Shikumi.Cache.ResponseJSON" (re-exported through t'CachedResponse'\'s
+-- t'Data.Aeson.ToJSON'/t'Data.Aeson.FromJSON').
 --
 -- The store is a thin embedded SQLite database (no server) accessed via
--- @direct-sqlite@. A single 'Database.SQLite3.Database' handle is guarded by an
+-- @direct-sqlite@. A single t'Database.SQLite3.Database' handle is guarded by an
 -- 'MVar' so the 'Cache' effect's lookups and stores are serialized (SQLite's
 -- default threading mode does not allow concurrent use of one connection). WAL
 -- mode and a busy timeout make separate processes cooperate better. Lookup and
@@ -43,13 +43,13 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Shikumi.Cache (Cache (..), CacheKey (unCacheKey), CachedResponse (..))
 import Shikumi.Cache.Backend.Effort (bestEffortIO)
 
--- | A handle to an open SQLite-backed cache. The 'Database' is behind an 'MVar'
+-- | A handle to an open SQLite-backed cache. The t'Database' is behind an 'MVar'
 -- so all access through the 'Cache' effect is serialized.
 newtype SQLiteCache = SQLiteCache {db :: MVar Database}
 
 -- | The schema. The @key@ is the 64-hex 'CacheKey' (already version-namespaced
 -- via the @version@ field baked into the hash). @value@ is the UTF-8 JSON of
--- 'CachedResponse'. @stored_at@ is ISO-8601 for inspection; policy-layer TTL
+-- t'CachedResponse'. @stored_at@ is ISO-8601 for inspection; policy-layer TTL
 -- uses the same timestamp inside the JSON value.
 createTableSQL :: Text
 createTableSQL =

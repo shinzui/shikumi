@@ -1,12 +1,12 @@
--- | A 'Signature' bundles a task's natural-language instruction, its worked
--- demonstrations, and the input/output field metadata derived from the @i@/@o@
+-- | A t'Signature' bundles a task's natural-language instruction, its worked
+-- demonstrations, and the input\/output field metadata derived from the @i@\/@o@
 -- record types.
 --
 -- The @instruction@ and @demos@ are the framework's /optimizable parameters/
 -- (integration point #3): they are first-class, replaceable values that the
 -- compiler (EP-9) and optimizer (EP-10) rewrite to improve quality. The
--- @inputFields@/@outputFields@ are /derived metadata/ (not optimizable). Because
--- 'Signature' derives 'Generic', the @#instruction@ / @#demos@ @generic-lens@
+-- @inputFields@\/@outputFields@ are /derived metadata/ (not optimizable). Because
+-- t'Signature' derives 'Generic', the @#instruction@ / @#demos@ @generic-lens@
 -- optics are available to downstream plans for free.
 module Shikumi.Signature
   ( Demo (..),

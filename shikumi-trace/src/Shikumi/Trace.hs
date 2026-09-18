@@ -15,10 +15,10 @@
 -- on each 'Shikumi.LLM.complete' it opens an 'LlmCallSpan' under the active span
 -- and fills its attributes — model, provider, latency, tokens, cost, tool calls,
 -- the recorded response JSON, and the EP-6 content-addressed 'Shikumi.Cache.Key.cacheKey'
--- (integration point #7) — from the returned 'Baikai.Response'.
+-- (integration point #7) — from the returned t'Baikai.Response.Response'.
 --
--- 'renderTree' pretty-prints the tree; 'Shikumi.Trace.Store' serializes it and
--- 'Shikumi.Trace.Replay' replays it offline.
+-- 'renderTree' pretty-prints the tree; "Shikumi.Trace.Store" serializes it and
+-- "Shikumi.Trace.Replay" replays it offline.
 module Shikumi.Trace
   ( -- * Span and tree types
     SpanKind (..),
@@ -261,7 +261,7 @@ data TraceState = TraceState
 -- The building state lives in 'IORef's reached through the 'Prim' effect (so no
 -- open-ended @IOE@ is needed here — only in-process mutation), and span
 -- timestamps come from shikumi's own 'Time' effect. Both are discharged at the
--- program edge by 'runPrim' and 'runTime'.
+-- program edge by 'Effectful.Prim.runPrim' and 'Shikumi.Effect.Time.runTime'.
 --
 -- The span stack is sequential: use 'Shikumi.Program.runProgram' with
 -- 'tracedLLM', not 'Shikumi.Program.runProgramConc'. State writes are atomic so a
@@ -339,7 +339,7 @@ modifyActive st f = do
     (sid : _) -> atomicModifyIORef' (st ^. #spans) (\m -> (m & ix sid . #attrs %~ f, ()))
     [] -> pure ()
 
--- | Freeze the building state into an immutable 'TraceTree'.
+-- | Freeze the building state into an immutable t'TraceTree'.
 freezeTree :: (Prim :> es) => TraceState -> Eff es TraceTree
 freezeTree st = do
   sp <- readIORef (st ^. #spans)

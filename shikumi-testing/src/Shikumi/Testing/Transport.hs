@@ -1,4 +1,4 @@
--- | Scripted real transport for offline runtime/cache/billing integration tests.
+-- | Scripted real transport for offline runtime\/cache\/billing integration tests.
 module Shikumi.Testing.Transport (scriptedTransport) where
 
 import Baikai

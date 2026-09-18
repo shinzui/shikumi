@@ -20,12 +20,13 @@
 -- integration point #4).
 --
 -- __Search surrogate.__ DSPy drives phase 3 with Optuna's TPE sampler, which has no
--- Haskell equivalent in this workspace. We implement __greedy coordinate descent with
--- minibatch pruning__ over the joint grid: each trial screens the one-coordinate
--- neighbours of the running best on a seeded minibatch, then full-evaluates the
--- best-screened neighbour and accepts it only if it strictly improves the full score.
+-- Haskell equivalent in this workspace. We implement
+-- __greedy coordinate descent with minibatch pruning__ over the joint grid: each trial
+-- screens the one-coordinate neighbours of the running best on a seeded minibatch,
+-- then full-evaluates the best-screened neighbour and accepts it only if it strictly
+-- improves the full score.
 -- This keeps the three essential, testable behaviours — joint grid, minibatch-screen
--- + full-eval-confirm, and a hard 'Budget' — while staying fully deterministic. A
+-- + full-eval-confirm, and a hard t'Budget' — while staying fully deterministic. A
 -- later EP can swap the neighbour-selection step for a TPE-lite without changing this
 -- module's public surface.
 module Shikumi.Optimize.MIPRO
@@ -86,7 +87,7 @@ import Shikumi.Trace.Node (programNodePaths)
 -- Configuration and presets
 -- ---------------------------------------------------------------------------
 
--- | How aggressively to search. Mirrors DSPy's light/medium/heavy "auto" modes.
+-- | How aggressively to search. Mirrors DSPy's light/medium\/heavy "auto" modes.
 data Miprov2Auto = Miprov2Light | Miprov2Medium | Miprov2Heavy
   deriving stock (Eq, Show)
 
@@ -109,7 +110,7 @@ data Miprov2Config = Miprov2Config
     maxBootstrappedDemos :: !Int,
     -- | min metric score for a teacher run to contribute demos
     bootstrapThreshold :: !Double,
-    -- | hard predicted LM-completion / candidate ceiling (V1's 'Budget')
+    -- | hard predicted LM-completion / candidate ceiling (V1's t'Budget')
     budget :: !Budget
   }
   deriving stock (Eq, Show, Generic)
@@ -240,7 +241,7 @@ proposeInstructionCandidatesWith meter cfg student train demoCands =
               }
         pure cs
 
--- | Render a recovered 'Demo' as @<input-json> => <output-json>@ for the proposal
+-- | Render a recovered t'Demo' as @\<input-json\> => \<output-json\>@ for the proposal
 -- prompt's demo signal.
 renderDemo :: Demo -> Text
 renderDemo (Demo i o) = enc i <> " => " <> enc o
@@ -256,7 +257,7 @@ type JointVec = [(Int, Int)]
 
 -- | Search the joint per-node @(instruction × demoset)@ grid by greedy coordinate
 -- descent with minibatch screening, returning the best program found within the
--- 'Budget'. Bootstrap teacher runs, grounded proposer calls, minibatch scoring, and
+-- t'Budget'. Bootstrap teacher runs, grounded proposer calls, minibatch scoring, and
 -- full scoring all reserve predicted cost against one meter in 'miprov2With'. Each
 -- trial screens the one-coordinate neighbours of the running best on a seeded
 -- minibatch, then full-evaluates the best-screened neighbour and accepts it only if

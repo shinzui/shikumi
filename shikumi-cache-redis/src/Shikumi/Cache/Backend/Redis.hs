@@ -6,7 +6,7 @@
 -- string key @shikumi:cache:\<hex\>@ (the @shikumi:cache:@ prefix is operational
 -- namespacing, outside the content hash). By default entries have no Redis-side
 -- expiry; callers that want Redis to bound storage can opt into @SETEX@ with
--- 'openRedisCacheWithTTL'. The value is the UTF-8 JSON of a 'CachedResponse';
+-- 'openRedisCacheWithTTL'. The value is the UTF-8 JSON of a t'Shikumi.Cache.Types.CachedResponse';
 -- the baikai 'Baikai.Response.Response' round-trip is the one from
 -- @shikumi-cache@ ("Shikumi.Cache.ResponseJSON").
 module Shikumi.Cache.Backend.Redis
@@ -43,7 +43,7 @@ defaultRedisTTL :: Integer
 defaultRedisTTL = 7 * 24 * 60 * 60
 
 -- | Connect to Redis (verifying the connection eagerly via @checkedConnect@)
--- with no Redis-side expiry. Throws 'R.ConnectError' if the server is
+-- with no Redis-side expiry. Throws t'Database.Redis.ConnectError' if the server is
 -- unreachable.
 openRedisCache :: R.ConnectInfo -> IO RedisCache
 openRedisCache ci = do
@@ -51,7 +51,7 @@ openRedisCache ci = do
   pure (RedisCache conn Nothing)
 
 -- | As 'openRedisCache' but with an explicit Redis-side per-entry TTL (seconds).
--- This bounds Redis storage independently of the policy-layer 'CacheConfig'
+-- This bounds Redis storage independently of the policy-layer 'Shikumi.Cache.CacheConfig'
 -- expiry in @shikumi-cache@.
 openRedisCacheWithTTL :: Integer -> R.ConnectInfo -> IO RedisCache
 openRedisCacheWithTTL ttl ci = do

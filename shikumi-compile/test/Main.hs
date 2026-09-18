@@ -1,6 +1,7 @@
--- | The EP-9 acceptance suite. Every assertion is about the /prompt the model would
--- have seen/ (captured offline via "Test.Capture") or the /parameters now stored on
--- the nodes/ (a pure @foldParams@ read) — never merely "a type was added".
+-- | The EP-9 acceptance suite. Every assertion is about the
+-- /prompt the model would have seen/ (captured offline via "Test.Capture") or the
+-- /parameters now stored on the nodes/ (a pure @foldParams@ read) — never merely
+-- "a type was added".
 module Main (main) where
 
 import Data.Aeson qualified as Aeson

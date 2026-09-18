@@ -6,7 +6,7 @@
 -- EP-6's @cachedLLM@ and EP-7's @tracedLLM@ use. Because @LLM.complete@ returns
 -- the full 'Response' (which already carries 'Baikai.Usage.Usage' and
 -- 'Baikai.Cost.Cost'), no substrate hook or writer effect is needed; the
--- interposed handler reads usage straight off each response. A shared 'IORef'
+-- interposed handler reads usage straight off each response. A shared 'Data.IORef.IORef'
 -- mutated with 'atomicModifyIORef'' makes the accumulation safe under the bounded
 -- concurrency @evaluate@ uses (each pooled worker gets a cloned env that still
 -- references the one ref).

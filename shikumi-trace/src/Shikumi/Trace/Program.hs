@@ -5,10 +5,10 @@
 -- | Node-correlated program execution for the trace (EP-16, M2).
 --
 -- 'runProgramTraced' is an /additive/ entry point: it runs a
--- 'Shikumi.Program.Program' exactly like 'Shikumi.Program.runProgram' — reusing
+-- t'Shikumi.Program.Program' exactly like 'Shikumi.Program.runProgram' — reusing
 -- its render\/parse\/retry\/vote semantics by delegating each @Predict@ leaf to
 -- @runProgram@ — but it also opens a trace span per node and threads the active
--- node's 'NodePath' so that each model-call span is tagged with the structural
+-- node's t'NodePath' so that each model-call span is tagged with the structural
 -- position of the node that issued it. 'Shikumi.Program.runProgram' /
 -- 'Shikumi.Program.runProgramConc' are untouched (MasterPlan integration point #4).
 --
@@ -89,7 +89,7 @@ import Shikumi.Trace.Node (NodePath (..), NodeStep (..))
 -- The current-node effect
 -- ---------------------------------------------------------------------------
 
--- | Carries the 'NodePath' of the node currently executing. 'localNode' sets it
+-- | Carries the t'NodePath' of the node currently executing. 'localNode' sets it
 -- for the duration of an inner action; 'askNode' reads it. A dedicated effect
 -- (rather than @Effectful.Reader@) keeps the value dynamically scoped as execution
 -- descends the program tree without the caller threading it, and keeps
@@ -135,7 +135,7 @@ runCurrentNode act = do
 -- Node-aware capture
 -- ---------------------------------------------------------------------------
 
--- | Like 'Shikumi.Trace.tracedLLM' but also stamps the active 'NodePath' onto each
+-- | Like 'Shikumi.Trace.tracedLLM' but also stamps the active t'NodePath' onto each
 -- model-call span. The capture (model\/prompt\/response\/cost) and the node tag are
 -- written inside the /same/ 'withSpan', so the tag always lands on the LM-call span
 -- — no dependence on interpose ordering relative to a separate capture layer.
@@ -153,7 +153,7 @@ tracedNodeLLM = interpose $ \_ -> \case
 -- ---------------------------------------------------------------------------
 
 -- | Run a program like 'Shikumi.Program.runProgram', opening a span per node and
--- tagging each model-call span with the issuing node's 'NodePath'. The step prefix
+-- tagging each model-call span with the issuing node's t'NodePath'. The step prefix
 -- accumulated as it descends is the same one 'Shikumi.Trace.Node.programNodePaths'
 -- builds, so a @Predict@ leaf's path here equals the path that enumeration assigns
 -- it. Each @Predict@ leaf delegates to @runProgram@ (reusing its exact semantics);

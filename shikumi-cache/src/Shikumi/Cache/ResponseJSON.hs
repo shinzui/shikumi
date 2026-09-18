@@ -1,35 +1,35 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | A faithful JSON round-trip for baikai's 'Response' graph (EP-6).
+-- | A faithful JSON round-trip for baikai's t'Response' graph (EP-6).
 --
--- The persistent cache backends (SQLite/Redis/Postgres) store each cached
--- 'Baikai.Response.Response' as JSON and read it back. baikai's 'Response' graph
--- round-trips only /partially/ out of the box: 'Baikai.Model.Model',
--- 'Baikai.Api.Api', 'Baikai.Content.AssistantContent', and
--- 'Baikai.StopReason.StopReason' have both 'ToJSON' and 'FromJSON'; but
+-- The persistent cache backends (SQLite\/Redis\/Postgres) store each cached
+-- 'Baikai.Response.Response' as JSON and read it back. baikai's t'Response' graph
+-- round-trips only /partially/ out of the box: t'Baikai.Model.Model',
+-- t'Baikai.Api.Api', t'Baikai.Content.AssistantContent', and
+-- t'Baikai.StopReason.StopReason' have both t'ToJSON' and t'FromJSON'; but
 -- 'Baikai.Usage.Usage', 'Baikai.Cost.Cost', and 'Baikai.Cost.CostBreakdown' are
--- 'ToJSON'-only, and 'Baikai.Message.AssistantPayload' and 'Response' have no
+-- t'ToJSON'-only, and 'Baikai.Message.AssistantPayload' and t'Response' have no
 -- aeson instances at all.
 --
--- This module supplies the missing pieces as __orphan instances__ so a 'Response'
+-- This module supplies the missing pieces as __orphan instances__ so a t'Response'
 -- can be encoded and decoded losslessly enough for caching. The instances mirror
 -- baikai's own encoders exactly:
 --
---   * 'Usage' uses @camelTo2 '_'@ field labels (baikai's @usageOptions@), so the
---     'FromJSON' reads the same snake_case keys baikai's 'ToJSON' writes.
---   * 'Cost' / 'CostBreakdown' read the @usd@ / @*_usd@ 'Scientific' fields baikai
+--   * t'Usage' uses @camelTo2 '_'@ field labels (baikai's @usageOptions@), so the
+--     t'FromJSON' reads the same snake_case keys baikai's t'ToJSON' writes.
+--   * t'Cost' \/ t'CostBreakdown' read the @usd@ \/ @*_usd@ 'Scientific' fields baikai
 --     writes (via @fromRationalRepetendUnlimited@) and lift them back to
 --     'Rational' with 'toRational'. This is lossy only for non-terminating
 --     repetends; it never affects the typed-output guarantee, which is decoded
---     from the assistant __text__ ('AssistantContent', which round-trips
+--     from the assistant __text__ ([AssistantContent]("Baikai.Content#t:AssistantContent"), which round-trips
 --     exactly) — cost is metadata.
---   * 'AssistantPayload' uses @defaultOptions@ (matching baikai's
+--   * t'AssistantPayload' uses @defaultOptions@ (matching baikai's
 --     @deriving anyclass ToJSON@).
---   * 'Response' is written out by hand with the same keys @defaultOptions@
+--   * t'Response' is written out by hand with the same keys @defaultOptions@
 --     produced, minus @evidence@ — see below.
 --
--- __'Response' does not cache its 'Baikai.Evidence.ModelCallEvidence'.__ Since
--- baikai 0.5 a 'Response' may carry the evidence record for the call that
+-- __t'Response' does not cache its t'Baikai.Evidence.ModelCallEvidence'.__ Since
+-- baikai 0.5 a t'Response' may carry the evidence record for the call that
 -- produced it. That record describes /one/ crossing of the provider boundary; a
 -- cache hit is precisely the case where no such crossing happened, so replaying
 -- a stored record would attribute another call's evidence to this one — the
@@ -67,7 +67,7 @@ import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Scientific (Scientific)
 
--- | baikai's 'Usage' field-label scheme: @camelTo2 '_'@ (snake_case).
+-- | baikai's t'Usage' field-label scheme: @camelTo2 '_'@ (snake_case).
 usageOptions :: Options
 usageOptions = defaultOptions {fieldLabelModifier = camelTo2 '_'}
 
@@ -76,7 +76,7 @@ usageOptions = defaultOptions {fieldLabelModifier = camelTo2 '_'}
 -- with a non-terminating decimal expansion, such as @1 % 3@, does not satisfy
 -- 'Eq' after an encode/decode round-trip because baikai's encoder drops the
 -- repetend index. Real USD pricing rates are decimal, so real provider costs
--- terminate; do not rely on round-tripped 'CachedResponse' equality for
+-- terminate; do not rely on round-tripped 'Shikumi.Cache.Types.CachedResponse' equality for
 -- synthetic non-decimal costs.
 ratField :: Object -> Key -> Parser Rational
 ratField o k = toRational <$> (o .: k :: Parser Scientific)

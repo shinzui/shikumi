@@ -5,7 +5,7 @@
 --
 -- The record instances mirror @ProgramFixtures@ in the @shikumi@ test tree (which
 -- lives there and is not importable here): each record derives 'Generic' and gets
--- empty 'ToSchema' / 'FromModel' / 'ToPrompt' / 'Validatable' bodies (Generic
+-- empty 'ToSchema' \/ 'FromModel' \/ 'ToPrompt' \/ 'Validatable' bodies (Generic
 -- defaults), plus 'ToJSON' / 'FromJSON' so 'Shikumi.Compile.fewShotTyped' can build
 -- demos from typed pairs.
 module Test.Fixtures

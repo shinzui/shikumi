@@ -2,7 +2,7 @@
 -- golden-pinned), the in-memory backend round-trip, the SQLite backend
 -- round-trip and cross-process restart durability, the @cachedLLM@ memoizer (the
 -- headline one-provider-call behaviour) via a counting stub, and
--- versioning/invalidation. The server-backed Redis/Postgres backends are tested
+-- versioning\/invalidation. The server-backed Redis\/Postgres backends are tested
 -- in their own packages (@shikumi-cache-redis@/@shikumi-cache-postgres@).
 --
 -- The SQLite restart test re-executes this binary as a subprocess in a "write"

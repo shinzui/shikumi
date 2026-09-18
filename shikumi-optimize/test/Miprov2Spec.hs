@@ -52,7 +52,7 @@ import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 -- Fixtures and run helpers
 -- ---------------------------------------------------------------------------
 
--- | Region A (good/bad) needs a RULE instruction; region B (great/terrible) needs a
+-- | Region A (good\/bad) needs a RULE instruction; region B (great\/terrible) needs a
 -- covering demo. See "StubLM".'StubLM.runJointStubLM'.
 jointTrain :: Dataset Sentence Label
 jointTrain =

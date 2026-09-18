@@ -3,12 +3,12 @@
 
 -- | The per-node feedback channel (EP-16, M3).
 --
--- A 'FeedbackLog' is a sibling of the trace (deliberately /not/ part of
+-- A t'FeedbackLog' is a sibling of the trace (deliberately /not/ part of
 -- 'Shikumi.Trace.TraceTree', whose serialized format is pinned and consumed by
 -- replay): it maps a node's 'NodePath' to the textual critiques attached to it. A
 -- metric or LM-judge writes a critique with 'attachFeedback' during evaluation; an
 -- optimizer reads all critiques for a node with 'feedbackFor' during a proposal
--- step. GEPA (@docs/plans/22-gepa-reflective-optimizer.md@) is the headline
+-- step. GEPA (@docs\/plans\/22-gepa-reflective-optimizer.md@) is the headline
 -- consumer.
 module Shikumi.Trace.Feedback
   ( FeedbackLog (..),
@@ -37,7 +37,7 @@ newtype FeedbackLog = FeedbackLog (Map NodePath [Text])
   deriving stock (Eq, Show)
 
 -- | Serialized as a list of @(NodePath, [Text])@ pairs, so 'NodePath' needs only
--- 'ToJSON'\/'FromJSON' (not a text 'ToJSONKey').
+-- t'ToJSON'\/t'FromJSON' (not a text t'Data.Aeson.ToJSONKey').
 instance ToJSON FeedbackLog where
   toJSON (FeedbackLog m) = toJSON (Map.toList m)
 

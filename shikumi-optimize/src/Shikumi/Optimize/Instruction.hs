@@ -6,7 +6,7 @@
 -- kept. Optimization is greedy coordinate ascent — one node at a time, holding the
 -- others fixed — so the candidate count is linear in @nodes × proposals@.
 --
--- The proposer and its signal-gatherers are themselves ordinary shikumi 'Program's, so
+-- The proposer and its signal-gatherers are themselves ordinary shikumi t'Shikumi.Program.Program's, so
 -- they are typed, cached, traced, and testable with the same stub-LM machinery as
 -- everything else — the optimizer is written in the framework it optimizes. The
 -- /current/ effective instruction (override, or signature base when no override is
@@ -18,12 +18,12 @@
 -- completions per node (dataset summary, program describe, module describe, and one
 -- generation per proposal); scoring one candidate reserves one completion per dataset
 -- example per predict node. The search stops — returning the best found /so far/ —
--- before either bound in the 'Budget' would be exceeded. When the remaining budget
+-- before either bound in the t'Budget' would be exceeded. When the remaining budget
 -- cannot cover a node's full proposal, that node keeps its current instruction (no
 -- proposer call) rather than partially proposing.
 --
 -- This module re-points V1's blind proposer at EP-19's grounded surface; the old
--- @ProposeIn@/@ProposeOut@/@proposeInstruction@ predictor is removed (the grounded
+-- @ProposeIn@\/@ProposeOut@\/@proposeInstruction@ predictor is removed (the grounded
 -- @GenerateInstructionIn@/@GenerateInstructionOut@ replaces it, still emitting a
 -- @proposedInstruction@ output field).
 module Shikumi.Optimize.Instruction

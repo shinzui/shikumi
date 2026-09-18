@@ -1,5 +1,5 @@
 -- | EP-4 M1 (run a node through the LLM effect) and M2 (the parameter interface:
--- @foldParams@ / @mapParams@ / @mapParamsAt@ and the ordering law).
+-- @foldParams@ \/ @mapParams@ \/ @mapParamsAt@ and the ordering law).
 module ProgramSpec (tests) where
 
 import Control.Lens ((&), (.~))

@@ -257,7 +257,7 @@ main = do
 -- when the fix is released upstream.
 --
 -- The defect is in the @cmark-gfm@ bindings, not in okf or shikumi. Full
--- mechanism: @mori://kivikakk/cmark-gfm-hs@, upstream-issues entry
+-- mechanism: @mori:\/\/kivikakk\/cmark-gfm-hs@, upstream-issues entry
 -- @cmark-gfm-hs-unsafe-concurrent-extension-registration@.
 warmUpMarkdown :: IO ()
 warmUpMarkdown = do
@@ -369,7 +369,7 @@ tests =
         -- generator actually emits.
         --
         -- This replaces a former "Conformance" group that re-asserted the
-        -- profile's conventions (concept types, `shikumi://` resource scheme)
+        -- profile's conventions (concept types, `shikumi:\/\/` resource scheme)
         -- in-process against a Haskell copy of them, and so could never notice
         -- the descriptor itself going stale. Every convention it checked is now
         -- expressed by the descriptor and enforced here against the real file.

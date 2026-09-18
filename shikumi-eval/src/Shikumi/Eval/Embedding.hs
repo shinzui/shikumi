@@ -2,10 +2,10 @@
 
 -- | A real embeddings interpreter for the existing 'Embedding' effect (EP-15).
 --
--- 'Shikumi.Eval.Metric' ships only the pure 'Shikumi.Eval.Metric.runEmbedding'
+-- "Shikumi.Eval.Metric" ships only the pure 'Shikumi.Eval.Metric.runEmbedding'
 -- (a @Text -> Vector Double@ table), so @semanticSimilarity@ has no way to call a
 -- real backend. This module adds interpreters that drive the upstream
--- 'Baikai.Embedding' client (an OpenAI-compatible @\/v1\/embeddings@ endpoint),
+-- "Baikai.Embedding" client (an OpenAI-compatible @\/v1\/embeddings@ endpoint),
 -- so @semanticSimilarity@ runs end to end. The @Embedding@ effect itself is
 -- unchanged (integration point #5); only new interpreters are added.
 --

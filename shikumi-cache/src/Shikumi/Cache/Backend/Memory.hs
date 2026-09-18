@@ -1,6 +1,6 @@
 -- | The in-memory cache backend (EP-6): a process-local @STM@ map from the hex
 -- cache key to a 'CachedResponse'. It stores the Haskell value directly (no
--- serialization), so it needs no JSON instances for the baikai 'Response' graph.
+-- serialization), so it needs no JSON instances for the baikai t'Baikai.Response.Response' graph.
 -- Build the store with 'newMemoryCache' and discharge the 'Cache' effect with
 -- 'runCacheMemory'.
 module Shikumi.Cache.Backend.Memory

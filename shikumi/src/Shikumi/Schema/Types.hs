@@ -2,12 +2,12 @@
 {-# LANGUAGE KindSignatures #-}
 
 -- | Shared vocabulary for the schema engine: the per-field description wrapper
--- 'Field', the derived 'FieldMeta' record, JSON-Schema smart constructors (the
+-- t'Field', the derived t'FieldMeta' record, JSON-Schema smart constructors (the
 -- small subset OpenAI/Anthropic structured-output endpoints accept), and the
 -- field-path breadcrumb used to locate decode errors.
 --
 -- This module is owned by EP-3 (integration point #3). The user-facing error
--- type is 'Shikumi.Error.ShikumiError' (owned by EP-1); decode errors render a
+-- type is t'Shikumi.Error.ShikumiError' (owned by EP-1); decode errors render a
 -- 'FieldPath' breadcrumb into that type's @Text@ payloads.
 module Shikumi.Schema.Types
   ( -- * Field description wrapper
@@ -56,7 +56,7 @@ import GHC.Generics (Generic)
 import GHC.TypeLits (Nat, Symbol)
 
 -- | A field carrying a compile-time description as a type-level 'Symbol'. A
--- single 'GHC.Generics' traversal recovers both the field name (from the record
+-- single "GHC.Generics" traversal recovers both the field name (from the record
 -- selector) and its description (from @desc@), so the two cannot drift. The
 -- wrapper is opt-in per field: a bare @Text@ field simply has no description.
 newtype Field (desc :: Symbol) a = Field {unField :: a}
@@ -71,7 +71,7 @@ field = Field
 -- string-length rules); the signed/decimal numeric bounds 'MinVal'\/'MaxVal' carry
 -- the bound as a 'Symbol' (e.g. @MinVal "0"@, @MaxVal "100"@, @MinVal "-3.5"@) so
 -- both the schema emitter and the validator parse it to a 'Scientific'. Used
--- promoted, as the @cs@ of 'Constrained'.
+-- promoted, as the @cs@ of t'Constrained'.
 data Constraint
   = -- | string minimum length -> @"minLength"@
     MinLen Nat
@@ -85,9 +85,9 @@ data Constraint
     EnumOneOf [Symbol]
 
 -- | A field value carrying a compile-time list of constraints (EP-26). Parallel to
--- 'Field'; the two compose: @Field "desc" (Constrained '[MinLen 10] Text)@. The
+-- t'Field'; the two compose: @Field "desc" (Constrained '[MinLen 10] Text)@. The
 -- reflection of @cs@ to schema keywords and a post-decode validator lives in
--- "Shikumi.Schema" ('Shikumi.Schema.ReflectConstraints').
+-- "Shikumi.Schema" ([ReflectConstraints]("Shikumi.Schema#t:ReflectConstraints")).
 newtype Constrained (cs :: [Constraint]) a = Constrained {unConstrained :: a}
   deriving stock (Eq, Show)
 
@@ -95,7 +95,7 @@ newtype Constrained (cs :: [Constraint]) a = Constrained {unConstrained :: a}
 constrained :: a -> Constrained cs a
 constrained = Constrained
 
--- | Per-field metadata recovered by the generic walk (used by 'Shikumi.Signature'
+-- | Per-field metadata recovered by the generic walk (used by "Shikumi.Signature"
 -- and the prompt adapters).
 data FieldMeta = FieldMeta
   { fieldName :: !Text,
@@ -104,7 +104,7 @@ data FieldMeta = FieldMeta
   deriving stock (Eq, Show, Generic)
 
 -- | A breadcrumb trail to a location inside a decoded value, e.g.
--- @["bullets", "[2]"]@. Rendered into 'Shikumi.Error.ShikumiError' messages.
+-- @["bullets", "[2]"]@. Rendered into t'Shikumi.Error.ShikumiError' messages.
 type FieldPath = [Text]
 
 -- | Extend a path with a named record field.
@@ -147,7 +147,7 @@ numberSchema = object ["type" .= ("number" :: Text)]
 boolSchema :: Value
 boolSchema = object ["type" .= ("boolean" :: Text)]
 
--- | @{"type":"array","items":<items>}@.
+-- | @{"type":"array","items":\<items\>}@.
 arraySchema :: Value -> Value
 arraySchema items = object ["type" .= ("array" :: Text), "items" .= items]
 
@@ -158,7 +158,7 @@ enumSchema :: [Text] -> Value
 enumSchema names = object ["type" .= ("string" :: Text), "enum" .= names]
 
 -- | Permit JSON @null@ in addition to the wrapped schema. The @anyOf@ form is
--- used (more portable across providers than @"type":["T","null"]@).
+-- used (more portable across providers than @"type":[\"T\","null"]@).
 nullableSchema :: Value -> Value
 nullableSchema s = object ["anyOf" .= [s, object ["type" .= ("null" :: Text)]]]
 

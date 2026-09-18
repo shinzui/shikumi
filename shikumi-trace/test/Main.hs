@@ -481,7 +481,7 @@ genTree = do
     firstSpan (s : _) = s
     firstSpan [] = error "genTree: empty"
 
--- | Flatten a shape into spans, assigning ids/parents/times from a running
+-- | Flatten a shape into spans, assigning ids\/parents\/times from a running
 -- counter. Returns the produced spans (root first) and the next free counter.
 flattenShape :: Maybe SpanId -> Int -> Shape -> ([Span], Int)
 flattenShape par n (Shape k kids) =
