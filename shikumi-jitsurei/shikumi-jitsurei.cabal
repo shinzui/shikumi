@@ -73,7 +73,7 @@ executable jitsurei-compose
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai            >=0.7.0.0 && <0.8
+    , baikai            >=0.7.1.0 && <0.8
     , base              >=4.20    && <5
     , shikumi
     , shikumi-jitsurei
@@ -86,7 +86,7 @@ executable jitsurei-combinators
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai            >=0.7.0.0 && <0.8
+    , baikai            >=0.7.1.0 && <0.8
     , base              >=4.20    && <5
     , shikumi
     , shikumi-jitsurei
@@ -145,7 +145,7 @@ executable jitsurei-trace-replay
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai            >=0.7.0.0 && <0.8
+    , baikai            >=0.7.1.0 && <0.8
     , base              >=4.20    && <5
     , effectful
     , filepath
@@ -163,7 +163,7 @@ executable jitsurei-multimodal
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai            >=0.7.0.0 && <0.8
+    , baikai            >=0.7.1.0 && <0.8
     , base              >=4.20    && <5
     , bytestring
     , effectful
@@ -181,7 +181,7 @@ executable jitsurei-streaming
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai        >=0.7.0.0 && <0.8
+    , baikai        >=0.7.1.0 && <0.8
     , base          >=4.20    && <5
     , effectful
     , generic-lens
@@ -198,7 +198,7 @@ executable jitsurei-adapters
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
-    , baikai            >=0.7.0.0 && <0.8
+    , baikai            >=0.7.1.0 && <0.8
     , base              >=4.20    && <5
     , generic-lens
     , lens
@@ -261,7 +261,7 @@ executable jitsurei-request-defaults
   hs-source-dirs: app
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , baikai           >=0.7.0.0 && <0.8
+    , baikai           >=0.7.1.0 && <0.8
     , base             >=4.20    && <5
     , effectful
     , generic-lens
@@ -279,7 +279,7 @@ executable jitsurei-responses
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
-    , baikai           >=0.7.0.0 && <0.8
+    , baikai           >=0.7.1.0 && <0.8
     , baikai-openai    >=0.7.0.0 && <0.8
     , base             >=4.20    && <5
     , effectful

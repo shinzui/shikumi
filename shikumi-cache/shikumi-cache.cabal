@@ -45,13 +45,13 @@ library
 
   build-depends:
     , aeson          >=2.2      && <2.3
-    , baikai         >=0.7.0.0  && <0.8
+    , baikai         >=0.7.1.0  && <0.8
     , base           >=4.20     && <5
     , blake3         >=0.3      && <0.4
     , bytestring     >=0.11     && <0.13
     , containers     >=0.6      && <0.9
     , direct-sqlite  >=2.3      && <2.4
-    , effectful      >=2.5      && <2.7
+    , effectful      >=2.7      && <2.8
     , generic-lens   >=2.2      && <2.4
     , lens           ^>=5.3
     , scientific     >=0.3      && <0.4
@@ -69,7 +69,7 @@ test-suite shikumi-cache-test
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
     , aeson
-    , baikai         >=0.7.0.0  && <0.8
+    , baikai         >=0.7.1.0  && <0.8
     , base
     , bytestring
     , containers

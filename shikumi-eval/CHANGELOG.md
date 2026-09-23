@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and raise the `effectful` bound to `>=2.7 && <2.8`, which the core `shikumi` package now requires through `baikai-effectful` 0.4.0.2. Bounds only; no source changed.
+
 ## 0.3.0.0 — 2026-09-08
 
 - Raise the internal `shikumi` bound to `^>=0.4.0.0` for the breaking core release.

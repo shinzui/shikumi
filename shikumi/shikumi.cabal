@@ -57,15 +57,15 @@ library
   other-modules:   Shikumi.Adapter.Xml
   build-depends:
     , aeson              >=2.2     && <2.3
-    , baikai             >=0.7.0.0 && <0.8
+    , baikai             >=0.7.1.0 && <0.8
     , baikai-claude      >=0.7.0.0 && <0.8
-    , baikai-effectful   >=0.4.0.1 && <0.5
+    , baikai-effectful   >=0.4.0.2 && <0.5
     , baikai-openai      >=0.7.0.0 && <0.8
     , base               >=4.20    && <5
     , base64-bytestring  >=1.2     && <1.3
     , bytestring         >=0.11    && <0.13
     , containers         >=0.6     && <0.9
-    , effectful          >=2.5     && <2.7
+    , effectful          >=2.7     && <2.8
     , filepath           >=1.4     && <1.6
     , generic-lens       >=2.2     && <2.4
     , lens               ^>=5.3
@@ -116,9 +116,9 @@ test-suite shikumi-test
 
   build-depends:
     , aeson
-    , baikai             >=0.7.0.0  && <0.8
+    , baikai             >=0.7.1.0  && <0.8
     , baikai-claude      >=0.7.0.0  && <0.8
-    , baikai-effectful   >=0.4.0.1  && <0.5
+    , baikai-effectful   >=0.4.0.2  && <0.5
     , baikai-openai      >=0.7.0.0  && <0.8
     , base
     , base64-bytestring

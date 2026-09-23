@@ -49,7 +49,7 @@ library
 
   build-depends:
     , aeson
-    , baikai         >=0.7.0.0  && <0.8
+    , baikai         >=0.7.1.0  && <0.8
     , baikai-openai  >=0.7.0.0  && <0.8
     , base           >=4.20     && <5
     , bytestring

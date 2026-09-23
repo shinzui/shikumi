@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and on `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.2 && <0.5`. That `baikai-effectful` release requires `effectful-core` 2.7, so the `effectful` bound moves to `>=2.7 && <2.8`. Bounds only; no source changed.
+
 ## 0.4.0.0 — 2026-09-08
 
 - Add per-attempt observers to bare/resilient runtimes and a bounded, thread-safe billing collector with exact cost persistence and explicit unknown usage. Observer exceptions propagate without retry; no additional budget charge occurs. `LLMConfig.observer` is a public record addition requiring a PVP major review.

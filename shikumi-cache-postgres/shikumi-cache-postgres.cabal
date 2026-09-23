@@ -40,7 +40,7 @@ library
   build-depends:
     , aeson          >=2.2      && <2.3
     , base           >=4.20     && <5
-    , effectful      >=2.5      && <2.7
+    , effectful      >=2.7      && <2.8
     , hasql          >=1.9      && <1.11
     , shikumi-cache  ^>=0.2.0.0
     , text           ^>=2.1
@@ -52,7 +52,7 @@ test-suite shikumi-cache-postgres-test
   main-is:        Main.hs
   ghc-options:    -threaded -with-rtsopts=-N
   build-depends:
-    , baikai                  >=0.7.0.0  && <0.8
+    , baikai                  >=0.7.1.0  && <0.8
     , base
     , effectful
     , ephemeral-pg

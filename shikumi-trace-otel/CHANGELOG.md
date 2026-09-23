@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8`. Bounds only; no source changed.
+
 ## 0.1.2.0 — 2026-09-08
 
 - Add the missing `bytestring` upper bound (`>=0.11 && <0.13`), matching the
