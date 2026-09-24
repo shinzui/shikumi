@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { modelHelp, modelOptions, resolveModel } from "./provenance-model.ts";
 
 const USAGE = `Usage: bun init-plan.ts --title "<title>" [options]
 
@@ -12,6 +13,7 @@ Options:
   --title <text>          (required) Human-readable plan title.
   --intention <id>        Intention ID to record in frontmatter.
   --master-plan <path>    Path to the parent MasterPlan, recorded in frontmatter.
+${modelHelp}
   --dir <path>            Directory to write into. Defaults to docs/plans.
   -h, --help              Show this message.
 
@@ -33,6 +35,7 @@ const { values } = (() => {
         title: { type: "string" },
         intention: { type: "string" },
         "master-plan": { type: "string" },
+        ...modelOptions,
         dir: { type: "string", default: "docs/plans" },
         help: { type: "boolean", short: "h" },
       },
@@ -55,6 +58,14 @@ if (!title || !title.trim()) {
   console.error(USAGE);
   die("--title is required");
 }
+
+const identity = (() => {
+  try {
+    return resolveModel(values);
+  } catch (e) {
+    die((e as Error).message);
+  }
+})();
 
 const dir = values.dir!;
 
@@ -99,6 +110,12 @@ fm.push(`kind: exec-plan`);
 fm.push(`created_at: ${createdAt}`);
 if (values.intention) fm.push(`intention: ${yamlString(values.intention)}`);
 if (values["master-plan"]) fm.push(`master_plan: ${yamlString(values["master-plan"])}`);
+fm.push("provenance:");
+fm.push("  created_by:");
+fm.push(`    model: ${yamlString(identity.model)}`);
+if (identity.harness) fm.push(`    harness: ${yamlString(identity.harness)}`);
+fm.push(`    at: ${createdAt}`);
+if (identity.note) fm.push(`    note: ${yamlString(identity.note)}`);
 fm.push("---");
 fm.push("");
 fm.push("");
@@ -118,11 +135,12 @@ working. State the user-visible behavior you will enable.
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
+Use checkboxes for verifiable milestones or substantial deliverables, not individual
+edits, commands, tests, commits, or session activity. Update this section when a milestone
+is accepted, a material blocker or change of course arises, or work is handed off. For a
+handoff during a milestone, add a short prose note stating the remaining outcome.
 
-- [ ] Example incomplete step.
+- [ ] <First verifiable milestone or deliverable and its acceptance condition.>
 
 
 ## Surprises & Discoveries
@@ -135,7 +153,8 @@ implementation. Provide concise evidence.
 
 ## Decision Log
 
-Record every decision made while working on the plan.
+Record decisions that change scope, architecture, interfaces, acceptance, or the path a
+future contributor should follow. Omit routine implementation choices.
 
 - Decision: ...
   Rationale: ...
@@ -165,8 +184,8 @@ ADR exists, say so.
 
 ## Plan of Work
 
-Describe, in prose, the sequence of edits and additions. For each edit, name the file and
-location (function, module) and what to insert or change. Keep it concrete and minimal.
+Describe the sequence of meaningful changes in prose. Name key files and locations
+(functions or modules) and the intended result, leaving routine edit choices open.
 
 Break into milestones if the work spans multiple independent phases. Each milestone must be
 independently verifiable. Introduce each milestone with a brief paragraph: scope, what will
@@ -177,7 +196,7 @@ exist at the end, commands to run, acceptance criteria.
 
 State the exact commands to run and where to run them (working directory). When a command
 generates output, show a short expected transcript so the reader can compare. This section
-must be updated as work proceeds.
+should be revised when the implementation approach changes.
 
 
 ## Validation and Acceptance
@@ -195,8 +214,8 @@ rollback path.
 
 ## Interfaces and Dependencies
 
-Name the libraries, modules, and services to use and why. Specify the types, interfaces, and
-function signatures that must exist at the end of each milestone. Use full module paths.
+Name the libraries, modules, and services whose choice matters. Specify key types or
+interfaces that other work depends on, using full module paths.
 `;
 
 writeFileSync(path, fm.join("\n") + skeleton, "utf8");

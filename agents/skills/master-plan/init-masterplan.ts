@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { modelHelp, modelOptions, resolveModel } from "../exec-plan/provenance-model.ts";
 
 const USAGE = `Usage: bun init-masterplan.ts --title "<title>" [options]
 
@@ -11,6 +12,7 @@ skeleton, then prints the created file path to stdout.
 Options:
   --title <text>          (required) Human-readable initiative title.
   --intention <id>        Intention ID to record in frontmatter.
+${modelHelp}
   --dir <path>            Directory to write into. Defaults to docs/masterplans.
   -h, --help              Show this message.
 
@@ -31,6 +33,7 @@ const { values } = (() => {
       options: {
         title: { type: "string" },
         intention: { type: "string" },
+        ...modelOptions,
         dir: { type: "string", default: "docs/masterplans" },
         help: { type: "boolean", short: "h" },
       },
@@ -53,6 +56,14 @@ if (!title || !title.trim()) {
   console.error(USAGE);
   die("--title is required");
 }
+
+const identity = (() => {
+  try {
+    return resolveModel(values);
+  } catch (e) {
+    die((e as Error).message);
+  }
+})();
 
 const dir = values.dir!;
 
@@ -96,6 +107,12 @@ fm.push(`title: ${yamlString(title)}`);
 fm.push(`kind: master-plan`);
 fm.push(`created_at: ${createdAt}`);
 if (values.intention) fm.push(`intention: ${yamlString(values.intention)}`);
+fm.push("provenance:");
+fm.push("  created_by:");
+fm.push(`    model: ${yamlString(identity.model)}`);
+if (identity.harness) fm.push(`    harness: ${yamlString(identity.harness)}`);
+fm.push(`    at: ${createdAt}`);
+if (identity.note) fm.push(`    note: ${yamlString(identity.note)}`);
 fm.push("---");
 fm.push("");
 fm.push("");
@@ -157,12 +174,12 @@ rationale that will matter later, and deliberate exclusions.
 
 ## Progress
 
-Track milestone-level progress across all child plans. Each entry names the child plan
-and the milestone. This section provides an at-a-glance view of the entire initiative.
+Summarize the current initiative state, blocked child plans, and remaining integration
+or acceptance gates. The Exec-Plan Registry owns child-plan status, and each child plan
+owns its milestone progress. Do not duplicate those milestones as checkboxes here.
+Use a checkbox only for a cross-plan gate that has its own observable acceptance.
 
-- [ ] EP-1: <first milestone description>
-- [ ] EP-1: <second milestone description>
-- [ ] EP-2: <first milestone description>
+(No child plans started.)
 
 
 ## Surprises & Discoveries
@@ -175,8 +192,8 @@ interactions between child plans. Provide concise evidence.
 
 ## Decision Log
 
-Record every decomposition or coordination decision made while working on the master
-plan.
+Record material decomposition or coordination decisions that affect dependencies,
+interfaces, acceptance, or the path future contributors should follow.
 
 - Decision: ...
   Rationale: ...

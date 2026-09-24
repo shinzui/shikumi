@@ -7,9 +7,9 @@ This document defines the requirements for a master plan ("MasterPlan"), a coord
 
 Use a MasterPlan when the work requires multiple independently-deliverable changes that share a unifying goal. Indicators that a MasterPlan is appropriate:
 
-The initiative spans three or more distinct functional concerns (for example, a new data model, a consumer, and an API endpoint). Work streams have ordering constraints or shared interfaces that require coordination. The total scope would produce an unwieldy single ExecPlan (more than five milestones or touching more than ten files across unrelated modules). Multiple contributors or sessions will work on different parts of the initiative.
+The initiative contains distinct, independently deliverable work streams with dependencies or shared interfaces that need coordination. A single ExecPlan would obscure those boundaries or become hard to resume. Multiple contributors or sessions may work on different parts of the initiative.
 
-If the work fits comfortably in a single ExecPlan with two to four milestones, use an ExecPlan directly. A MasterPlan adds value only when coordination across plans is the hard problem.
+If one ExecPlan can explain and verify the work clearly, use it directly. A MasterPlan adds value when coordination across plans is the hard problem.
 
 
 ## Non-Negotiable Requirements
@@ -34,9 +34,18 @@ MasterPlans should identify cross-plan decisions that deserve ADR records: archi
 At completion, distill durable context from the MasterPlan and child ExecPlans. Review Decision Logs, Surprises & Discoveries, and Outcomes & Retrospectives, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient coordination details in the plans.
 
 
+## Provenance
+
+Every MasterPlan and every child ExecPlan should record who wrote it and who has looked at it since, using the same frontmatter contract as ExecPlans (see `agents/skills/exec-plan/PLANS.md`): an optional `provenance` key holding a single `created_by` record, an append-only `revisions` list, and an append-only `reviews` list. Entries are written by `agents/skills/exec-plan/record-provenance.ts`, never by hand, so that reviews by several models accumulate instead of overwriting one another.
+
+A MasterPlan's provenance is coordination provenance: it says which model produced the decomposition. Each child plan carries its own, which matters most when child plans are drafted in parallel by different agents — the model that drafted a child plan is the one recorded in that child's `created_by`, not the model coordinating the initiative.
+
+Provenance is optional and its absence carries no meaning. Documents created before provenance existed have no `provenance` block, and that is not a defect to repair. Never backfill a `created_by` record for work you did not do.
+
+
 ## Decomposition Principles
 
-Break the initiative into work streams by functional concern, not by file or module. Each work stream should produce a demonstrable, independently verifiable behavior. Prefer fewer well-scoped plans (two to seven) over many granular ones. If you find yourself creating more than seven child plans, introduce phases to group related plans into implementation waves.
+Break the initiative into work streams by functional concern, not by file or module. Each work stream should produce a demonstrable, independently verifiable behavior. Use the fewest child plans that preserve clear ownership, dependencies, and acceptance. Group plans into phases only when phases make ordering or handoffs clearer.
 
 When deciding where to draw boundaries, consider the following. Minimize cross-plan coupling: two plans that must modify the same function in the same way should likely be one plan. Maximize independent verifiability: each plan's outcome should be testable without the others being complete. Respect natural ordering: if feature B is meaningless without feature A, make A a dependency of B rather than merging them. Balance scope: avoid one plan doing eighty percent of the work while others are trivial; redistribute if possible.
 
@@ -61,7 +70,9 @@ Integration points prevent silent conflicts where two plans make incompatible as
 
 ## Living Document Requirements
 
-The MasterPlan must maintain and keep current the following sections: a Progress section (aggregate checklist tracking milestone-level progress across all child plans), a Surprises & Discoveries section (cross-plan insights, dependency changes, scope adjustments), a Decision Log (every decomposition or coordination decision with rationale and date), and an Outcomes & Retrospective section (filled during and after the initiative).
+The MasterPlan must maintain and keep current the following sections: a Progress section summarizing initiative state and remaining integration work, a Surprises & Discoveries section for findings that affect more than one child plan, a Decision Log for material decomposition or coordination decisions with rationale and date, and an Outcomes & Retrospective section filled during and after the initiative.
+
+The Exec-Plan Registry is the source of truth for child-plan status; each child ExecPlan owns its milestone progress. Do not copy child milestones or routine tasks into MasterPlan checkboxes. In Progress, identify the current phase, blocked plans, and any cross-plan integration or acceptance gate not represented by a child plan. Use a checklist for those gates only if checking them off makes the initiative easier to manage. Update the snapshot on child-plan status changes, material blockers, integration results, or handoff, not after every action.
 
 When a child plan's implementation reveals that the decomposition was wrong (a plan should be split, merged, reordered, or cancelled), update the MasterPlan first, then cascade the changes to affected child plans. Record the change in the Decision Log with rationale.
 
@@ -70,4 +81,4 @@ When a living-document entry captures durable project context, update `docs/adr/
 
 ## Writing Style and Formatting
 
-Follow the same writing style and formatting rules as ExecPlans (see `agents/skills/exec-plan/PLANS.md`). Write in plain prose. Use fenced code blocks (triple backticks) with an explicit language tag — for example `bash`, `typescript`, `haskell`, `diff`, or `text` — for every command, transcript, diff, or code snippet. Bare fences without a language tag are not permitted. The Exec-Plan Registry is the one exception where a table is preferred for scanability.
+Follow the same writing style and formatting rules as ExecPlans (see `agents/skills/exec-plan/PLANS.md`), except that MasterPlan Progress is a concise coordination snapshot rather than a mandatory checklist. Write in plain prose. Use fenced code blocks (triple backticks) with an explicit language tag — for example `bash`, `typescript`, `haskell`, `diff`, or `text` — for every command, transcript, diff, or code snippet. Bare fences without a language tag are not permitted. The Exec-Plan Registry is the one exception where a table is preferred for scanability.
