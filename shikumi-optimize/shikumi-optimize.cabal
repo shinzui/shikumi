@@ -1,8 +1,8 @@
-cabal-version:   3.4
-name:            shikumi-optimize
-version:         0.3.0.0
-synopsis:        The optimizer framework for shikumi LM programs (EP-10)
-category:        AI
+cabal-version: 3.4
+name: shikumi-optimize
+version: 0.3.0.0
+synopsis: The optimizer framework for shikumi LM programs (EP-10)
+category: AI
 description:
   The optimizer framework for shikumi: search procedures that automatically
   improve a 'Shikumi.Program.Program' by rewriting its per-node optimizable
@@ -16,20 +16,26 @@ description:
   Every acceptance assertion runs fully offline against a deterministic stub LM,
   so the whole package tests with no network and no API key.
 
-license:         BSD-3-Clause
-author:          Nadeem Bitar
-maintainer:      nadeem@gmail.com
-build-type:      Simple
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+build-type: Simple
 extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-    -Wincomplete-record-updates -Wredundant-constraints
-    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fhide-source-paths
+    -Wmissing-export-lists
+    -Wpartial-fields
     -Wmissing-deriving-strategies
 
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
@@ -37,8 +43,8 @@ common common-options
     OverloadedStrings
 
 library
-  import:          common-options
-  hs-source-dirs:  src
+  import: common-options
+  hs-source-dirs: src
   exposed-modules:
     Shikumi.Optimize
     Shikumi.Optimize.Bootstrap
@@ -64,25 +70,28 @@ library
     Shikumi.Optimize.Types
 
   build-depends:
-    , aeson            >=2.2      && <2.3
-    , base             >=4.20     && <5
-    , containers       >=0.6      && <0.9
-    , effectful        >=2.7      && <2.8
-    , generic-lens     >=2.2      && <2.4
-    , lens             ^>=5.3
-    , shikumi          ^>=0.4.0.0
-    , shikumi-compile  ^>=0.2.1.0
-    , shikumi-eval     ^>=0.3.0.0
-    , shikumi-trace    ^>=0.3.0.0
-    , text             ^>=2.1
-    , vector           >=0.13     && <0.14
+    aeson >=2.2 && <2.3,
+    base >=4.20 && <5,
+    containers >=0.6 && <0.9,
+    effectful >=2.7 && <2.8,
+    generic-lens >=2.2 && <2.4,
+    lens ^>=5.3,
+    shikumi ^>=0.4.0.0,
+    shikumi-compile ^>=0.2.1.0,
+    shikumi-eval ^>=0.3.0.0,
+    shikumi-trace ^>=0.3.0.0,
+    text ^>=2.1,
+    vector >=0.13 && <0.14,
 
 test-suite shikumi-optimize-test
-  import:         common-options
-  type:           exitcode-stdio-1.0
+  import: common-options
+  type: exitcode-stdio-1.0
   hs-source-dirs: test
-  main-is:        Main.hs
-  ghc-options:    -threaded -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -with-rtsopts=-N
+
   other-modules:
     AcceptanceSpec
     BootstrapSpec
@@ -106,19 +115,19 @@ test-suite shikumi-optimize-test
     StubLM
 
   build-depends:
-    , aeson
-    , baikai            >=0.7.1.0  && <0.8
-    , base
-    , containers
-    , effectful
-    , generic-lens
-    , lens
-    , shikumi           ^>=0.4.0.0
-    , shikumi-compile   ^>=0.2.1.0
-    , shikumi-eval      ^>=0.3.0.0
-    , shikumi-optimize  ^>=0.3.0.0
-    , shikumi-trace     ^>=0.3.0.0
-    , tasty
-    , tasty-hunit
-    , text
-    , vector
+    aeson,
+    baikai >=0.7.1.0 && <0.8,
+    base,
+    containers,
+    effectful,
+    generic-lens,
+    lens,
+    shikumi ^>=0.4.0.0,
+    shikumi-compile ^>=0.2.1.0,
+    shikumi-eval ^>=0.3.0.0,
+    shikumi-optimize ^>=0.3.0.0,
+    shikumi-trace ^>=0.3.0.0,
+    tasty,
+    tasty-hunit,
+    text,
+    vector,

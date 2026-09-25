@@ -28,3 +28,4 @@ cabal-dev
 .direnv
 db/
 redis/
+.envrc.local

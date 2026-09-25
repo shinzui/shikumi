@@ -1,10 +1,10 @@
 cabal-version: 3.4
-name:          shikumi-testing
-version:       0.1.0.0
+name: shikumi-testing
+version: 0.1.0.0
 synopsis:
   Shared offline test harness and fixtures for shikumi (internal)
 
-category:      AI
+category: AI
 description:
   The single home for shikumi's deterministic, network-free stub LM — a
   responder-driven interpreter, a script-replay interpreter, counting and
@@ -17,19 +17,25 @@ description:
   .
   Internal to the repository: not published to Hackage.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+build-type: Simple
 
 common common-options
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-    -Wincomplete-record-updates -Wredundant-constraints
-    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fhide-source-paths
+    -Wmissing-export-lists
+    -Wpartial-fields
     -Wmissing-deriving-strategies
 
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
@@ -37,8 +43,8 @@ common common-options
     OverloadedStrings
 
 library
-  import:          common-options
-  hs-source-dirs:  src
+  import: common-options
+  hs-source-dirs: src
   exposed-modules:
     Shikumi.Testing
     Shikumi.Testing.Fixtures
@@ -48,32 +54,35 @@ library
     Shikumi.Testing.Transport
 
   build-depends:
-    , aeson
-    , baikai         >=0.7.1.0  && <0.8
-    , baikai-openai  >=0.7.0.0  && <0.8
-    , base           >=4.20     && <5
-    , bytestring
-    , effectful
-    , generic-lens
-    , http-types     >=0.12.6   && <0.13
-    , lens           ^>=5.3
-    , shikumi        ^>=0.4.0.0
-    , streamly-core
-    , text           ^>=2.1
-    , vector
-    , wai            >=3.2.5    && <3.3
-    , warp           >=3.4.15   && <3.5
+    aeson,
+    baikai >=0.7.1.0 && <0.8,
+    baikai-openai >=0.7.0.0 && <0.8,
+    base >=4.20 && <5,
+    bytestring,
+    effectful,
+    generic-lens,
+    http-types >=0.12.6 && <0.13,
+    lens ^>=5.3,
+    shikumi ^>=0.4.0.0,
+    streamly-core,
+    text ^>=2.1,
+    vector,
+    wai >=3.2.5 && <3.3,
+    warp >=3.4.15 && <3.5,
 
 test-suite shikumi-testing-test
-  import:         common-options
-  type:           exitcode-stdio-1.0
+  import: common-options
+  type: exitcode-stdio-1.0
   hs-source-dirs: test
-  main-is:        Main.hs
-  ghc-options:    -threaded -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , shikumi          ^>=0.4.0.0
-    , shikumi-testing  ^>=0.1.0.0
-    , tasty
-    , tasty-hunit
-    , text
+    base,
+    shikumi ^>=0.4.0.0,
+    shikumi-testing ^>=0.1.0.0,
+    tasty,
+    tasty-hunit,
+    text,

@@ -1,7 +1,7 @@
 cabal-version: 3.4
-name:          shikumi-cli
-version:       0.1.0.0
-synopsis:      The shikumi command-line interface (EP-12)
+name: shikumi-cli
+version: 0.1.0.0
+synopsis: The shikumi command-line interface (EP-12)
 description:
   The user-facing command line for shikumi: a library of reusable subcommand
   builders plus a small bundled example executable named @shikumi@. Because a
@@ -14,19 +14,25 @@ description:
   trace). Everything runs offline against a deterministic in-process stub LM, so
   every transcript reproduces from a clean checkout with no API key or network.
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-build-type:    Simple
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+build-type: Simple
 
 common common-options
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-    -Wincomplete-record-updates -Wredundant-constraints
-    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fhide-source-paths
+    -Wmissing-export-lists
+    -Wpartial-fields
     -Wmissing-deriving-strategies
 
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
@@ -34,8 +40,8 @@ common common-options
     OverloadedStrings
 
 library
-  import:          common-options
-  hs-source-dirs:  src
+  import: common-options
+  hs-source-dirs: src
   exposed-modules:
     Shikumi.Cli
     Shikumi.Cli.Example
@@ -45,52 +51,58 @@ library
     Shikumi.Cli.Runtime
 
   build-depends:
-    , aeson
-    , baikai                >=0.7.1.0  && <0.8
-    , base                  >=4.20     && <5
-    , bytestring
-    , containers
-    , directory
-    , effectful
-    , filepath
-    , optparse-applicative
-    , shikumi
-    , shikumi-compile
-    , shikumi-eval
-    , shikumi-optimize
-    , shikumi-testing       ^>=0.1.0.0
-    , shikumi-trace
-    , shikumi-trace-otel
-    , text                  ^>=2.1
+    aeson,
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    filepath,
+    optparse-applicative,
+    shikumi,
+    shikumi-compile,
+    shikumi-eval,
+    shikumi-optimize,
+    shikumi-testing ^>=0.1.0.0,
+    shikumi-trace,
+    shikumi-trace-otel,
+    text ^>=2.1,
 
 executable shikumi
-  import:         common-options
+  import: common-options
   hs-source-dirs: app
-  main-is:        Main.hs
-  ghc-options:    -threaded -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , shikumi-cli
+    base,
+    shikumi-cli,
 
 test-suite shikumi-cli-test
-  import:         common-options
-  type:           exitcode-stdio-1.0
+  import: common-options
+  type: exitcode-stdio-1.0
   hs-source-dirs: test
-  main-is:        Main.hs
-  ghc-options:    -threaded -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , bytestring
-    , containers
-    , directory
-    , filepath
-    , optparse-applicative
-    , shikumi
-    , shikumi-cli
-    , shikumi-compile
-    , shikumi-eval
-    , shikumi-optimize
-    , shikumi-trace
-    , tasty
-    , tasty-hunit
-    , text
+    base,
+    bytestring,
+    containers,
+    directory,
+    filepath,
+    optparse-applicative,
+    shikumi,
+    shikumi-cli,
+    shikumi-compile,
+    shikumi-eval,
+    shikumi-optimize,
+    shikumi-trace,
+    tasty,
+    tasty-hunit,
+    text,

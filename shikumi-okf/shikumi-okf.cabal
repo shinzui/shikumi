@@ -1,10 +1,10 @@
-cabal-version:   3.4
-name:            shikumi-okf
-version:         0.2.1.0
+cabal-version: 3.4
+name: shikumi-okf
+version: 0.2.1.0
 synopsis:
   Generate OKF documentation bundles from shikumi programs (EP-31)
 
-category:        AI
+category: AI
 description:
   An opt-in generator that documents shikumi @Program@ values as an Open
   Knowledge Format (OKF) bundle: one @Shikumi App@ concept that links to one
@@ -18,25 +18,30 @@ description:
   @shikumi-trace-otel@ quarantines the OpenTelemetry tree — so shikumi users who
   do not care about OKF never depend on it.
 
-license:         BSD-3-Clause
-author:          Nadeem Bitar
-maintainer:      nadeem@gmail.com
-build-type:      Simple
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+build-type: Simple
 extra-doc-files: CHANGELOG.md
-
 -- Shipped so consumers get the profile their bundles are checked against, and so
 -- the test suite can locate it via Paths_shikumi_okf.getDataFileName regardless
 -- of the directory cabal was invoked from.
-data-files:      profile/shikumi.dhall
+data-files: profile/shikumi.dhall
 
 common common-options
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-    -Wincomplete-record-updates -Wredundant-constraints
-    -fhide-source-paths -Wmissing-export-lists -Wpartial-fields
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fhide-source-paths
+    -Wmissing-export-lists
+    -Wpartial-fields
     -Wmissing-deriving-strategies
 
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
@@ -44,45 +49,48 @@ common common-options
     OverloadedStrings
 
 library
-  import:          common-options
-  hs-source-dirs:  src
+  import: common-options
+  hs-source-dirs: src
   exposed-modules:
     Shikumi.Okf.Generate
     Shikumi.Okf.Render
     Shikumi.Okf.Types
 
   build-depends:
-    , base      >=4.20     && <5
-    , okf-core  ^>=0.9.0.0
-    , shikumi   ^>=0.4.0.0
-    , text      ^>=2.1
+    base >=4.20 && <5,
+    okf-core ^>=0.9.0.0,
+    shikumi ^>=0.4.0.0,
+    text ^>=2.1,
 
 executable shikumi-okf-example
-  import:         common-options
+  import: common-options
   hs-source-dirs: example
-  main-is:        Main.hs
+  main-is: Main.hs
   build-depends:
-    , base
-    , shikumi      ^>=0.4.0.0
-    , shikumi-okf  ^>=0.2.1.0
-    , text
+    base,
+    shikumi ^>=0.4.0.0,
+    shikumi-okf ^>=0.2.1.0,
+    text,
 
 test-suite shikumi-okf-test
-  import:          common-options
-  type:            exitcode-stdio-1.0
-  hs-source-dirs:  test
-  main-is:         Main.hs
-  other-modules:   Paths_shikumi_okf
+  import: common-options
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules: Paths_shikumi_okf
   autogen-modules: Paths_shikumi_okf
-  ghc-options:     -threaded -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -with-rtsopts=-N
+
   build-depends:
-    , base
-    , directory
-    , effectful
-    , filepath
-    , okf-core     ^>=0.9.0.0
-    , shikumi      ^>=0.4.0.0
-    , shikumi-okf  ^>=0.2.1.0
-    , tasty
-    , tasty-hunit
-    , text
+    base,
+    directory,
+    effectful,
+    filepath,
+    okf-core ^>=0.9.0.0,
+    shikumi ^>=0.4.0.0,
+    shikumi-okf ^>=0.2.1.0,
+    tasty,
+    tasty-hunit,
+    text,

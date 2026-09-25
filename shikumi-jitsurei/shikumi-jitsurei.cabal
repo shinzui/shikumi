@@ -1,7 +1,7 @@
-cabal-version:   3.4
-name:            shikumi-jitsurei
-version:         0.1.0.0
-synopsis:        Worked examples (実例) for the shikumi framework
+cabal-version: 3.4
+name: shikumi-jitsurei
+version: 0.1.0.0
+synopsis: Worked examples (実例) for the shikumi framework
 description:
   Runnable cookbook examples for shikumi, mirroring the README's motivating
   examples one-for-one. Every example defaults to offline operation against a deterministic
@@ -12,19 +12,25 @@ description:
   .
   Not intended for publication.
 
-license:         BSD-3-Clause
-author:          Nadeem Bitar
-maintainer:      nadeem@gmail.com
-build-type:      Simple
+license: BSD-3-Clause
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+build-type: Simple
 extra-doc-files: CHANGELOG.md
 
 common common-options
   ghc-options:
-    -Wall -Wcompat -Widentities -Wincomplete-uni-patterns
-    -Wincomplete-record-updates -Wredundant-constraints
-    -fhide-source-paths -Wpartial-fields -Wmissing-deriving-strategies
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wredundant-constraints
+    -fhide-source-paths
+    -Wpartial-fields
+    -Wmissing-deriving-strategies
 
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DataKinds
     DeriveAnyClass
@@ -39,255 +45,319 @@ common common-options
 -- The shared offline harness: a deterministic, network-free stub LM plus the
 -- response builders the examples script it with.
 library
-  import:          common-options
-  hs-source-dirs:  src
+  import: common-options
+  hs-source-dirs: src
   exposed-modules: Shikumi.Jitsurei.Stub
   build-depends:
-    , base             >=4.20     && <5
-    , shikumi-testing  ^>=0.1.0.0
+    base >=4.20 && <5,
+    shikumi-testing ^>=0.1.0.0,
 
 -- An index that lists the runnable examples (the bundled `shikumi-jitsurei`).
 executable shikumi-jitsurei
-  import:         common-options
-  main-is:        Main.hs
+  import: common-options
+  main-is: Main.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
-  build-depends:  base >=4.20 && <5
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends: base >=4.20 && <5
 
 -- (1) Records in, records out: a single typed prediction, decoded offline.
 executable jitsurei-predict
-  import:         common-options
-  main-is:        Predict.hs
+  import: common-options
+  main-is: Predict.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base              >=4.20 && <5
-    , shikumi
-    , shikumi-jitsurei
-    , text
+    base >=4.20 && <5,
+    shikumi,
+    shikumi-jitsurei,
+    text,
 
 -- (2) Compose typed programs with (>>>); mismatches would be compile errors.
 executable jitsurei-compose
-  import:         common-options
-  main-is:        Compose.hs
+  import: common-options
+  main-is: Compose.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai            >=0.7.1.0 && <0.8
-    , base              >=4.20    && <5
-    , shikumi
-    , shikumi-jitsurei
-    , text
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    shikumi,
+    shikumi-jitsurei,
+    text,
 
 -- (3) Control flow as combinators: retry / validate / mapP / vote / ensemble.
 executable jitsurei-combinators
-  import:         common-options
-  main-is:        Combinators.hs
+  import: common-options
+  main-is: Combinators.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai            >=0.7.1.0 && <0.8
-    , base              >=4.20    && <5
-    , shikumi
-    , shikumi-jitsurei
-    , text
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    shikumi,
+    shikumi-jitsurei,
+    text,
 
 -- (5) Evaluate a program against a dataset with a typed metric; print a report.
 executable jitsurei-evaluate
-  import:         common-options
-  main-is:        Evaluate.hs
+  import: common-options
+  main-is: Evaluate.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base              >=4.20 && <5
-    , shikumi
-    , shikumi-eval
-    , shikumi-jitsurei
-    , text
+    aeson,
+    base >=4.20 && <5,
+    shikumi,
+    shikumi-eval,
+    shikumi-jitsurei,
+    text,
 
 -- (6) Optimize a program against data, then serialize and reload the result.
 executable jitsurei-optimize
-  import:         common-options
-  main-is:        Optimize.hs
+  import: common-options
+  main-is: Optimize.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base              >=4.20 && <5
-    , bytestring
-    , shikumi
-    , shikumi-compile
-    , shikumi-eval
-    , shikumi-jitsurei
-    , shikumi-optimize
-    , text
+    aeson,
+    base >=4.20 && <5,
+    bytestring,
+    shikumi,
+    shikumi-compile,
+    shikumi-eval,
+    shikumi-jitsurei,
+    shikumi-optimize,
+    text,
 
 -- (7) A typed tool and a ReAct agent loop, driven by a scripted offline LM.
 executable jitsurei-react
-  import:         common-options
-  main-is:        ReActAgent.hs
+  import: common-options
+  main-is: ReActAgent.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base              >=4.20 && <5
-    , shikumi
-    , shikumi-jitsurei
-    , shikumi-tools
-    , text
-    , vector
+    aeson,
+    base >=4.20 && <5,
+    shikumi,
+    shikumi-jitsurei,
+    shikumi-tools,
+    text,
+    vector,
 
 -- (8) Caching, hierarchical tracing, and deterministic replay over one program.
 executable jitsurei-trace-replay
-  import:         common-options
-  main-is:        TraceReplay.hs
+  import: common-options
+  main-is: TraceReplay.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai            >=0.7.1.0 && <0.8
-    , base              >=4.20    && <5
-    , effectful
-    , filepath
-    , shikumi
-    , shikumi-cache
-    , shikumi-jitsurei
-    , shikumi-trace
-    , temporary
-    , text
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    effectful,
+    filepath,
+    shikumi,
+    shikumi-cache,
+    shikumi-jitsurei,
+    shikumi-trace,
+    temporary,
+    text,
 
 -- (9) Multimodal input: an image field the model actually sees.
 executable jitsurei-multimodal
-  import:         common-options
-  main-is:        Multimodal.hs
+  import: common-options
+  main-is: Multimodal.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai            >=0.7.1.0 && <0.8
-    , base              >=4.20    && <5
-    , bytestring
-    , effectful
-    , generic-lens
-    , lens
-    , shikumi
-    , shikumi-jitsurei
-    , text
-    , vector
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    bytestring,
+    effectful,
+    generic-lens,
+    lens,
+    shikumi,
+    shikumi-jitsurei,
+    text,
+    vector,
 
 -- (10) Program-level streaming: field chunks and status messages.
 executable jitsurei-streaming
-  import:         common-options
-  main-is:        Streaming.hs
+  import: common-options
+  main-is: Streaming.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai        >=0.7.1.0 && <0.8
-    , base          >=4.20    && <5
-    , effectful
-    , generic-lens
-    , lens
-    , shikumi
-    , text
-    , vector
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    effectful,
+    generic-lens,
+    lens,
+    shikumi,
+    text,
+    vector,
 
 -- (11) Adapter completeness (XML, two-step) and declarative field constraints.
 executable jitsurei-adapters
-  import:         common-options
-  main-is:        Adapters.hs
+  import: common-options
+  main-is: Adapters.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , baikai            >=0.7.1.0 && <0.8
-    , base              >=4.20    && <5
-    , generic-lens
-    , lens
-    , shikumi
-    , shikumi-jitsurei
-    , text
-    , vector
+    aeson,
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    generic-lens,
+    lens,
+    shikumi,
+    shikumi-jitsurei,
+    text,
+    vector,
 
 -- (12) Code execution: programOfThought and codeAct over a hermetic sandbox.
 executable jitsurei-codeexec
-  import:         common-options
-  main-is:        CodeExec.hs
+  import: common-options
+  main-is: CodeExec.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , base              >=4.20 && <5
-    , bytestring
-    , shikumi
-    , shikumi-jitsurei
-    , shikumi-tools
-    , text
-    , vector
+    aeson,
+    base >=4.20 && <5,
+    bytestring,
+    shikumi,
+    shikumi-jitsurei,
+    shikumi-tools,
+    text,
+    vector,
 
 -- Validation-selected GEPA and named quality/cost objectives, fully offline.
 executable jitsurei-gepa-objectives
-  import:         common-options
-  main-is:        GepaObjectives.hs
+  import: common-options
+  main-is: GepaObjectives.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base              >=4.20 && <5
-    , containers
-    , shikumi
-    , shikumi-eval
-    , shikumi-jitsurei
-    , shikumi-optimize
-    , text
+    base >=4.20 && <5,
+    containers,
+    shikumi,
+    shikumi-eval,
+    shikumi-jitsurei,
+    shikumi-optimize,
+    text,
 
 -- Finite typed structure selection and restoration, fully offline.
 executable jitsurei-structure-search
-  import:         common-options
-  main-is:        StructureSearch.hs
+  import: common-options
+  main-is: StructureSearch.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , base              >=4.20 && <5
-    , effectful
-    , shikumi
-    , shikumi-compile
-    , shikumi-eval
-    , shikumi-jitsurei
-    , shikumi-optimize
-    , text
+    base >=4.20 && <5,
+    effectful,
+    shikumi,
+    shikumi-compile,
+    shikumi-eval,
+    shikumi-jitsurei,
+    shikumi-optimize,
+    text,
 
 -- Shared request defaults, cache and trace ordering, and evidence bypass.
 executable jitsurei-request-defaults
-  import:         common-options
-  main-is:        RequestDefaults.hs
+  import: common-options
+  main-is: RequestDefaults.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , baikai           >=0.7.1.0 && <0.8
-    , base             >=4.20    && <5
-    , effectful
-    , generic-lens
-    , lens
-    , shikumi
-    , shikumi-cache
-    , shikumi-testing
-    , shikumi-trace
+    baikai >=0.7.1.0 && <0.8,
+    base >=4.20 && <5,
+    effectful,
+    generic-lens,
+    lens,
+    shikumi,
+    shikumi-cache,
+    shikumi-testing,
+    shikumi-trace,
 
 -- Released Responses adapter over loopback by default, with an explicit live mode.
 executable jitsurei-responses
-  import:         common-options
-  main-is:        Responses.hs
+  import: common-options
+  main-is: Responses.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson
-    , baikai           >=0.7.1.0 && <0.8
-    , baikai-openai    >=0.7.0.0 && <0.8
-    , base             >=4.20    && <5
-    , effectful
-    , generic-lens
-    , lens
-    , shikumi
-    , shikumi-eval
-    , shikumi-testing
-    , shikumi-tools
-    , shikumi-trace
-    , text
+    aeson,
+    baikai >=0.7.1.0 && <0.8,
+    baikai-openai >=0.7.0.0 && <0.8,
+    base >=4.20 && <5,
+    effectful,
+    generic-lens,
+    lens,
+    shikumi,
+    shikumi-eval,
+    shikumi-testing,
+    shikumi-tools,
+    shikumi-trace,
+    text,
