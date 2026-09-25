@@ -4,7 +4,7 @@
 
 - Tighten the `hasql` bound to `>=1.10 && <1.11`, matching the rest of the cohort (`mori://shinzui/keiro`, `mori://shinzui/kiroku`, `mori://shinzui/ephemeral-pg`). The old `>=1.9` floor was wrong: the backend already uses the 1.10-only API (`preparable`/`unpreparable`, `Hasql.Connection.Settings`). The test suite now bounds `mori://shinzui/ephemeral-pg/packages/ephemeral-pg` at `^>=0.3.1.0`. Bounds only; no source changed.
 
-- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and raise the `effectful` bound to `>=2.7 && <2.8`, which the core `shikumi` package now requires through `baikai-effectful` 0.4.0.2. Bounds only; no source changed.
+- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and widen the `effectful` bound to `>=2.6 && <2.8`, so both effectful 2.6 and 2.7 are supported (effectful 2.7 needs `baikai-effectful` 0.4.0.2, effectful 2.6 needs 0.4.0.1). Bounds only; no source changed.
 
 ## 0.1.3.0 — 2026-09-08
 

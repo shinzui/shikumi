@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and on `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.2 && <0.5`. That `baikai-effectful` release requires `effectful-core` 2.7, so the `effectful` bound moves to `>=2.7 && <2.8`. Bounds only; no source changed.
+- Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and on `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.1 && <0.5`, and widen the `effectful` bound to `>=2.6 && <2.8`. Both effectful 2.6 and 2.7 are supported: `baikai-effectful` 0.4.0.1 requires `effectful-core` 2.6 and 0.4.0.2 requires 2.7, so the solver pairs them. Bounds only; no source changed.
 
 ## 0.4.0.0 — 2026-09-08
 

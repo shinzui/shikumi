@@ -46,7 +46,7 @@ library
   build-depends:
     aeson >=2.2 && <2.3,
     base >=4.20 && <5,
-    effectful >=2.7 && <2.8,
+    effectful >=2.6 && <2.8,
     hasql >=1.10 && <1.11,
     shikumi-cache ^>=0.2.0.0,
     text ^>=2.1,

@@ -59,7 +59,7 @@ library
     aeson >=2.2 && <2.3,
     base >=4.20 && <5,
     bytestring >=0.11 && <0.13,
-    effectful >=2.7 && <2.8,
+    effectful >=2.6 && <2.8,
     generic-lens >=2.2 && <2.4,
     lens ^>=5.3,
     shikumi ^>=0.4.0.0,

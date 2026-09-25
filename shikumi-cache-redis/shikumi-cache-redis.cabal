@@ -45,7 +45,7 @@ library
     aeson >=2.2 && <2.3,
     base >=4.20 && <5,
     bytestring >=0.11 && <0.13,
-    effectful >=2.7 && <2.8,
+    effectful >=2.6 && <2.8,
     hedis >=0.15 && <0.17,
     shikumi-cache ^>=0.2.0.0,
     text ^>=2.1,
