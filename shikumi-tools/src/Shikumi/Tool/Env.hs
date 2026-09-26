@@ -5,13 +5,13 @@
 --
 -- Filesystem and process-backed tools should depend on this record instead of
 -- calling the host operating system directly. A future sandbox can provide a
--- different 'ToolEnv' value while the tool definitions stay unchanged.
+-- different t'ToolEnv' value while the tool definitions stay unchanged.
 --
 -- Security posture: 'localToolEnv' is deliberately non-hermetic. It has full
 -- access to the host filesystem paths and inherited environment visible to the
 -- current process, and it can execute arbitrary shell commands with the current
 -- user's privileges. Its filesystem and process IO is performed inside the
--- @(LLM, Error ShikumiError)@ row via 'unsafeEff_'. Supply a different 'ToolEnv'
+-- @(LLM, Error ShikumiError)@ row via 'unsafeEff_'. Supply a different t'ToolEnv'
 -- to confine tools; this module is the sandboxing seam, not the sandbox.
 module Shikumi.Tool.Env
   ( Path,

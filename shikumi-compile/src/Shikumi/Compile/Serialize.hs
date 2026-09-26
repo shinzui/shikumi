@@ -1,4 +1,4 @@
--- | Serialization of a 'CompiledProgram'.
+-- | Serialization of a t'CompiledProgram'.
 --
 -- __Parameter-state plus shape fingerprint, not whole-structure.__ A @Program@'s
 -- executable structure cannot be serialized in general (its @FMap@ nodes hold

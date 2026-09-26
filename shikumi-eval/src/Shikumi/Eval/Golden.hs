@@ -6,15 +6,15 @@
 -- stack under a /mock or replayed/ LM (never a live one), so the only thing that
 -- can change the output is a genuine change in program behaviour.
 --
--- 'goldenProgram' compares a per-example transcript (one @index\\t<output>@ line
--- per example, in dataset order); 'goldenReport' compares the rendered 'Report'
+-- 'goldenProgram' compares a per-example transcript (one @index\\t\<output\>@ line
+-- per example, in dataset order); 'goldenReport' compares the rendered t'Shikumi.Eval.Report.Report'
 -- from 'evaluate'. Both are built on @tasty-golden@'s 'goldenVsString' —
 -- regenerate the golden file with @cabal test --test-options=--accept@.
 --
 -- The runner is a single rank-2 function @forall a. Eff es a -> IO a@, so the
 -- helper stays agnostic to the exact effect stack: the caller picks a concrete
 -- @es@ (e.g. @'[LLM, Error ShikumiError, IOE]@) and a function collapsing it to
--- 'IO' (throwing on a 'ShikumiError').
+-- 'IO' (throwing on a t'ShikumiError').
 module Shikumi.Eval.Golden
   ( goldenProgram,
     goldenReport,
@@ -49,7 +49,7 @@ goldenProgram ::
   TestName ->
   -- | golden file path (relative to the package directory)
   FilePath ->
-  -- | how to run the effect stack (mock/replay), throwing on a 'ShikumiError'
+  -- | how to run the effect stack (mock/replay), throwing on a t'ShikumiError'
   (forall a. Eff es a -> IO a) ->
   Dataset i o ->
   Program i o ->
@@ -62,7 +62,7 @@ goldenProgram name path runner ds prog render =
     outs <- runner (traverse (runProgram prog) inputs)
     pure (encodeText (renderTranscript (zip [0 ..] (map render outs))))
 
--- | Like 'goldenProgram' but compares the rendered 'Report' produced by
+-- | Like 'goldenProgram' but compares the rendered t'Shikumi.Eval.Report.Report' produced by
 -- 'evaluate' with the given metric, rather than a raw transcript.
 goldenReport ::
   (LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
@@ -78,7 +78,7 @@ goldenReport name path runner ds metric prog =
     report <- runner (evaluate ds metric prog)
     pure (encodeText (renderReportText report))
 
--- | One @index\\t<rendered output>@ line per example, in dataset order.
+-- | One @index\\t\<rendered output\>@ line per example, in dataset order.
 renderTranscript :: [(Int, Text)] -> Text
 renderTranscript = T.unlines . map (\(i, t) -> T.pack (show i) <> "\t" <> t)
 

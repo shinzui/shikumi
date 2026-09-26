@@ -1,8 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 
--- | Built-in filesystem tools over 'ToolEnv'.
+-- | Built-in filesystem tools over t'ToolEnv'.
 --
--- The search tools prefer host-provided @rg@/@fd@ through 'ToolEnv.exec' when
+-- The search tools prefer host-provided @rg@/@fd@ through 'Shikumi.Tool.Env.envExec' when
 -- available, and fall back to a bounded in-process traversal through the same
 -- environment record. The fallback skips noisy directories, binary files, and
 -- large files, and caps traversal depth and result count.

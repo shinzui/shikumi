@@ -4,13 +4,13 @@
 -- | The retrieval-augmented (RAG) compiler: install retrieved context so that the
 -- rendered prompt at every LM-call node carries the passages a retriever found.
 --
--- __Purity vs. retrieval (how the plan's question is resolved here).__ 'compile' is
+-- __Purity vs. retrieval (how the plan's question is resolved here).__ 'Shikumi.Compile.Types.compile' is
 -- pure, but retrieval fetches data. EP-4 ships /no/ effectful escape-hatch node
 -- (no @embed@ / @Embed@ constructor that would let an @i -> Eff es o@ become a
 -- @Program@ node), so the plan's "approach 1" (install a runtime retrieval step
 -- keyed on the actual input) is not available. This is the plan's documented
 -- /fallback/: retrieve at /compile time/ against a fixed sample query, then inject
--- the top passages into every node's signature instruction. 'compile' stays pure
+-- the top passages into every node's signature instruction. 'Shikumi.Compile.Types.compile' stays pure
 -- because the trivial 'Shikumi.Compile.Retriever.inMemoryRetriever' performs no
 -- effect — it is run via 'runPureEff'. The limitation is that retrieval is
 -- query-independent of the actual program input; wiring true per-input retrieval
@@ -22,8 +22,8 @@
 -- signature's base instruction) plus the retrieved context. This means RAG state
 -- survives 'Shikumi.Compile.Serialize.encodeCompiled' /
 -- 'Shikumi.Compile.Serialize.decodeCompiledOnto'. Composition order still matters:
--- applying 'zeroShot' after 'rag' replaces the whole override and drops the
--- context, while applying 'rag' after 'zeroShot' appends context to the zero-shot
+-- applying 'Shikumi.Compile.ZeroShot.zeroShot' after 'rag' replaces the whole override and drops the
+-- context, while applying 'rag' after 'Shikumi.Compile.ZeroShot.zeroShot' appends context to the zero-shot
 -- instruction.
 module Shikumi.Compile.RAG
   ( rag,

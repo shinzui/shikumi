@@ -5,7 +5,7 @@
 -- server, but it persists entries in a @jsonb@ column rather than an evicting
 -- key-value store, so entries live until explicitly removed or the policy layer
 -- treats them as expired via 'Shikumi.Cache.CacheConfig'. The value column holds
--- the JSON of a 'CachedResponse' (the baikai 'Baikai.Response.Response'
+-- the JSON of a t'Shikumi.Cache.Types.CachedResponse' (the baikai 'Baikai.Response.Response'
 -- round-trip is @shikumi-cache@'s "Shikumi.Cache.ResponseJSON"). Access goes
 -- through @hasql@; the single 'Connection' is guarded by an 'MVar' so the
 -- 'Cache' effect's lookups and stores are serialized.

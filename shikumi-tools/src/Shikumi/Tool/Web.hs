@@ -3,14 +3,14 @@
 
 -- | Swappable HTTP operations for the built-in web tools.
 --
--- 'web_fetch' is functional with only a TLS 'Manager'. 'web_search' requires a
+-- @web_fetch@ is functional with only a TLS 'Manager'. @web_search@ requires a
 -- configured provider because search APIs need provider-specific credentials.
 --
 -- Security posture: the default fetch policy denies non-http(s) schemes and the
 -- most common SSRF destinations (loopback, link-local, and RFC-1918 private host
 -- literals) before opening a connection, and caps response bytes while reading.
 -- It does not resolve hostnames to detect private addresses behind DNS; supply a
--- stricter 'FetchPolicy' through 'localWebClientWith' when deployments need that.
+-- stricter t'FetchPolicy' through 'localWebClientWith' when deployments need that.
 module Shikumi.Tool.Web
   ( FetchResult (..),
     SearchHit (..),

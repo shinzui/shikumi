@@ -1,7 +1,7 @@
--- | A faithful JSON round-trip for baikai's 'Baikai.Response.Response' graph.
+-- | A faithful JSON round-trip for baikai's t'Baikai.Response.Response' graph.
 --
 -- This module exists for backward compatibility: it re-exports the baikai
--- 'Response'-graph orphan instances ('ToJSON'/'FromJSON' for @Response@,
+-- t'Baikai.Response.Response'-graph orphan instances ([ToJSON]("Data.Aeson#t:ToJSON")/t'Data.Aeson.FromJSON' for @Response@,
 -- @AssistantPayload@, @Usage@, @Cost@, @CostBreakdown@) from their single home,
 -- "Shikumi.Cache.ResponseJSON" in @shikumi-cache@ (EP-6 owns the cache key that
 -- @shikumi-trace@ already depends on, so the dependency direction is natural).

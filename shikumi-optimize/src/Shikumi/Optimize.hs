@@ -1,7 +1,7 @@
 -- | The public surface of the optimizer framework (EP-10).
 --
 -- 'optimize' is the one stable entry point EP-12's CLI calls: it applies an
--- 'Optimizer' strategy to a starting program and returns a 'CompiledProgram'. The
+-- t'Optimizer' strategy to a starting program and returns a 'CompiledProgram'. The
 -- shared search-state plumbing ('selectBest', 'scoreOn', 'freezeProgram') lives in
 -- "Shikumi.Optimize.Search" and is re-exported here; the four strategies are
 -- re-exported from their own modules.

@@ -8,7 +8,7 @@
 --
 -- COPRO consumes EP-19's grounded proposer ('Shikumi.Optimize.Propose.proposeInstructions')
 -- directly: each round's call passes the node's current instruction and its scored
--- 'PastInstruction' history, and the proposer returns ranked candidates with the
+-- t'PastInstruction' history, and the proposer returns ranked candidates with the
 -- current effective instruction always retained. Keeping that candidate writes no
 -- redundant override, preserving the safety property that a node never degrades.
 --
@@ -42,7 +42,7 @@ import Shikumi.Optimize.Search (BudgetMeter, effectiveInstructionAt, freezeProgr
 import Shikumi.Optimize.Types (Budget (..), Optimizer (..), defaultBudget)
 import Shikumi.Program (Program, foldParams)
 
--- | COPRO's two knobs plus the shared 'Budget'.
+-- | COPRO's two knobs plus the shared t'Budget'.
 data CoproConfig = CoproConfig
   { -- | candidate instructions generated per node per round (clamped to @>= 2@)
     breadth :: !Int,
@@ -60,7 +60,7 @@ defaultCoproConfig = CoproConfig {breadth = 4, depth = 3, budget = defaultBudget
 -- | Coordinate-ascent instruction optimization. Visits each node in @foldParams@
 -- order, optimizing it over @depth@ rounds against the already-improved earlier
 -- nodes. Proposer calls and candidate scoring reserve their predicted cost through
--- one shared 'Budget', so the search returns the best-so-far before the next spend
+-- one shared t'Budget', so the search returns the best-so-far before the next spend
 -- would exceed either ceiling.
 copro :: (ToJSON i, ToJSON o) => CoproConfig -> Optimizer i o
 copro cfg = Optimizer $ \train metric student -> do
@@ -78,7 +78,7 @@ copro cfg = Optimizer $ \train metric student -> do
 -- @breadth - 1@ fresh candidates (plus the retained current instruction) via the
 -- grounded proposer fed the scored attempt history, scores the not-yet-seen ones on
 -- the whole training set, records @(instruction, best-score)@, and sets the node to
--- the best so far. Every spend is gated against the 'Budget'.
+-- the best so far. Every spend is gated against the t'Budget'.
 optimizeNode ::
   (ToJSON i, ToJSON o, LLM :> es, Concurrent :> es, Error ShikumiError :> es, Time :> es, Prim :> es) =>
   CoproConfig ->

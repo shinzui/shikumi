@@ -6,11 +6,11 @@
 -- a typed answer.
 --
 -- The loop mirrors DSPy's @ProgramOfThought.forward@: ask the model for a code
--- snippet that computes the answer; run it through the captured 'CodeInterpreter';
+-- snippet that computes the answer; run it through the captured t'CodeInterpreter';
 -- if it errors, feed the error back and ask for a correction (up to @maxIters@
 -- attempts); once it runs, ask the model to extract the typed output @o@ from the
 -- code and its output. The whole loop is a single 'Shikumi.Program.Embed' node, so
--- @programOfThought@ is an ordinary @'Program' i o@ that carries no tunable
+-- @programOfThought@ is an ordinary @t'Program' i o@ that carries no tunable
 -- parameters (the parameter-count invariant holds: @foldParams (programOfThought
 -- sig) == []@) and composes/serializes exactly like @react@.
 module Shikumi.CodeExec.ProgramOfThought
@@ -56,7 +56,7 @@ programOfThought ::
 programOfThought = programOfThoughtWith defaultPoTConfig
 
 -- | @programOfThought@ with an explicit config (e.g. a different @maxIters@ or a
--- different 'CodeInterpreter').
+-- different t'CodeInterpreter').
 programOfThoughtWith ::
   (ToPrompt i, ToSchema o, FromModel o, Validatable o) =>
   PoTConfig ->

@@ -1,15 +1,15 @@
 -- | The evaluation data model — MasterPlan integration point #5. The optimizer
--- (@docs/plans/10-optimizer-framework.md@) and the CLI
--- (@docs/plans/12-cli-and-developer-experience.md@) /consume/ these types and
+-- (@docs\/plans\/10-optimizer-framework.md@) and the CLI
+-- (@docs\/plans\/12-cli-and-developer-experience.md@) /consume/ these types and
 -- must not redefine them.
 --
--- A 'Score' is a 'Double' clamped to the closed interval @[0, 1]@ at
+-- A t'Score' is a 'Double' clamped to the closed interval @[0, 1]@ at
 -- construction, so downstream ranking code can assume @0 <= s <= 1@ without
--- re-checking (a @Bool@ metric maps @True -> 1@, @False -> 0@). An 'Example' is
--- one labelled datum (input + expected output); a 'Dataset' is a list of them. A
--- 'Prediction' is a program's actual output for one example, carrying a primary
+-- re-checking (a @Bool@ metric maps @True -> 1@, @False -> 0@). An t'Example' is
+-- one labelled datum (input + expected output); a t'Dataset' is a list of them. A
+-- t'Prediction' is a program's actual output for one example, carrying a primary
 -- output plus the non-empty set of sampled outputs (a single-output program
--- yields a one-element 'Prediction'), so agreement-rewarding metrics
+-- yields a one-element t'Prediction'), so agreement-rewarding metrics
 -- (majority-vote, ensemble) can inspect every sample.
 module Shikumi.Eval.Types
   ( -- * Scores
@@ -68,7 +68,7 @@ data Example i o = Example
   }
   deriving stock (Eq, Show)
 
--- | Build an 'Example' from an input and its expected output.
+-- | Build an t'Example' from an input and its expected output.
 example :: i -> o -> Example i o
 example = Example
 
@@ -76,7 +76,7 @@ example = Example
 newtype Dataset i o = Dataset [Example i o]
   deriving stock (Eq, Show)
 
--- | Build a 'Dataset' from a list of examples.
+-- | Build a t'Dataset' from a list of examples.
 dataset :: [Example i o] -> Dataset i o
 dataset = Dataset
 

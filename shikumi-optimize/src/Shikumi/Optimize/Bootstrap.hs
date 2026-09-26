@@ -57,7 +57,7 @@ defaultBootstrapConfig :: BootstrapConfig
 defaultBootstrapConfig = BootstrapConfig {passThreshold = 1.0, maxBootstrappedDemos = 4}
 
 -- | Recover a demonstration from one teacher run: pair the typed input with the
--- teacher's produced output, serialized to the JSON 'Demo' the run-time adapter
+-- teacher's produced output, serialized to the JSON t'Demo' the run-time adapter
 -- decodes back into the node's typed demo channel. (The JSON keys are the record
 -- field names, so @fromModel@ round-trips them — see the unit test.)
 recoverDemo :: (ToJSON i, ToJSON o) => i -> o -> Demo
@@ -71,7 +71,7 @@ bootstrapFewShot = bootstrapFewShotWith defaultBootstrapConfig
 -- stronger or chain-of-thought variant of the student, or the student itself; it
 -- must share the student's input/output types. Each teacher run reserves one
 -- predicted LM completion per teacher predict node before it runs; when the next
--- teacher run does not fit the 'Budget', demo recovery stops and the demos found so
+-- teacher run does not fit the t'Budget', demo recovery stops and the demos found so
 -- far are attached.
 bootstrapFewShotWith ::
   (ToJSON i, ToJSON o) =>

@@ -3,30 +3,30 @@
 {-# LANGUAGE TypeApplications #-}
 
 -- | The keystone of shikumi (EP-4): a typed /deep embedding/ of an LM program as
--- inspectable data. A 'Program' @i o@ is a tree of three constructors that can be
+-- inspectable data. A t'Program' @i o@ is a tree of three constructors that can be
 -- done three different things with at once:
 --
 --   * __run__ as a typed function — 'runProgram' interprets the tree as an 'Eff'
 --     computation that issues @LLM@ calls and returns a typed @o@ (or throws a
---     typed 'ShikumiError');
---   * __rewritten as data__ — 'paramsTraversal' / 'foldParams' / 'mapParams' /
---     'mapParamsAt' read and replace each node's optimizable 'Params' (its
+--     typed t'ShikumiError');
+--   * __rewritten as data__ — 'paramsTraversal' \/ 'foldParams' \/ 'mapParams' \/
+--     'mapParamsAt' read and replace each node's optimizable t'Params' (its
 --     instruction override and few-shot demos) without running the program and
 --     without runtime reflection, which is what the optimizer
---     (@docs/plans/10-optimizer-framework.md@) needs;
+--     (@docs\/plans\/10-optimizer-framework.md@) needs;
 --   * __serialized__ — 'programShape' captures the closure-free structure and
 --     'programParams' / 'setProgramParams' move the JSON-serializable parameter
 --     vector, so an optimized program's state can be saved and replayed.
 --
 -- The constructor set is deliberately minimal (three): richer modules
 -- (@chainOfThought@; the combinators in
--- @docs/plans/5-module-combinators-and-control-flow.md@) are /derived/ functions
+-- @docs\/plans\/5-module-combinators-and-control-flow.md@) are /derived/ functions
 -- that build these constructors, not new constructors.
 --
 -- This module consumes EP-1 (@Shikumi.LLM@, @Shikumi.Error@) and EP-3
 -- (@Shikumi.Signature@, @Shikumi.Adapter@, @Shikumi.Schema@). See the plan's
 -- Decision Log for the reconciliations with the delivered EP-3 surface (which
--- exposes @render@/@parse@/@adapterFor@ rather than a single @runSignature@).
+-- exposes @render@\/@parse@\/@adapterFor@ rather than a single @runSignature@).
 module Shikumi.Program
   ( -- * The representation
     Program
@@ -125,9 +125,9 @@ import Shikumi.Signature qualified as Sig
 -- | The optimizable overlay of a single node: an optional instruction override
 -- (@Nothing@ = use the signature's default) and an ordered list of few-shot
 -- demonstrations. This is the /uniform, serializable/ handle the compiler
--- (@docs/plans/9-compiler-layer.md@) and optimizer
--- (@docs/plans/10-optimizer-framework.md@) manipulate regardless of a node's
--- @i@/@o@ — hence demos are stored as type-agnostic JSON (see 'Demo').
+-- (@docs\/plans\/9-compiler-layer.md@) and optimizer
+-- (@docs\/plans\/10-optimizer-framework.md@) manipulate regardless of a node's
+-- @i@/@o@ — hence demos are stored as type-agnostic JSON (see t'Demo').
 data Params = Params
   { instructionOverride :: !(Maybe Text),
     demos :: ![Demo]
@@ -141,7 +141,7 @@ instance FromJSON Params
 -- | A worked input/output example, stored as JSON so it is uniform across nodes
 -- of differing types. At run time each demo is decoded back into the node's typed
 -- @Sig.Demo i o@ and spliced into the prompt by EP-3's adapter; a demo whose JSON
--- does not decode surfaces as a 'ShikumiError'.
+-- does not decode surfaces as a t'ShikumiError'.
 data Demo = Demo
   { input :: !Value,
     output :: !Value
@@ -182,7 +182,7 @@ instance FromJSON TempSchedule
 -- ---------------------------------------------------------------------------
 
 -- | A typed LM program. 'Predict' is a single signature-backed LM call carrying
--- its 'Params'; 'Compose' sequences two programs (its intermediate type is
+-- its t'Params'; 'Compose' sequences two programs (its intermediate type is
 -- existential); 'FMap' applies a pure post-processing function (no LM call).
 --
 -- 'Predict' captures the adapter/decode dictionaries existentially so that
@@ -214,7 +214,7 @@ data Program i o where
   Map :: Int -> Program a b -> Program [a] [b]
   -- | Run two programs on the /same/ input and pair their outputs.
   Parallel :: Program i a -> Program i b -> Program i (a, b)
-  -- | Re-run a program up to @n@ total attempts on any 'ShikumiError'.
+  -- | Re-run a program up to @n@ total attempts on any t'ShikumiError'.
   Retry :: Int -> Program i o -> Program i o
   -- | Like 'Retry' but only retries errors satisfying the predicate; a
   -- non-matching error propagates after a single attempt.
@@ -229,7 +229,7 @@ data Program i o where
   -- reducer. Each sample is run with its 'TempSchedule' temperature applied to
   -- the wire (see 'TempSchedule'). The reducer is opaque to the parameter
   -- traversal and to 'ProgramShape' (omitted, exactly like 'Ensemble'\'s), so a
-  -- @MajorityVote@ exposes the sub-program's 'Params' once. The @Eq o@ that
+  -- @MajorityVote@ exposes the sub-program's t'Params' once. The @Eq o@ that
   -- 'modal' needs now lives on the smart constructor, not the GADT.
   MajorityVote :: Int -> TempSchedule -> (NonEmpty o -> o) -> Program i o -> Program i o
   -- | Run several programs on the same input, collect their (homogeneous)
@@ -240,10 +240,10 @@ data Program i o where
   -- (@LLM@ + @Error ShikumiError@) so an 'Embed' node runs under the ordinary
   -- 'runProgram'/'runProgramConc' without widening integration point #4\'s
   -- constraint. This is the constructor multi-step agents (ReAct,
-  -- @docs/plans/11-typed-tools-and-react-agents.md@) are built on: the agent
-  -- loop is one 'Embed' node, so the agent is a real, composable 'Program' that
+  -- @docs\/plans\/11-typed-tools-and-react-agents.md@) are built on: the agent
+  -- loop is one 'Embed' node, so the agent is a real, composable t'Program' that
   -- is runnable, structurally inspectable ('ShapeEmbed'), and serializable
-  -- (it carries no 'Params', like 'FMap'). The body is a closure, so it is
+  -- (it carries no t'Params', like 'FMap'). The body is a closure, so it is
   -- opaque to the parameter traversal — exactly as 'FMap'\'s function is.
   Embed :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
 
@@ -253,9 +253,9 @@ data Program i o where
 pipeline :: Program a b -> Program b c -> Program a c
 pipeline = Compose
 
--- | Embed an opaque effectful step as a 'Program' node. The smart constructor for
+-- | Embed an opaque effectful step as a t'Program' node. The smart constructor for
 -- 'Embed': lift an @(i -> Eff es o)@ — runnable in 'runProgram'\'s effect row — into
--- a @Program i o@. Used by ReAct (@docs/plans/11-typed-tools-and-react-agents.md@) to
+-- a @Program i o@. Used by ReAct (@docs\/plans\/11-typed-tools-and-react-agents.md@) to
 -- make a multi-step agent loop a first-class, composable program.
 embed :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
 embed = Embed
@@ -275,9 +275,9 @@ placeholderModel :: Model
 placeholderModel = emptyModel
 
 -- | Interpret a program as a typed @Eff@ computation. A 'Predict' node overlays
--- its 'Params' onto the signature (effective instruction + decoded demos), renders
--- the request via EP-3's adapter, issues the 'LLM' call, and parses the response
--- back into a typed @o@ — throwing a 'ShikumiError' on a parse or demo-decode
+-- its t'Params' onto the signature (effective instruction + decoded demos), renders
+-- the request via EP-3's adapter, issues the t'LLM' call, and parses the response
+-- back into a typed @o@ — throwing a t'ShikumiError' on a parse or demo-decode
 -- failure. 'Compose' threads the intermediate value; 'FMap' maps the result purely.
 runProgram ::
   (LLM :> es, Error ShikumiError :> es) =>
@@ -326,8 +326,8 @@ runProgramConc (Ensemble ps reduce) i = reduce <$> mapConcurrently (\p -> runPro
 -- internally via its own 'Concurrent' handler.
 runProgramConc (Embed f) i = f i
 
--- | Interpret a single 'Predict' node: overlay its 'Params', render via EP-3's
--- adapter, issue the 'LLM' call, parse back to a typed @o@. Shared by both
+-- | Interpret a single 'Predict' node: overlay its t'Params', render via EP-3's
+-- adapter, issue the t'LLM' call, parse back to a typed @o@. Shared by both
 -- executors so the wire behaviour is defined once.
 runPredict ::
   forall i o es.
@@ -462,13 +462,13 @@ modal xs = pickBest (foldl' tally [] (NE.toList xs))
     pickBest (z : zs) =
       fst (foldl' (\best cur -> if snd cur > snd best then cur else best) z zs)
 
--- | Overlay a node's 'Params' onto its signature: substitute the instruction
+-- | Overlay a node's t'Params' onto its signature: substitute the instruction
 -- override (when present) and decode the JSON demos into the signature's typed
 -- demo channel. A demo whose JSON does not decode is reported as the located
--- 'ShikumiError' from 'fromModel'.
+-- t'ShikumiError' from 'fromModel'.
 --
 -- Exported as an execution internal: "Shikumi.Stream".@streamPredict@ reuses it
--- (with 'parseResponse') so the streamed and blocking paths overlay 'Params' and
+-- (with 'parseResponse') so the streamed and blocking paths overlay t'Params' and
 -- decode the reply through one definition, not two divergent copies.
 effectiveSignature ::
   (FromModel i, FromModel o, Error ShikumiError :> es) =>
@@ -486,11 +486,11 @@ effectiveSignature sig ps = do
 -- Parameter interface
 -- ---------------------------------------------------------------------------
 
--- | The source-of-truth traversal: focuses every 'Params' in a program in
+-- | The source-of-truth traversal: focuses every t'Params' in a program in
 -- /left-to-right depth-first/ order (for @Compose f g@ all of @f@'s come before
--- @g@'s). Composite nodes ('Compose', 'FMap') carry no 'Params' of their own — so
+-- @g@'s). Composite nodes ('Compose', 'FMap') carry no t'Params' of their own — so
 -- a program's parameter count equals its number of 'Predict' nodes. Obeys the
--- @lens@ @Traversal'@ laws; use it directly with @toListOf@/@over@/@set@.
+-- @lens@ @Traversal'@ laws; use it directly with @toListOf@\/@over@\/@set@.
 paramsTraversal :: (Applicative f) => (Params -> f Params) -> Program i o -> f (Program i o)
 paramsTraversal h (Predict sig ps) = Predict sig <$> h ps
 paramsTraversal h (PredictCaptured codec sig ps) = PredictCaptured codec sig <$> h ps
@@ -503,11 +503,11 @@ paramsTraversal h (RetryWhen ok n p) = RetryWhen ok n <$> paramsTraversal h p
 paramsTraversal h (Validate v p) = Validate v <$> paramsTraversal h p
 paramsTraversal h (MajorityVote k sched reduce p) = MajorityVote k sched reduce <$> paramsTraversal h p
 paramsTraversal h (Ensemble ps reduce) = Ensemble <$> traverse (paramsTraversal h) ps <*> pure reduce
--- 'Embed' carries no 'Params' (its body is an opaque closure, like 'FMap'\'s
+-- 'Embed' carries no t'Params' (its body is an opaque closure, like 'FMap'\'s
 -- function), so it is a traversal leaf — preserved untouched.
 paramsTraversal _ (Embed f) = pure (Embed f)
 
--- | Read every node's 'Params', in traversal order.
+-- | Read every node's t'Params', in traversal order.
 foldParams :: Program i o -> [Params]
 foldParams = getConst . paramsTraversal (\ps -> Const [ps])
 
@@ -515,7 +515,7 @@ foldParams = getConst . paramsTraversal (\ps -> Const [ps])
 -- structurally. A 'Predict' hides its @i@\/@o@ types existentially, so a typed
 -- @Signature@ cannot escape the GADT — but the field /names/ are plain 'Text' and
 -- can. This is what the EP-16 node-correlated trace and the grounded instruction
--- proposer (@docs/plans/19-grounded-instruction-proposer.md@) consume.
+-- proposer (@docs\/plans\/19-grounded-instruction-proposer.md@) consume.
 data NodeFields = NodeFields
   { inputFieldNames :: ![Text],
     outputFieldNames :: ![Text]
@@ -548,7 +548,7 @@ nodeFieldsIndexed = go
 -- Index-aligned with 'nodeFieldsIndexed' and 'foldParams': entry @n@ describes the
 -- same node those functions address, so the two lists can be zipped. Composite
 -- nodes carry no instruction and 'Embed' is opaque, so neither contributes an
--- entry. This reads the /signature's/ base instruction (not any per-node 'Params'
+-- entry. This reads the /signature's/ base instruction (not any per-node t'Params'
 -- instruction override), which is the stable task description suitable for
 -- documentation (consumed by @shikumi-okf@'s program-doc renderer).
 nodeInstructionsIndexed :: Program i o -> [Text]
@@ -568,11 +568,11 @@ nodeInstructionsIndexed = go
     go (Ensemble ps _) = concatMap go ps
     go (Embed _) = []
 
--- | Apply a function to every node's 'Params', preserving structure and types.
+-- | Apply a function to every node's t'Params', preserving structure and types.
 mapParams :: (Params -> Params) -> Program i o -> Program i o
 mapParams f = runIdentity . paramsTraversal (Identity . f)
 
--- | Apply a function to the 'Params' at a single 0-based index in traversal order;
+-- | Apply a function to the t'Params' at a single 0-based index in traversal order;
 -- an out-of-range index leaves the program unchanged. The optimizer's primary edit
 -- primitive: "replace node @n@'s instruction/demos". The index it addresses is the
 -- same index 'foldParams' produces (the ordering law).
@@ -686,14 +686,14 @@ sigLabel :: Signature i o -> Text
 sigLabel sig = T.intercalate "," (map fieldName (outputFields sig))
 
 -- | The ordered parameter vector, in 'foldParams' order — JSON-serializable
--- because 'Params'/'Demo' are. Saving an optimized program = write
+-- because t'Params'/t'Demo' are. Saving an optimized program = write
 -- @(programShape p, programParams p)@; loading = read the @[Params]@, reconstruct
 -- @p@ in code, then 'setProgramParams'.
 programParams :: Program i o -> [Params]
 programParams = foldParams
 
 -- | Apply a saved parameter vector onto a program of the matching shape, replacing
--- each node's 'Params' in 'foldParams' order. The vector must have exactly one
+-- each node's t'Params' in 'foldParams' order. The vector must have exactly one
 -- entry per 'Predict' node; a length mismatch is a 'ParamCountMismatch' 'Left'.
 setProgramParams :: [Params] -> Program i o -> Either ProgramShapeError (Program i o)
 setProgramParams ps prog

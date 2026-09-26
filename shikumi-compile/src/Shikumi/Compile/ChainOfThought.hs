@@ -5,23 +5,23 @@
 -- before answering.
 --
 -- __Implementation: a structural rewrite (the plan's preferred form).__ EP-4 has
--- no @reasoning@ flag on 'Shikumi.Program.Params' to flip; instead, reasoning is a
+-- no @reasoning@ flag on t'Shikumi.Program.Params' to flip; instead, reasoning is a
 -- /structural/ property — 'Shikumi.Module.chainOfThought' augments a signature's
 -- output with a leading @reasoning@ field and amends its instruction to "think step
 -- by step", then projects the answer back out with @FMap@. So this compiler walks
 -- the program and replaces each @Predict sig ps@ leaf with exactly that shape:
--- @FMap value (chainOfThoughtRaw sig)@, carrying the node's existing 'Params'
+-- @FMap value (chainOfThoughtRaw sig)@, carrying the node's existing t'Shikumi.Program.Params'
 -- across. The rewrite is type-preserving (a @Program i o@ stays a @Program i o@)
 -- because the augmented @Program i (WithReasoning o)@ is mapped back through
 -- 'Shikumi.Module.value'.
 --
--- This is feasible — and faithful — only because EP-4 /exports the GADT
--- constructors/, so a downstream package can pattern-match and rebuild nodes. EP-4
--- does not ship a node-level @rewriteNodes@ helper, so the recursion is spelled out
--- here over every constructor (the EP-4/EP-5 rule: every function over the GADT
--- must match every constructor).
+-- This is feasible — and faithful — only because EP-4
+-- /exports the GADT constructors/, so a downstream package can pattern-match and
+-- rebuild nodes. EP-4 does not ship a node-level @rewriteNodes@ helper, so the
+-- recursion is spelled out here over every constructor (the EP-4/EP-5 rule: every
+-- function over the GADT must match every constructor).
 --
--- __Caveat (recorded in the plan's Decision Log).__ The node's existing 'Params'
+-- __Caveat (recorded in the plan's Decision Log).__ The node's existing t'Shikumi.Program.Params'
 -- are preserved verbatim. For the common case — compiling a base (uncompiled)
 -- program whose nodes carry 'Shikumi.Program.emptyParams' — this reproduces
 -- 'Shikumi.Module.chainOfThought' exactly. If a node already carries an
@@ -73,8 +73,8 @@ chainOfThoughtCompiler = Compiler cot
 
 -- | The structural rewrite, polymorphic in @i@/@o@ so it threads through the GADT's
 -- existential children. At a 'Predict' leaf the constructor's captured dictionaries
--- ('Shikumi.Schema.FromModel' @i@/@o@, 'Shikumi.Schema.ToSchema' @o@, the
--- 'Shikumi.Adapter.ToPrompt's) are exactly what 'chainOfThoughtRaw' needs.
+-- ('Shikumi.Schema.FromModel' @i@/@o@, t'Shikumi.Schema.ToSchema' @o@, the
+-- t'Shikumi.Adapter.ToPrompt's) are exactly what 'chainOfThoughtRaw' needs.
 cot :: Program i o -> Program i o
 cot (PredictCaptured codec sig ps) =
   case chainOfThoughtRaw sig of

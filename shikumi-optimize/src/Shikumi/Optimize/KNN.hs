@@ -2,7 +2,7 @@
 -- examples whose inputs are most /semantically similar/ to it, and show those as the
 -- demos. Two forms:
 --
---   * 'knnFewShot' — the faithful run-time form: a single 'Embed' node that, per
+--   * 'knnFewShot' — the faithful run-time form: a single 'Shikumi.Program.Embed' node that, per
 --     input, embeds the input, ranks the training examples by cosine similarity, and
 --     runs the student under the @k@ nearest as demos. Demos depend on the input.
 --   * 'knnFewShotCentroid' — a compile-time fallback that bakes the @k@ examples
@@ -10,7 +10,7 @@
 --     for callers who cannot run an embedder at execution time.
 --
 -- The embedder is injected as a /pure/ closure @Text -> Vector Double@ (the shape of
--- EP-15's pure @runEmbedding@ argument), not the @Embedding@ effect: an 'Embed'
+-- EP-15's pure @runEmbedding@ argument), not the @Embedding@ effect: an 'Shikumi.Program.Embed'
 -- body's row is fixed to @(LLM, Error ShikumiError)@, so it cannot call @embedText@;
 -- all embedding-effect work happens at the caller, outside the node. The run-time
 -- form carries no @Params@ (it serializes as an @Embed@ shape with an empty vector,
@@ -87,7 +87,7 @@ centroid [] = V.empty
 centroid vs = V.map (/ fromIntegral (length vs)) (foldl1 (V.zipWith (+)) vs)
 
 -- | The run-time KNN node: for each input, attach the @k@ nearest training examples
--- as demos and run the student under them. A plain @Program i o@ (an 'Embed' node)
+-- as demos and run the student under them. A plain @Program i o@ (an 'Shikumi.Program.Embed' node)
 -- usable anywhere a Program is; it carries no @Params@ (like @react@).
 knnDemos ::
   (ToJSON i, ToJSON o, ToPrompt i) =>
@@ -100,7 +100,7 @@ knnDemos embedder k train student =
   let exs = datasetExamples train
    in embed $ \i -> runProgram (withDemos (nearestDemos embedder k exs (toPrompt i)) student) i
 
--- | Run-time KNN as an 'Optimizer': selection is by embedding geometry, not by
+-- | Run-time KNN as an t'Optimizer': selection is by embedding geometry, not by
 -- score, so it consults neither the metric nor the LM at optimize time and spends
 -- zero optimizer LM calls. The result is a structure-changing @Embed@ wrapper
 -- around the student. Its run-time selector closure is not persisted by

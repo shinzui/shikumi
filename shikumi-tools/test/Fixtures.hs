@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
 -- | Shared fixtures for the @shikumi-tools@ specs: the weather records from the
--- plan's Purpose, their schema/decode/prompt instances, the typed @weatherTool@ and
+-- plan's Purpose, their schema\/decode\/prompt instances, the typed @weatherTool@ and
 -- its registry, the mock-LM scripts for both protocols, and the expected schema and
 -- answer the specs assert against.
 module Fixtures

@@ -1,4 +1,4 @@
--- | Turn a 'ProgramManifest' into OKF concepts and write them to disk.
+-- | Turn a t'ProgramManifest' into OKF concepts and write them to disk.
 --
 -- The bundle is one @Shikumi App@ concept that links to one @Shikumi Program@
 -- concept per manifest entry. Those Markdown links are the app→program edges the
@@ -10,7 +10,7 @@
 -- The bundles target __OKF v0.2__: the root @index.md@ declares
 -- @okf_version: "0.2"@ and every concept records its producer in the v0.2
 -- @generated@ family, which is what strict validation now asks for. Both come
--- from 'GenerateOptions'; start from 'defaultGenerateOptions' and override,
+-- from t'GenerateOptions'; start from 'defaultGenerateOptions' and override,
 -- rather than building the record literally, so a later field with a default
 -- leaves your call site working.
 --
@@ -57,7 +57,7 @@ import Shikumi.Okf.Types (AppInfo (..), ProgramDoc (..), ProgramManifest (..))
 -- | Why bundle generation failed.
 data GenerateError
   = -- | A manifest name did not form a valid OKF concept id (carries the raw
-    -- @apps/<app>@ or @programs/<name>@ text and the underlying parse error).
+    -- @apps\/\<app\>@ or @programs\/\<name\>@ text and the underlying parse error).
     InvalidConceptName Text ConceptIdError
   | -- | Writing the bundle's @index.md@ files failed.
     IndexWriteError BundleError
@@ -111,11 +111,11 @@ defaultGeneratedBy = ProcessActor "shikumi-okf"
 okfVersion02 :: OkfVersion
 okfVersion02 = OkfVersion {okfVersionMajor = 0, okfVersionMinor = 2}
 
--- | The concept id of a program: @programs/<name>@.
+-- | The concept id of a program: @programs/\<name\>@.
 programConceptId :: ProgramDoc -> Either GenerateError ConceptId
 programConceptId doc = mkConceptId ("programs/" <> name doc)
 
--- | The concept id of the application: @apps/<app>@.
+-- | The concept id of the application: @apps/\<app\>@.
 appConceptId :: AppInfo -> Either GenerateError ConceptId
 appConceptId app = mkConceptId ("apps/" <> appName app)
 
@@ -176,7 +176,7 @@ generateBundle app opts manifest = do
   pure (appC : programCs)
 
 -- | Generate the bundle and write it to @root@, then write its @index.md@ files
--- with the OKF version declaration from 'GenerateOptions'. Returns the first
+-- with the OKF version declaration from t'GenerateOptions'. Returns the first
 -- error encountered (an invalid name before any IO, or an index write failure
 -- after the concept files are written).
 writeProgramBundle ::

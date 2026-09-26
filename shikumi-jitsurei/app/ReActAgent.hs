@@ -29,7 +29,7 @@ import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Tool (SomeTool (..), Tool, ToolRegistry, mkRegistry, mkTool)
 
 -- ---------------------------------------------------------------------------
--- A tool's request/response are records; the agent's question/answer too.
+-- A tool's request\/response are records; the agent's question\/answer too.
 -- ---------------------------------------------------------------------------
 
 data WeatherReq = WeatherReq {city :: !Text, units :: !Text}

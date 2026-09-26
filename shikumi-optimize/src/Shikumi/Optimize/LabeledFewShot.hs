@@ -40,7 +40,7 @@ labeledFewShotWith budget k = Optimizer $ \train metric prog -> do
     Just sc -> freezeProgram (withDemos (candidate sc) prog)
 
 -- | The candidate demo sets a 'labeledFewShot' search considers: every size-@k@
--- combination of the training examples (each turned into a JSON 'Demo'), in
+-- combination of the training examples (each turned into a JSON t'Demo'), in
 -- deterministic enumeration order. Exposed so tests can reproduce the exact set of
 -- candidates the optimizer scored.
 labeledCandidateSets :: (ToJSON i, ToJSON o) => Int -> Dataset i o -> [[Demo]]

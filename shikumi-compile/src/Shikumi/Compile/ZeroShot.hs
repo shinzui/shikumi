@@ -15,7 +15,7 @@ import Shikumi.Program (mapParams)
 
 -- | Override every node's instruction with @instr@ and remove all demos. Reaches
 -- every 'Shikumi.Program.Predict' node in the program — including nodes nested
--- inside @Compose@/@Parallel@/@Retry@/etc. — because 'mapParams' visits them all.
+-- inside @Compose@\/@Parallel@\/@Retry@\/etc. — because 'mapParams' visits them all.
 zeroShot :: Text -> Compiler
 zeroShot instr =
   Compiler $
