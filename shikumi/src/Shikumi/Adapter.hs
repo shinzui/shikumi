@@ -473,8 +473,8 @@ nullableInner _ = Nothing
 
 -- | A compact, JSON-like rendering of a derived schema for the fallback guide:
 -- scalars by type name, string enums as their quoted values joined by @|@,
--- arrays as @[<item>, ...]@, objects as @{"k": <shape>, …}@ (keys in @required@
--- order, any others sorted after), and nullable values as @<shape> | null@.
+-- arrays as @[\<item\>, ...]@, objects as @{"k": \<shape\>, …}@ (keys in @required@
+-- order, any others sorted after), and nullable values as @\<shape\> | null@.
 renderShape :: Value -> Text
 renderShape v = case nullableInner v of
   Just s -> renderShape s <> " | null"
