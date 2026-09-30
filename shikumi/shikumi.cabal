@@ -98,6 +98,7 @@ test-suite shikumi-test
     ContinuationSpec
     EndToEndSpec
     ErrorSpec
+    FallbackGuideSpec
     Fixtures
     LLMSpec
     LiveSpec

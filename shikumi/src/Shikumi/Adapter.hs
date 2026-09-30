@@ -90,8 +90,10 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
 import Data.Kind (Type)
+import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -425,11 +427,77 @@ nativeOutputGuide sig =
 
 -- | A fallback-output guide: ask for one @[[ ## field ## ]]@ section per output
 -- field, then a final @[[ ## completed ## ]]@ marker (DSPy's convention).
-fallbackOutputGuide :: Signature i o -> Text
+--
+-- A field whose derived schema (ignoring nullability) is an object or an array
+-- gets one further @JSON shape: …@ line ('renderShape'), so a model without
+-- schema enforcement still sees nested keys and closed enum values. Scalar
+-- fields, including top-level enums, render exactly as before.
+fallbackOutputGuide :: forall i o. (ToSchema o) => Signature i o -> Text
 fallbackOutputGuide sig =
   "Reply using these sections, each marker on its own line:\n"
-    <> T.unlines [marker (fieldName f) <> describeSuffix f | f <- outputFields sig]
+    <> T.unlines (concat [fieldLines f | f <- outputFields sig])
     <> marker "completed"
+  where
+    schema = deriveSchema @o
+    fieldLines f =
+      (marker (fieldName f) <> describeSuffix f)
+        : [ "JSON shape: " <> renderShape s
+          | Just s <- [propertySchema (fieldName f) schema],
+            isStructured s
+          ]
+    isStructured s = case KM.lookup "type" =<< objectOf (stripNullable s) of
+      Just (String t) -> t == "object" || t == "array"
+      _ -> False
+
+-- | The schema of one top-level property of a derived object schema.
+propertySchema :: Text -> Value -> Maybe Value
+propertySchema name schema =
+  KM.lookup (Key.fromText name) =<< objectOf =<< KM.lookup "properties" =<< objectOf schema
+
+objectOf :: Value -> Maybe Object
+objectOf (Object o) = Just o
+objectOf _ = Nothing
+
+-- | Strip a nullable @anyOf [s, {"type":"null"}]@ wrapper, if present.
+stripNullable :: Value -> Value
+stripNullable v = fromMaybe v (nullableInner v)
+
+-- | The inner schema of a nullable @anyOf [s, {"type":"null"}]@ wrapper.
+nullableInner :: Value -> Maybe Value
+nullableInner (Object o)
+  | Just (Array alts) <- KM.lookup "anyOf" o,
+    [s, Object n] <- V.toList alts,
+    KM.lookup "type" n == Just (String "null") =
+      Just s
+nullableInner _ = Nothing
+
+-- | A compact, JSON-like rendering of a derived schema for the fallback guide:
+-- scalars by type name, string enums as their quoted values joined by @|@,
+-- arrays as @[<item>, ...]@, objects as @{"k": <shape>, …}@ (keys in @required@
+-- order, any others sorted after), and nullable values as @<shape> | null@.
+renderShape :: Value -> Text
+renderShape v = case nullableInner v of
+  Just s -> renderShape s <> " | null"
+  Nothing -> case objectOf v of
+    Nothing -> anyValue
+    Just o -> case KM.lookup "enum" o of
+      Just (Array vs) | not (V.null vs) -> T.intercalate " | " (map jsonText (V.toList vs))
+      _ -> case KM.lookup "type" o of
+        Just (String "array") -> "[" <> maybe anyValue renderShape (KM.lookup "items" o) <> ", ...]"
+        Just (String "object") -> renderObject o
+        Just (String t) | t `elem` ["string", "integer", "number", "boolean"] -> t
+        _ -> anyValue
+  where
+    anyValue = "any JSON value"
+    jsonText x = decodeUtf8 (LBS.toStrict (Aeson.encode x))
+    renderObject o =
+      let props = fromMaybe KM.empty (objectOf =<< KM.lookup "properties" o)
+          required = case KM.lookup "required" o of
+            Just (Array rs) -> [k | String r <- V.toList rs, let k = Key.fromText r, KM.member k props]
+            _ -> []
+          others = sortOn Key.toText [k | k <- KM.keys props, k `notElem` required]
+          entry k = jsonText (String (Key.toText k)) <> ": " <> maybe anyValue renderShape (KM.lookup k props)
+       in "{" <> T.intercalate ", " (map entry (required <> others)) <> "}"
 
 describeField :: FieldMeta -> Text
 describeField f = "- " <> fieldName f <> maybe "" (": " <>) (fieldDesc f)

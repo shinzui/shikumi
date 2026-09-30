@@ -73,9 +73,13 @@ workaround.
   Evidence: `cabal test shikumi --test-options='-p CliSchema'` passes 3/3 — claude CLI (asserts the
   strict `JsonSchema "output"` format and that no private metadata reaches the transport), codex CLI,
   and the `Custom "no-schema"` control, whose error contains `expected object, got string`.
-- [ ] Milestone 3: `fallbackAdapter`'s guide renders the JSON shape of every object or array output
+- [x] Milestone 3 (2026-09-30): `fallbackAdapter`'s guide renders the JSON shape of every object or array output
   field, and a pinned-text test fixes the rendered guide. Scalar-only guides are byte-for-byte
   unchanged. `cabal test all` passes.
+  Evidence: `FallbackGuideSpec` passes 3/3. Its scalar-only pin was written from the old code and
+  passed before the guide changed; the `Assessment` guide matches the target text in Plan of Work
+  exactly. `cabal test all`: 17 of 17 suites pass (`shikumi` 254 tests) with no fixture updates in
+  other packages. User guide updated.
 - [ ] Milestone 4: `shikumi` and `shikumi-tools` are released to Hackage, bounded to the Baikai
   cohort that implements IR-11. IR-4 is marked completed with evidence.
 
@@ -93,6 +97,9 @@ workaround.
     baikai-claude-0.7.1.0: 404
     baikai-openai-0.7.1.0: 404
     ```
+
+- No fixture in `shikumi-compile`, `shikumi-optimize`, `shikumi-trace` or `shikumi-eval` changed
+  with the new `JSON shape:` lines; none of them pins a fallback prompt for a structured output.
 
 - `shikumi-tools/src/Shikumi/Agent/ReAct.hs` (`resolveProtocolKind`) reuses `capabilityFor` to decide
   whether to use provider-native *tool calling*. Its comment says this depends on CLI models resolving

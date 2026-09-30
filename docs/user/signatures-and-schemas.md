@@ -196,19 +196,39 @@ data Adapter i o = Adapter
 ```haskell
 data ModelCapability = NativeSchema | PromptFallback
 
-capabilityFor :: Model -> ModelCapability    -- pure check on (provider, api)
+capabilityFor :: Model -> ModelCapability    -- pure check on (provider, api) via Baikai's declaration
 adapterFor    :: Model -> Adapter i o        -- auto-selects native vs. fallback
 ```
 
 - **`nativeAdapter` (the reliable path).** For models that support provider-native structured
-  output (OpenAI Chat Completions, Anthropic Messages), the derived JSON schema is attached to
-  the request and the provider *enforces* the shape. `parse` reads the structured JSON and
-  decodes it.
-- **`fallbackAdapter` (everything else).** For models without native structured output, the
-  request asks for one `[[ ## fieldname ## ]]` section per output field, followed by a final
-  `[[ ## completed ## ]]` marker (DSPy's convention). `parse` splits the sections, coerces
-  each to its schema type (string-like fields stay strings; everything else is JSON-parsed),
-  assembles a JSON object, and decodes it the same way.
+  output, the derived JSON schema is attached to the request and the provider *enforces* the
+  shape. `parse` reads the structured JSON and decodes it. `capabilityFor` starts from Baikai's
+  `declaredStructuredOutput` for the model's `api` and selects this path for the first-party
+  HTTP hosts (`openai` over Chat Completions or Responses, `anthropic` over Messages) and for
+  the subscription CLIs: `claude-cli` (`AnthropicMessagesCli`, sent as `claude -p
+  --json-schema`) and `codex-cli` (`OpenAICompletionsCli`, sent as `codex exec
+  --output-schema`). An installed CLI too old to know the flag fails with a terminal
+  `ProviderError` instead of replying unconstrained.
+- **`fallbackAdapter` (everything else).** For models without enforced structured output —
+  `Custom` hosts such as Ollama, and third-party hosts that speak a first-party wire format
+  (`deepseek` or `openrouter` over Chat Completions), whose enforcement Baikai cannot vouch
+  for — the request asks for one `[[ ## fieldname ## ]]` section per output field, followed by
+  a final `[[ ## completed ## ]]` marker (DSPy's convention). A field whose schema is an object
+  or an array also gets a `JSON shape:` line showing its nested keys and enum values, so the
+  model knows a list of records is not a list of strings:
+
+  ```text
+  [[ ## concerns ## ]]  -- Readiness concerns
+  JSON shape: [{"statement": string, "severity": "Blocker" | "Major" | "Minor"}, ...]
+  ```
+
+  Scalar fields, including top-level enums, get no shape line. `parse` splits the sections,
+  coerces each to its schema type (string-like fields stay strings; everything else is
+  JSON-parsed), assembles a JSON object, and decodes it the same way.
+
+Schema enforcement and tool calling are separate capabilities: Baikai's CLI providers enforce a
+schema but drop tools, so `Shikumi.Agent.ReAct`'s `ProtocolAuto` still picks the prompt tool
+protocol for CLI models.
 - **`xmlAdapter` (opt-in).** A third wire format on the same seam: `render` asks the model to
   wrap each output field in an XML tag — `<headline>…</headline>` — and `parse` reads those
   tags back. Some models follow an XML shape more reliably than JSON or the `[[ ## … ## ]]`

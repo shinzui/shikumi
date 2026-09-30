@@ -9,6 +9,7 @@ import ConstraintSpec qualified
 import ContinuationSpec qualified
 import EndToEndSpec qualified
 import ErrorSpec qualified
+import FallbackGuideSpec qualified
 import LLMSpec qualified
 import LiveSpec qualified
 import ModuleSpec qualified
@@ -44,6 +45,7 @@ main =
         SignatureSpec.tests,
         AdapterSpec.tests,
         CliSchemaSpec.tests,
+        FallbackGuideSpec.tests,
         EndToEndSpec.tests,
         LLMSpec.tests,
         ResilienceSpec.tests,
