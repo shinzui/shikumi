@@ -30,7 +30,6 @@ packages:
 -- depends on the published `okf-core` library. This keeps okf-core OUT of every
 -- other package's build plan: only shikumi-okf lists it under build-depends, so
 -- `cabal build shikumi` (core) never compiles it.
-
 -- cmark-gfm fork: makes core-extension registration thread-safe, so parsing
 -- Markdown from more than one thread does not abort the process.
 --
@@ -83,6 +82,5 @@ package postgresql-libpq
 
 test-show-details: direct
 tests: True
-
 -- Parallel module compilation
 jobs: $ncpus
