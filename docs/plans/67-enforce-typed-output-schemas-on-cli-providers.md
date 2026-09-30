@@ -67,9 +67,12 @@ workaround.
   Evidence: `shikumi` 248 tests pass, including five new `capabilityFor` cases; `shikumi-tools` passes,
   including three new `ProtocolAuto` cases (codex CLI, claude CLI, deepseek → `ProtocolPrompt`). The
   CLI routing assertion lives in `CliSchemaSpec` (Milestone 2).
-- [ ] Milestone 2: A typed program whose output holds a list of records with an enum field decodes
+- [x] Milestone 2 (2026-09-30): A typed program whose output holds a list of records with an enum field decodes
   through a scripted `AnthropicMessagesCli` provider that enforces the schema. The same provider
   registered under a fallback tag fails with the Mina-style `SchemaMismatch`.
+  Evidence: `cabal test shikumi --test-options='-p CliSchema'` passes 3/3 — claude CLI (asserts the
+  strict `JsonSchema "output"` format and that no private metadata reaches the transport), codex CLI,
+  and the `Custom "no-schema"` control, whose error contains `expected object, got string`.
 - [ ] Milestone 3: `fallbackAdapter`'s guide renders the JSON shape of every object or array output
   field, and a pinned-text test fixes the rendered guide. Scalar-only guides are byte-for-byte
   unchanged. `cabal test all` passes.

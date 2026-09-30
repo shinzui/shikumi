@@ -3,6 +3,7 @@
 module Main (main) where
 
 import AdapterSpec qualified
+import CliSchemaSpec qualified
 import CombinatorSpec qualified
 import ConstraintSpec qualified
 import ContinuationSpec qualified
@@ -42,6 +43,7 @@ main =
         SchemaSpec.tests,
         SignatureSpec.tests,
         AdapterSpec.tests,
+        CliSchemaSpec.tests,
         EndToEndSpec.tests,
         LLMSpec.tests,
         ResilienceSpec.tests,
