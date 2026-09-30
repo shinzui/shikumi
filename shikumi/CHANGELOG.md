@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.4.1.0 — 2026-09-30
+
+- Route subscription-CLI models through the native schema adapter. `capabilityFor` now starts from Baikai's `declaredStructuredOutput` for the model's `api`: `AnthropicMessagesCli` (`claude -p --json-schema`) and `OpenAICompletionsCli` (`codex exec --output-schema`) are `NativeSchema`, so their requests carry the strict derived schema and a list-of-records output decodes. First-party HTTP routing is unchanged; third-party hosts over a first-party wire format (`deepseek`, `openrouter` over Chat Completions) and `Custom` hosts stay `PromptFallback`. Previously cached CLI responses miss once, because the request now carries a `responseFormat` and the native prompt. Implements `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-4`.
+
+- Show the JSON shape of every object or array output field in the fallback guide: a `JSON shape:` line under the field's marker lists nested keys (in `required` order) and closed enum values. Scalar-only fallback prompts are byte-for-byte unchanged.
+
+- Raise the dependencies on `mori://shinzui/baikai/packages/baikai` to `>=0.7.2.0 && <0.8`, and on `mori://shinzui/baikai/packages/baikai-claude` and `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.1.0 && <0.8`. Older provider packages ignore `responseFormat` on the CLI transports, which would drop the marker fallback without gaining enforcement.
 
 - Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and on `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.1 && <0.5`, and widen the `effectful` bound to `>=2.6 && <2.8`. Both effectful 2.6 and 2.7 are supported: `baikai-effectful` 0.4.0.1 requires `effectful-core` 2.6 and 0.4.0.2 requires 2.7, so the solver pairs them. Bounds only; no source changed.
 
