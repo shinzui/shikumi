@@ -34,10 +34,17 @@ for pkg in "${packages[@]}"; do
     echo "cabal haddock $pkg failed" >&2
     exit 1
   fi
+  # Keep only the package's own Haddock run: local dependencies (e.g. a sibling
+  # baikai checkout in cabal.project.local) are haddocked first, in the same log.
   # Each warning is the `Warning:` line plus its indented explanation.
-  if grep -qE "^Warning: .*(is out of scope|is ambiguous)" "$log"; then
-    awk '/^Warning: .*(is out of scope|is ambiguous)/ { on = 1; print; next }
-         on && /^    / { print; next } { on = 0 }' "$log"
+  warnings=$(awk -v pkg="$pkg" '
+    $0 ~ ("^Running Haddock on .* for " pkg "-[0-9]") { own = 1 }
+    !own { next }
+    /^Warning: .*(is out of scope|is ambiguous)/ { on = 1; print; next }
+    on && /^    / { print; next }
+    { on = 0 }' "$log")
+  if [ -n "$warnings" ]; then
+    echo "$warnings"
     failed=1
   fi
 done
