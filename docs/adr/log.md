@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-30
+* **Added**: ADR-14: separate schema enforcement from tool-calling capability; CLI transports route natively.
+
 ## 2026-09-08
 * **Update**: Extend ADR-9 with released-adapter loopback fixtures, bounded worker cleanup, consumer test ownership and explicit live gates.
 * **Update**: Added ADR-13 for bounded transport billing, separate logical accounting, and explicit uncertainty.

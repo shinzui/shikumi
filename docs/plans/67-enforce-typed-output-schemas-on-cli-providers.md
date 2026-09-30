@@ -80,8 +80,14 @@ workaround.
   passed before the guide changed; the `Assessment` guide matches the target text in Plan of Work
   exactly. `cabal test all`: 17 of 17 suites pass (`shikumi` 254 tests) with no fixture updates in
   other packages. User guide updated.
-- [ ] Milestone 4: `shikumi` and `shikumi-tools` are released to Hackage, bounded to the Baikai
+- [x] Milestone 4 (2026-09-30): `shikumi` and `shikumi-tools` are released to Hackage, bounded to the Baikai
   cohort that implements IR-11. IR-4 is marked completed with evidence.
+  Evidence: with `cabal.project.local` moved aside, `cabal build all && cabal test all` passed (13 of 13
+  Shikumi suites), and `plan.json` showed `baikai 0.7.2.0`, `baikai-claude 0.7.1.0` and
+  `baikai-openai 0.7.1.0` as `repo-tar` (Hackage). `cabal check` is clean for both packages.
+  `shikumi-0.4.1.0` and `shikumi-tools-0.4.1.0` and their docs were uploaded. The published
+  `shikumi.cabal` shows the Milestone 1 bounds. Annotated tags `shikumi-0.4.1.0` and
+  `shikumi-tools-0.4.1.0` were created locally. ADR-14 was added.
 
 
 ## Surprises & Discoveries
@@ -97,6 +103,8 @@ workaround.
     baikai-claude-0.7.1.0: 404
     baikai-openai-0.7.1.0: 404
     ```
+
+    Update 2026-09-30: all three returned 200 by the time Milestone 4 started, which unblocked the release.
 
 - No fixture in `shikumi-compile`, `shikumi-optimize`, `shikumi-trace` or `shikumi-eval` changed
   with the new `JSON shape:` lines; none of them pins a fallback prompt for a structured output.
@@ -150,6 +158,14 @@ workaround.
   the expected text sits beside the assertion.
   Date: 2026-09-30
 
+- Decision: Release only `shikumi 0.4.1.0` and `shikumi-tools 0.4.1.0`. The other packages' pending
+  Unreleased entries (effectful 2.6/2.7 bound widening) stay unreleased. `shikumi` also bumps
+  minor, not major, because its pending entries are bounds-only.
+  Rationale: The other packages' existing `shikumi ^>=0.4.0.0` bounds already admit 0.4.1.0, so
+  consumers pick up the change without a cohort release. Releasing the unrelated bounds work is a
+  separate decision.
+  Date: 2026-09-30
+
 - Decision: Bound `baikai-claude` and `baikai-openai` at `>=0.7.1.0`, not only `baikai` at `>=0.7.2.0`.
   Rationale: With an older provider package, Shikumi would install the native JSON prompt and attach
   a `responseFormat` that the CLI provider silently ignores. That drops the marker fallback and gains
@@ -159,7 +175,23 @@ workaround.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-09-30. Every acceptance criterion in Validation and Acceptance holds. Programs on
+`claude-cli` and `codex-cli` models now take the native path with the strict derived schema.
+`CliSchemaSpec` proves that a list-of-records output decodes through a schema-enforcing CLI stub and
+fails in the Mina style without the schema. The fallback guide renders nested keys and enum values.
+Its output matched the plan's target text byte for byte, so no pin deviates from the plan. Scalar-only
+prompts are unchanged, and no fixture in another package moved. ReAct keeps CLI models on the prompt
+tool protocol through its own `nativeToolCalling` table. `shikumi 0.4.1.0` and `shikumi-tools
+0.4.1.0` are on Hackage, bounded to the IR-11 cohort. IR-4 is marked completed, and ADR-14 records
+the split between schema and tool capabilities.
+
+The optional live `claude-cli`/`codex-cli` check was not run. Mina's live judges are the natural
+place to confirm the fix and drop their key-listing workaround. The tags exist locally only; push
+them with the release commits when publishing the branch.
+
+Lesson: a capability predicate that is reused for two decisions (schema enforcement and tool
+calling) silently couples them. Keeping them apart was the one design point this work could not
+skip.
 
 
 ## Context and Orientation

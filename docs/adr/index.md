@@ -19,3 +19,4 @@ okf_version: "0.2"
 - [Centralize offline harness and diverse fixtures](0009-centralize-offline-harness-and-diverse-fixtures.md) - Own reusable offline LLM interpreters and nontrivial fixture shapes in an internal package below consumer libraries and tests.
 - [Use bounded schema-guided XML fragments](0010-use-bounded-schema-guided-xml-fragments.md) - Decode a bounded XML vocabulary through the existing typed decoder and use JSON serialization for structured XML demonstrations.
 - [Separate transport billing from logical usage](0013-separate-transport-billing-from-logical-usage.md) - Observe bounded transport attempts and preserve accounting uncertainty separately from logical usage.
+- [Separate schema enforcement from tool-calling capability](0014-separate-schema-enforcement-from-tool-calling-capability.md) - Derive native-schema routing from Baikai's declared structured-output support while keeping provider-native tool calling on its own first-party table.
