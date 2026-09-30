@@ -10,7 +10,9 @@
 --
 -- The native-schema adapter uses provider-enforced JSON; the prompt-based fallback
 -- renders @[[ ## field ## ]]@ sections for models without native structured output.
--- 'capabilityFor' selects between them per model. Two opt-in XML adapters share
+-- 'capabilityFor' selects between them per model from baikai's declared
+-- structured-output support: first-party HTTP hosts and the subscription CLIs
+-- (@claude@, @codex@) are native; third-party and @Custom@ hosts fall back. Two opt-in XML adapters share
 -- bounded nested decoding and offer legacy or structured demonstration rendering.
 --
 -- Native structured output is wired through a private /metadata channel/ (EP-14).
@@ -70,8 +72,10 @@ import Baikai
     Model,
     Options,
     Response,
+    StructuredOutputSupport (..),
     TextContent (..),
     assistant,
+    declaredStructuredOutput,
     emptyContext,
     emptyOptions,
     flattenAssistantBlocks,
@@ -184,15 +188,43 @@ data Adapter i o = Adapter
 data ModelCapability = NativeSchema | PromptFallback
   deriving stock (Eq, Show)
 
--- | A pure capability check over a baikai 'Model'. OpenAI/Anthropic on their
--- non-CLI APIs are native-capable; CLI APIs and unknown @Custom@ hosts use the
--- fallback. Refine as more models gain native support.
+-- | A pure capability check over a baikai 'Model', derived from baikai's
+-- per-transport declaration ('declaredStructuredOutput').
+--
+-- A model is 'NativeSchema' when baikai declares 'NativeJsonSchema' for its
+-- @api@ and either:
+--
+-- * the @api@ is a subscription CLI tag ('AnthropicMessagesCli' for @claude -p
+--   --json-schema@, 'OpenAICompletionsCli' for @codex exec --output-schema@) —
+--   such a tag is always served by baikai's own CLI provider, so baikai's
+--   declaration is authoritative; or
+-- * the @(provider, api)@ pair is a first-party HTTP host: @openai@ over Chat
+--   Completions or Responses, or @anthropic@ over Messages.
+--
+-- Third-party hosts speaking a first-party wire format (for example @deepseek@
+-- or @openrouter@ over 'OpenAIChatCompletions') stay 'PromptFallback': baikai
+-- forwards the schema, but cannot know whether such a host enforces it.
+-- @Custom@ transports are 'NoStructuredOutput' in baikai's table and therefore
+-- always 'PromptFallback'.
+--
+-- This answers schema enforcement only. Provider-native /tool calling/ is a
+-- separate capability (baikai's CLI providers enforce schemas but drop tools);
+-- see "Shikumi.Agent.ReAct".
 capabilityFor :: Model -> ModelCapability
-capabilityFor m = case (m ^. #provider, m ^. #api) of
-  ("openai", OpenAIChatCompletions) -> NativeSchema
-  ("openai", OpenAIResponses) -> NativeSchema
-  ("anthropic", AnthropicMessages) -> NativeSchema
-  _ -> PromptFallback
+capabilityFor m = case declaredStructuredOutput api of
+  NoStructuredOutput -> PromptFallback
+  NativeJsonSchema
+    | cliTransport || firstPartyApi -> NativeSchema
+    | otherwise -> PromptFallback
+  where
+    api = m ^. #api
+    cliTransport = api `elem` [AnthropicMessagesCli, OpenAICompletionsCli]
+    firstPartyApi =
+      (m ^. #provider, api)
+        `elem` [ ("openai", OpenAIChatCompletions),
+                 ("openai", OpenAIResponses),
+                 ("anthropic", AnthropicMessages)
+               ]
 
 -- | Select the adapter for a model from its capability.
 adapterFor ::

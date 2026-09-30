@@ -102,6 +102,16 @@ tests =
         capabilityFor (emptyModel & #provider .~ "openai" & #api .~ OpenAIResponses) @?= NativeSchema,
       testCase "capabilityFor: Custom (ollama) host -> PromptFallback" $
         capabilityFor ollamaModel @?= PromptFallback,
+      testCase "capabilityFor: claude CLI -> NativeSchema" $
+        capabilityFor (emptyModel & #provider .~ "claude-cli" & #api .~ AnthropicMessagesCli) @?= NativeSchema,
+      testCase "capabilityFor: codex CLI -> NativeSchema" $
+        capabilityFor (emptyModel & #provider .~ "codex-cli" & #api .~ OpenAICompletionsCli) @?= NativeSchema,
+      testCase "capabilityFor: deepseek over Chat Completions -> PromptFallback" $
+        capabilityFor (emptyModel & #provider .~ "deepseek" & #api .~ OpenAIChatCompletions) @?= PromptFallback,
+      testCase "capabilityFor: openrouter over Chat Completions -> PromptFallback" $
+        capabilityFor (emptyModel & #provider .~ "openrouter" & #api .~ OpenAIChatCompletions) @?= PromptFallback,
+      testCase "capabilityFor: OpenAI Chat Completions -> NativeSchema" $
+        capabilityFor (emptyModel & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= NativeSchema,
       testCase "fallback render: system prompt has the instruction and field markers" $ do
         T.isInfixOf "Summarize the article" (sysOf fallbackAdapter) @?= True
         T.isInfixOf "[[ ## headline ## ]]" (sysOf fallbackAdapter) @?= True,

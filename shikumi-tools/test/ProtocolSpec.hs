@@ -61,6 +61,12 @@ tests =
           _ -> assertFailure "both protocols should succeed",
       testCase "ProtocolAuto picks prompt for a CLI model" $
         resolveProtocolKind ProtocolAuto (emptyModel & #api .~ AnthropicMessagesCli) @?= ProtocolPrompt,
+      testCase "ProtocolAuto picks prompt for a codex CLI model" $
+        resolveProtocolKind ProtocolAuto (emptyModel & #provider .~ "codex-cli" & #api .~ OpenAICompletionsCli) @?= ProtocolPrompt,
+      testCase "ProtocolAuto picks prompt for a claude CLI model (schema-native, not tool-native)" $
+        resolveProtocolKind ProtocolAuto (emptyModel & #provider .~ "claude-cli" & #api .~ AnthropicMessagesCli) @?= ProtocolPrompt,
+      testCase "ProtocolAuto picks prompt for a third-party Chat Completions host" $
+        resolveProtocolKind ProtocolAuto (emptyModel & #provider .~ "deepseek" & #api .~ OpenAIChatCompletions) @?= ProtocolPrompt,
       testCase "ProtocolAuto picks native for a native-capable model" $
         resolveProtocolKind ProtocolAuto (emptyModel & #provider .~ "openai" & #api .~ OpenAIChatCompletions) @?= ProtocolNative,
       testCase "native turn with two tool calls executes both in order" $ do

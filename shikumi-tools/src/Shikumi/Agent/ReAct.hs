@@ -16,8 +16,9 @@
 -- inspectable, and composes with every other shikumi program and combinator.
 --
 -- Two tool /protocols/ are supported behind one internal interface ('ProtocolImpl'),
--- selected by a 'ToolProtocol' value ('ProtocolAuto' resolves per model via
--- "Shikumi.Adapter"'s 'capabilityFor'): a provider-native function-calling path
+-- selected by a 'ToolProtocol' value ('ProtocolAuto' resolves per model from a
+-- tool-calling table of first-party HTTP hosts, kept separate from
+-- "Shikumi.Adapter"'s schema-only 'Shikumi.Adapter.capabilityFor'): a provider-native function-calling path
 -- (baikai @Context.tools@ + @Options.toolChoice@, parsing @AssistantToolCall@ blocks)
 -- and a prompt-based fallback that renders an explicit action grammar and parses the
 -- model's text. The loop body is protocol-agnostic.
@@ -93,7 +94,7 @@ import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, catchError, throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (ModelCapability (..), ToPrompt (toPrompt), attachSchema, capabilityFor)
+import Shikumi.Adapter (ToPrompt (toPrompt), attachSchema)
 import Shikumi.Agent.History (ReActSession)
 import Shikumi.Agent.History qualified as H
 import Shikumi.Compaction (CompactionConfig (..), compactTail, defaultCompactionConfig, usageExceedsWindow)
@@ -361,9 +362,23 @@ data ProtocolImpl i o = ProtocolImpl
 resolveProtocolKind :: ToolProtocol -> Model -> ToolProtocol
 resolveProtocolKind ProtocolNative _ = ProtocolNative
 resolveProtocolKind ProtocolPrompt _ = ProtocolPrompt
-resolveProtocolKind ProtocolAuto m = case capabilityFor m of
-  NativeSchema -> ProtocolNative
-  PromptFallback -> ProtocolPrompt
+resolveProtocolKind ProtocolAuto m
+  | nativeToolCalling m = ProtocolNative
+  | otherwise = ProtocolPrompt
+
+-- | Whether a model's transport executes provider-native function calling.
+-- Deliberately not "Shikumi.Adapter"'s 'Shikumi.Adapter.capabilityFor': that
+-- answers /schema/ enforcement, which baikai's CLI providers (@claude@, @codex@)
+-- support, while those same providers silently drop @Context.tools@. Only the
+-- first-party HTTP hosts are native here; CLI, third-party and @Custom@ hosts
+-- use the prompt protocol.
+nativeToolCalling :: Model -> Bool
+nativeToolCalling m =
+  (m ^. #provider, m ^. #api)
+    `elem` [ ("openai", B.OpenAIChatCompletions),
+             ("openai", B.OpenAIResponses),
+             ("anthropic", B.AnthropicMessages)
+           ]
 
 -- | Build the concrete 'ProtocolImpl' for a model, choosing the native or prompt
 -- renderers from 'resolveProtocolKind'.
