@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.4.1.0 — 2026-09-30
 
 - Route subscription-CLI models through the native schema adapter. `capabilityFor` now starts from Baikai's `declaredStructuredOutput` for the model's `api`: `AnthropicMessagesCli` (`claude -p --json-schema`) and `OpenAICompletionsCli` (`codex exec --output-schema`) are `NativeSchema`, so their requests carry the strict derived schema and a list-of-records output decodes. First-party HTTP routing is unchanged; third-party hosts over a first-party wire format (`deepseek`, `openrouter` over Chat Completions) and `Custom` hosts stay `PromptFallback`. Previously cached CLI responses miss once, because the request now carries a `responseFormat` and the native prompt. Implements `mori://shinzui/shikumi/okf/improvement-requests/concepts/IR-4`.

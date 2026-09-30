@@ -1,5 +1,13 @@
 # Bundle Update Log
 
+## 2026-09-30
+* **Update**: Added CAP-37 and CAP-38 for `shikumi` 0.4.1.0. CAP-37 covers
+schema-enforced structured output on the `claude` and `codex` subscription CLIs.
+CAP-38 covers JSON shape lines for structured fields in the fallback prompt. Both
+grow CAP-3 and require it; CAP-3's `since` stays at 0.1.0.0. `shikumi-tools`
+0.4.1.0 changes no consumer-visible behavior (ReAct's tool-protocol choice only
+moved to its own check), so CAP-18 is unchanged.
+
 ## 2026-09-08
 * **Update**: Added CAP-23 … CAP-36 for the 2026-09-08 multi-package release.
 Five records cover new `shikumi` 0.4.0.0 provision (per-attempt transport

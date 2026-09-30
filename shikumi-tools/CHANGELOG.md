@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.4.1.0 — 2026-09-30
 
 - Give `ReAct`'s `ProtocolAuto` its own tool-calling check instead of reusing `Shikumi.Adapter.capabilityFor`. Behavior is unchanged: only `openai` over Chat Completions or Responses and `anthropic` over Messages use provider-native tool calling. CLI models, which `shikumi` 0.4.1.0 now treats as schema-native, still use the prompt tool protocol, because Baikai's CLI providers drop tools. Raise the internal `shikumi` bound to `^>=0.4.1.0` so this check never pairs with an older `shikumi`.

@@ -80,3 +80,5 @@ this repository but has not been published to Hackage, so its `since` value is
 | [CAP-34](structure-search.md) | Structure search over finite recipe registries | 0.3.0.0 | shikumi-optimize |
 | [CAP-35](failure-aware-optimizer-feedback.md) | Failure-aware optimizer feedback | 0.3.0.0 | shikumi-optimize |
 | [CAP-36](node-local-bootstrap-pools.md) | Node-local bootstrap demonstration pools | 0.3.0.0 | shikumi-optimize |
+| [CAP-37](cli-schema-enforced-output.md) | Schema-enforced structured output on subscription CLIs | 0.4.1.0 | shikumi |
+| [CAP-38](shape-guided-fallback-prompts.md) | Shape-guided fallback prompts | 0.4.1.0 | shikumi |
