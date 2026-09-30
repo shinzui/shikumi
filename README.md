@@ -229,6 +229,13 @@ cabal build all
 cabal test all
 ```
 
+`just check-haddock` builds every package's Haddocks and fails on out-of-scope or
+ambiguous identifier references, and on markup that renders silently wrong. Qualify
+names Haddock cannot see (`'Shikumi.Program.runProgram'`), pick a namespace for
+names shared by a type and a constructor (`t'Program'`, `v'Program'`), and escape
+`/` and `<` as `\/` and `\<` (two slashes on one line pair up as emphasis, even
+inside `@code@`). CI runs both checks; the markup lint also runs as a pre-commit hook.
+
 Tests are hermetic by default. To opt into the live provider smoke test:
 
 ```bash

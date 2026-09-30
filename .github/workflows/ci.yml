@@ -75,6 +75,8 @@ jobs:
             exit 1"
       - name: Test all packages (backend suites must run, not skip)
         run: nix develop -L .#ghc9124-ci --command cabal test all
+      - name: Haddock (no out-of-scope or ambiguous identifiers)
+        run: nix develop -L .#ghc9124-ci --command scripts/check-haddock.sh
 
   examples:
     name: smoke (shikumi-jitsurei examples)

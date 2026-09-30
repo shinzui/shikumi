@@ -17,6 +17,13 @@ build:
 test:
     cabal test all
 
+# Check Haddock docs: markup that renders wrongly (unescaped `/`, `<word>`) and
+# out-of-scope or ambiguous identifier references. Optionally limit to packages,
+# e.g. `just check-haddock shikumi shikumi-tools`.
+check-haddock *packages:
+    git ls-files '*.hs' | xargs awk -f scripts/lint-haddock-markup.awk
+    scripts/check-haddock.sh {{packages}}
+
 # Validate architecture decisions, their shared profile, and change-log coverage.
 check-adr:
     okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
