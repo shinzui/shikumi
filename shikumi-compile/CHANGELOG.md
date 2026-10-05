@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1.1 — 2026-10-05
+
 - Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8` and widen the `effectful` bound to `>=2.6 && <2.8`, so both effectful 2.6 and 2.7 are supported (effectful 2.7 needs `baikai-effectful` 0.4.0.2, effectful 2.6 needs 0.4.0.1). Bounds only; no source changed.
 
 ## 0.2.1.0 — 2026-09-08

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1.1 — 2026-10-05
+
 ### Changed
 
 - Move the dependency on `mori://shinzui/okf/packages/okf-core` from `^>=0.5.0.0` to `^>=0.9.0.0`. The 0.6–0.9 breaking changes touch profile-schema records this package does not construct, so no source changed; the strict `profile/shikumi.dhall` conformance tests still pass.

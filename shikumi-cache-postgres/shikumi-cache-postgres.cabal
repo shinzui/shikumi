@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name: shikumi-cache-postgres
-version: 0.1.3.0
+version: 0.1.3.1
 synopsis: Postgres-backed shikumi cache (EP-6)
 category: AI
 description:
@@ -48,7 +48,7 @@ library
     base >=4.20 && <5,
     effectful >=2.6 && <2.8,
     hasql >=1.10 && <1.11,
-    shikumi-cache ^>=0.2.0.0,
+    shikumi-cache ^>=0.2.0.1,
     text ^>=2.1,
 
 test-suite shikumi-cache-postgres-test
@@ -68,8 +68,8 @@ test-suite shikumi-cache-postgres-test
     generic-lens,
     lens,
     shikumi ^>=0.4.0.0,
-    shikumi-cache ^>=0.2.0.0,
-    shikumi-cache-postgres ^>=0.1.3.0,
+    shikumi-cache ^>=0.2.0.1,
+    shikumi-cache-postgres ^>=0.1.3.1,
     tasty,
     tasty-hunit,
     text,

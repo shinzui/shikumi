@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.2.1 — 2026-10-05
+
+- Refresh internal package bounds and Haddock links; no public API change.
+
 - Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8`. Bounds only; no source changed.
 
 ## 0.1.2.0 — 2026-09-08

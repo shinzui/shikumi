@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name: shikumi-okf
-version: 0.2.1.0
+version: 0.2.1.1
 synopsis:
   Generate OKF documentation bundles from shikumi programs (EP-31)
 
@@ -69,7 +69,7 @@ executable shikumi-okf-example
   build-depends:
     base,
     shikumi ^>=0.4.0.0,
-    shikumi-okf ^>=0.2.1.0,
+    shikumi-okf ^>=0.2.1.1,
     text,
 
 test-suite shikumi-okf-test
@@ -90,7 +90,7 @@ test-suite shikumi-okf-test
     filepath,
     okf-core ^>=0.9.0.0,
     shikumi ^>=0.4.0.0,
-    shikumi-okf ^>=0.2.1.0,
+    shikumi-okf ^>=0.2.1.1,
     tasty,
     tasty-hunit,
     text,

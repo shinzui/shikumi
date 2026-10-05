@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name: shikumi-cache
-version: 0.2.0.0
+version: 0.2.0.1
 synopsis: Content-addressed response caching for shikumi (EP-6)
 category: AI
 description:
@@ -90,7 +90,7 @@ test-suite shikumi-cache-test
     lens,
     process,
     shikumi ^>=0.4.0.0,
-    shikumi-cache ^>=0.2.0.0,
+    shikumi-cache ^>=0.2.0.1,
     stm,
     tasty,
     tasty-hunit,

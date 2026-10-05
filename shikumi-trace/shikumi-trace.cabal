@@ -1,6 +1,6 @@
 cabal-version: 3.4
 name: shikumi-trace
-version: 0.3.0.0
+version: 0.3.0.1
 synopsis:
   Hierarchical tracing, observability, and deterministic replay for shikumi (EP-7)
 
@@ -68,7 +68,7 @@ library
     lens ^>=5.3,
     scientific >=0.3 && <0.4,
     shikumi ^>=0.4.0.0,
-    shikumi-cache ^>=0.2.0.0,
+    shikumi-cache ^>=0.2.0.1,
     text ^>=2.1,
     time >=1.12 && <1.17,
     vector >=0.13 && <0.14,
@@ -83,7 +83,7 @@ executable shikumi-trace-demo
 
   build-depends:
     base,
-    shikumi-trace ^>=0.3.0.0,
+    shikumi-trace ^>=0.3.0.1,
 
 test-suite shikumi-trace-test
   import: common-options
@@ -109,8 +109,8 @@ test-suite shikumi-trace-test
     generic-lens,
     lens ^>=5.3,
     shikumi ^>=0.4.0.0,
-    shikumi-cache ^>=0.2.0.0,
-    shikumi-trace ^>=0.3.0.0,
+    shikumi-cache ^>=0.2.0.1,
+    shikumi-trace ^>=0.3.0.1,
     tasty,
     tasty-hunit,
     tasty-quickcheck,
