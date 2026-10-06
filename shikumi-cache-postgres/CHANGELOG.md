@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.3.2 — 2026-10-06
+
+### Fixed
+
+- Use a stable short effective-uid temporary root for PostgreSQL backend tests, retaining default stale-instance sweeping across shell sessions; require ephemeral-pg >=0.3.1 && <0.4.
+
+
 ## 0.1.3.1 — 2026-10-05
 
 - Tighten the `hasql` bound to `>=1.10 && <1.11`, matching the rest of the cohort (`mori://shinzui/keiro`, `mori://shinzui/kiroku`, `mori://shinzui/ephemeral-pg`). The old `>=1.9` floor was wrong: the backend already uses the 1.10-only API (`preparable`/`unpreparable`, `Hasql.Connection.Settings`). The test suite now bounds `mori://shinzui/ephemeral-pg/packages/ephemeral-pg` at `^>=0.3.1.0`. Bounds only; no source changed.

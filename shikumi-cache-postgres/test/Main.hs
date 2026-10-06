@@ -16,6 +16,7 @@ import Control.Exception (finally)
 import Control.Lens ((&), (.~))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.Monoid (Last (..))
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime)
 import Data.Vector qualified as V
@@ -28,9 +29,11 @@ import Shikumi.Cache.Backend.Postgres (PostgresCache, closePostgresCache, openPo
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), complete)
+import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr)
+import System.Posix.User (getEffectiveUserID)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -61,7 +64,11 @@ runCountingLLM ref resp = interpret $ \_ -> \case
 
 main :: IO ()
 main = do
-  started <- Pg.start Pg.defaultConfig
+  uid <- getEffectiveUserID
+  let root = "/tmp/ephpg-shikumi-" <> show uid
+  createDirectoryIfMissing True root
+  let config = Pg.defaultConfig {Pg.temporaryRoot = Last (Just root)}
+  started <- Pg.start config
   case started of
     Left err -> skip (T.unpack (Pg.renderStartError err))
     Right db -> do
