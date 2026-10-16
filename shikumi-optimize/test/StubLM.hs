@@ -77,7 +77,7 @@ import Baikai.Message (AssistantPayload (..), Message (..), UserPayload (..))
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (ToJSON)
 import Data.Generics.Labels ()
-import Data.IORef (IORef, modifyIORef')
+import Data.IORef (IORef, atomicModifyIORef')
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -189,7 +189,7 @@ runStubLM = interpret $ \_ -> \case
 runStubLMCounting :: (IOE :> es) => IORef Int -> Eff (LLM : es) a -> Eff es a
 runStubLMCounting ref = interpret $ \_ -> \case
   Complete _ ctx _ -> do
-    liftIO (modifyIORef' ref (+ 1))
+    liftIO (atomicModifyIORef' ref (\n -> (n + 1, ())))
     pure (mkResponse (respondTo ctx))
   Stream {} -> pure []
 
@@ -199,7 +199,7 @@ runStubLMCounting ref = interpret $ \_ -> \case
 runStubLMCapturing :: (IOE :> es) => IORef [Text] -> Eff (LLM : es) a -> Eff es a
 runStubLMCapturing ref = interpret $ \_ -> \case
   Complete _ ctx _ -> do
-    liftIO (modifyIORef' ref (++ [fullRequestText ctx]))
+    liftIO (atomicModifyIORef' ref (\requests -> (requests ++ [fullRequestText ctx], ())))
     pure (mkResponse (respondTo ctx))
   Stream {} -> pure []
 
@@ -218,7 +218,7 @@ runJointStubLM = interpret $ \_ -> \case
 runJointStubLMCounting :: (IOE :> es) => IORef Int -> Eff (LLM : es) a -> Eff es a
 runJointStubLMCounting ref = interpret $ \_ -> \case
   Complete _ ctx _ -> do
-    liftIO (modifyIORef' ref (+ 1))
+    liftIO (atomicModifyIORef' ref (\n -> (n + 1, ())))
     pure (mkResponse (respondWith answerJoint ctx))
   Stream {} -> pure []
 
@@ -287,7 +287,7 @@ runGepaStubLM = interpret $ \_ -> \case
 runGepaStubLMCapturing :: (IOE :> es) => IORef [Text] -> Eff (LLM : es) a -> Eff es a
 runGepaStubLMCapturing ref = interpret $ \_ -> \case
   Complete _ ctx _ -> do
-    liftIO (modifyIORef' ref (++ [fullRequestText ctx]))
+    liftIO (atomicModifyIORef' ref (\requests -> (requests ++ [fullRequestText ctx], ())))
     pure (mkResponse (respondGepa ctx))
   Stream {} -> pure []
 

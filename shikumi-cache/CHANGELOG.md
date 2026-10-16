@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0.2 — 2026-10-16
+
+### Changed
+
+- Require the compatible Shikumi patch releases built against Baikai 0.8.
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`.
 
 ## 0.2.0.1 — 2026-10-05

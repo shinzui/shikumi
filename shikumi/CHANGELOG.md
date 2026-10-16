@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+## 0.4.1.1 — 2026-10-16
+
+### Changed
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`, `mori://shinzui/baikai/packages/baikai-claude` to `>=0.7.1.1 && <0.8`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.1.1 && <0.8`, `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.3 && <0.5`.
+
+### Fixed
+
+- Correct Haddock markup and identifier links; no runtime or public API changes.
 
 ## 0.4.1.0 — 2026-09-30
 

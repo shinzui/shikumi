@@ -1,5 +1,13 @@
 # Bundle Update Log
 
+## 2026-10-16
+* **No catalog change**: Audited the ten-package Baikai compatibility patch
+release. The new dependency bounds, Haddock corrections, and atomic optimizer
+test-fixture observations add no Shikumi provision or adoption surface. Provider
+pricing, catalog, and subprocess cleanup belong to `mori://shinzui/baikai`.
+CAP-1 … CAP-38 keep their claims and `since` values; all repository-relative
+evidence paths were checked and the bundle validates with 38 records.
+
 ## 2026-09-30
 * **Update**: Added CAP-37 and CAP-38 for `shikumi` 0.4.1.0. CAP-37 covers
 schema-enforced structured output on the `claude` and `codex` subscription CLIs.

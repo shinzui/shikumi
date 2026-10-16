@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+## 0.4.1.1 — 2026-10-16
+
+### Changed
+
+- Require the compatible Shikumi patch releases built against Baikai 0.8.
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`.
+
+### Fixed
+
+- Correct Haddock markup and identifier links; no runtime or public API changes.
 
 ## 0.4.1.0 — 2026-09-30
 

@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+## 0.3.0.2 — 2026-10-16
+
+### Changed
+
+- Require the compatible Shikumi patch releases built against Baikai 0.8.
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`.
+
+### Fixed
+
+- Make the offline test stubs count and capture concurrent LLM calls atomically, preventing lost observations in budget assertions. No library behavior changes.
 
 ## 0.3.0.1 — 2026-10-05
 
