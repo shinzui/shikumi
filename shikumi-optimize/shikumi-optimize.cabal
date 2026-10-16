@@ -116,7 +116,7 @@ test-suite shikumi-optimize-test
 
   build-depends:
     aeson,
-    baikai >=0.7.1.0 && <0.8,
+    baikai >=0.8.0.0 && <0.9,
     base,
     containers,
     effectful,

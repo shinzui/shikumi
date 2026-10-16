@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`.
+
 ## 0.1.2.1 — 2026-10-05
 
 - Refresh internal package bounds and Haddock links; no public API change.

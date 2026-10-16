@@ -60,7 +60,7 @@ test-suite shikumi-cache-redis-test
     -with-rtsopts=-N
 
   build-depends:
-    baikai >=0.7.1.0 && <0.8,
+    baikai >=0.8.0.0 && <0.9,
     base,
     bytestring,
     effectful,
