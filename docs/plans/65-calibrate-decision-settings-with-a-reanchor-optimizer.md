@@ -11,6 +11,18 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-09-26T03:43:55Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      verdict: "comments"
+      note: "Consistent with the reconciled names except the Shikumi.Decision.Settings spelling; no Baikai-facing dependency"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      mode: "update"
+      note: "Align module name to Shikumi.Decision.Setting"
 ---
 
 # Calibrate decision settings with a ReAnchor optimizer
@@ -132,7 +144,7 @@ The code calls this shared order "the ordering law", and ReAnchor relies on it t
   - `Judgment { judgmentField, judgmentInstruction, judgmentKind }` and `judgmentsInSchema :: Value -> ([Judgment], [Text])`, which give each field's kind and ordered labels or levels.
 
   Each has `FromJSON` from the decision value's JSON.
-- **From EP-64 in `shikumi/src/Shikumi/Program.hs` or `Shikumi.Decision.Settings`.** A sum `DecisionSetting = NoulSetting { threshold :: Double } | ScoreSetting { cuts :: [Double] } | ChoiceSetting { weights :: Map Text Double }`, stored as `decisionSettings :: Map Text DecisionSetting` in `Params`, keyed by output field name. Alongside it EP-64 provides `validateSetting`, `defaultSetting :: Judgment -> DecisionSetting` and `deriveField :: Judgment -> Maybe DecisionSetting -> FieldEvidence -> Either ShikumiError Value`. An absent key means the type's default. The accessors are:
+- **From EP-64 in `shikumi/src/Shikumi/Program.hs` or `Shikumi.Decision.Setting`.** A sum `DecisionSetting = NoulSetting { threshold :: Double } | ScoreSetting { cuts :: [Double] } | ChoiceSetting { weights :: Map Text Double }`, stored as `decisionSettings :: Map Text DecisionSetting` in `Params`, keyed by output field name. Alongside it EP-64 provides `validateSetting`, `defaultSetting :: Judgment -> DecisionSetting` and `deriveField :: Judgment -> Maybe DecisionSetting -> FieldEvidence -> Either ShikumiError Value`. An absent key means the type's default. The accessors are:
   - `decisionSettingFor :: Text -> Params -> Maybe DecisionSetting`;
   - `setDecisionSetting :: Text -> DecisionSetting -> Params -> Params`;
   - `clearDecisionSetting :: Text -> Params -> Params`;
@@ -338,3 +350,8 @@ It consumes:
 It must not change any of them. If a needed accessor is missing, add it in the owning package in a separate commit, and note it in Surprises & Discoveries.
 
 It benefits from, but does not require, [66-request-probability-evidence-from-generative-models.md](66-request-probability-evidence-from-generative-models.md). Once EP-66 lands, add one `ReAnchorSpec` case that fits a threshold over a generative stub's evidence, proving calibration is backend-agnostic.
+
+
+## Revision Notes
+
+2026-10-21: Module name aligned with EP-64 and the MasterPlan (`Shikumi.Decision.Setting`). No other change; this plan has no Baikai-facing dependency.

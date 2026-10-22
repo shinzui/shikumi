@@ -11,6 +11,18 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-09-26T03:43:55Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      verdict: "comments"
+      note: "No-IR-10 dependency still holds; evidenceSchema must handle the anyOf noul criteria EP-63 now emits"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      mode: "update"
+      note: "Note anyOf noul criteria for evidenceSchema; describe questionJSON as a prompt rendering mirroring Baikai's wire"
 ---
 
 # Request probability evidence from generative models
@@ -78,10 +90,10 @@ The threshold, weights and cuts are *per-field decision settings*. EP-64 stores 
   - the evidence records `NoulEvidence { pTrue }`, `ChoiceEvidence { probabilities :: Map Text Double, confidence }` and `ScoreEvidence { levelProbabilities :: Vector Double, confidence }`, wrapped per field in `FieldEvidence`;
   - the field metadata `Judgment { judgmentField, judgmentInstruction, judgmentKind }`, where `JudgmentKind = JudgeBoolean … | JudgeChoice [(Text, Maybe Value)] | JudgeOrdered [Value]` carries the ordered answer keys and criteria;
   - `judgmentsInSchema :: Value -> ([Judgment], [Text])`, applied to `deriveSchema @o`. Use this rather than `judgmentsOf`, which requires `DecisionOutputs o` and so excludes bare fields;
-  - `questionJSON :: Judgment -> Value`, which renders the same question object that goes to Jev;
+  - `questionJSON :: Judgment -> Value`, which renders a question object in the shape Baikai sends to Jev (`type`, `instructions`, and `criteria` when declared); Shikumi does not build the wire itself, so this is a prompt rendering kept in step with Baikai by EP-63's parity test;
   - `metaDecisionStateKey = "shikumi.decision.state"` in `Shikumi.Adapter`.
 
-  Bare `Bool` and nullary-enum fields appear in `judgmentsInSchema` as ordinary boolean and choice judgments. A field is *native* when its schema lacks EP-63's private `x-shikumi-decision` marker; the rich `Noul`/`Choice`/`Score` types carry that marker.
+  Bare `Bool` and nullary-enum fields appear in `judgmentsInSchema` as ordinary boolean and choice judgments. A field is *native* when its schema lacks EP-63's private `x-shikumi-decision` marker; the rich `Noul`/`Choice`/`Score` types carry that marker. A `NoulWith` with declared criteria is not a plain `{"type": "boolean"}`: EP-63 renders it as an `anyOf` of `const true` and `const false` branches with descriptions, so `evidenceSchema` must replace that property by the field's `Judgment`, not by matching `"type": "boolean"`.
 - From EP-64:
   - the settings lookup `decisionSettingFor :: Text -> Params -> Maybe DecisionSetting`;
   - a shared per-field derivation, assumed to be `deriveField :: Judgment -> Maybe DecisionSetting -> FieldEvidence -> Either ShikumiError Value`. It returns the field's JSON exactly as the output type's `FromModel` instance expects. The System One path already uses it, and this plan must reuse it rather than write a second derivation.
@@ -318,3 +330,8 @@ It consumes:
 - EP-64's `decisionSettingFor`, `DecisionSetting` and `deriveField`.
 
 It must not define a second evidence type or a second derivation. No new package dependencies are needed. Baikai is used as it is today, and this plan has no dependency on `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10`.
+
+
+## Revision Notes
+
+2026-10-21: Cascaded from the MasterPlan's reconciliation with Baikai: a `NoulWith` with criteria renders as `anyOf` `const` branches, so `evidenceSchema` must key on the field's `Judgment`; `questionJSON` is described as a prompt rendering mirroring Baikai's wire rather than the wire itself. No interface change.

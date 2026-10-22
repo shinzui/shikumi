@@ -11,6 +11,18 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-09-26T03:43:55Z
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      verdict: "comments"
+      note: "Interfaces consistent with the MasterPlan and EP-63; test commands used hspec flags on a tasty suite"
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:38:28Z
+      mode: "update"
+      note: "Correct test commands and expected output to the tasty runner"
 ---
 
 # Derive decision values locally from probability evidence
@@ -211,21 +223,20 @@ Work from the repository root, `/Users/shinzui/Keikaku/bokuno/shikumi`.
 
 ```bash
 cabal build shikumi
-cabal test shikumi-test --test-options='--match "Decision"'
+cabal test shikumi-test --test-options='-p Decision'
 cabal test shikumi-cache-test shikumi-trace-test shikumi-compile-test
 just test
 ```
 
-Expected tail of a successful focused run:
+Expected tail of a successful focused run (the suites use tasty, so the pattern flag is `-p`):
 
 ```text
 Decision derivation
-  Noul threshold 0.7 on p=0.8 gives True, confidence 0.142857 [✔]
-  Score [0.1,0.3,0.6] gives value 1.5; cuts [0.5,1.6] give level 1 [✔]
-  Choice weighted tie prefers the raw winner [✔]
+  Noul threshold 0.7 on p=0.8 gives True, confidence 0.142857:        OK
+  Score [0.1,0.3,0.6] gives value 1.5; cuts [0.5,1.6] give level 1:    OK
+  Choice weighted tie prefers the raw winner:                          OK
 ...
-Finished in … seconds
-N examples, 0 failures
+All N tests passed
 ```
 
 
@@ -281,3 +292,8 @@ clearDecisionSetting :: Text -> Params -> Params
 Consumed from EP-63, to be reconciled with the landed code: `NoulEvidence`, `ChoiceEvidence`, `ScoreEvidence`, `FieldEvidence`, `Judgment`/`JudgmentKind`, `judgmentsInSchema`, and `deriveNoul`/`deriveScore`/`deriveChoice`. `deriveField` returns the field's JSON exactly as the output type's `FromModel` instance expects: the rich object for `Noul`/`Choice`/`Score`, or the bare value for a native `Bool`/enum field. EP-63's decoding and EP-66's decoding both call it.
 
 This plan adds no new package dependencies. `containers` and `aeson` are already dependencies of `shikumi`. The tests use `shikumi-testing`, per ADR-9.
+
+
+## Revision Notes
+
+2026-10-21: Test commands and expected output corrected to the tasty runner the `shikumi` suites actually use (`-p`, `OK`), found while reconciling the MasterPlan with Baikai's revised plans. No interface change.
