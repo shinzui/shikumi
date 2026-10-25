@@ -13,6 +13,7 @@ module Shikumi.Optimize.Execution
     runSearchSession,
     markLegacy,
     setSelection,
+    setSelectedCandidate,
     sessionStopped,
     canStartCandidate,
     addPredictedWork,
@@ -194,6 +195,20 @@ setSelection s mode policy = modifyReport s $ \r ->
           reportedPolicy = Just policy,
           validationMode = mode
         }
+
+-- | Pin the strategy's accepted candidate after an additional selection gate
+-- such as a held-out fold check. Trial scores alone must not bypass that gate.
+setSelectedCandidate :: (Prim :> es, Error ShikumiError :> es) => SearchSession es -> Maybe CandidateId -> Text -> Eff es ()
+setSelectedCandidate s chosen reason = do
+  current <- readIORef (state s)
+  ident <- case chosen of
+    Nothing -> pure Nothing
+    Just (CandidateId owner ix) -> do
+      unless
+        (owner == reserved s && any (\c -> candidateId c == ix && candidateStatus c == CandidateCompleted) (candidates current))
+        (throwError (ValidationFailure "selected candidate must be completed in this session"))
+      pure (Just ix)
+  modifyReport s (\r -> r {selectedCandidate = ident, resultStatus = Just (maybe Unscored (const CandidateCompleted) ident), selectionReason = reason})
 
 addPredictedWork :: (Prim :> es) => SearchSession es -> Int -> Eff es ()
 addPredictedWork s n = modifyReport s (\r -> r {predictedWork = predictedWork r + max 0 n})

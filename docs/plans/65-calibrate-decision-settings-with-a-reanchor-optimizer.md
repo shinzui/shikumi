@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T03:38:28Z
       mode: "update"
       note: "Align module name to Shikumi.Decision.Setting"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T17:59:09Z
+      mode: "implement"
+      note: "Implement calibration metadata, accepted-candidate selection and replay-based fitting"
 ---
 
 # Calibrate decision settings with a ReAnchor optimizer
@@ -74,7 +79,13 @@ The algorithm is restated in full below, so the implementer does not need that c
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-10-25: Ordinary Predict nodes intentionally have no typed output capture.
+ReAnchor records raw responses under the structural node path with walkProgramWith,
+inside each candidate runner. This preserves support for plain predict programs
+without changing trace observations or requiring predictCaptured. A shared-session
+selection accessor is also necessary: generic objective ranking would otherwise
+select a high-scoring trial rejected by the fold check. setSelectedCandidate pins
+the accepted completed reservation while leaving all trials in diagnostics.
 
 
 ## Decision Log

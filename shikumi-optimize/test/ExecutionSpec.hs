@@ -16,7 +16,7 @@ import Effectful.Prim (Prim, runPrim)
 import Effectful.Prim.IORef qualified as Ref
 import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Eval (Dataset, FailurePolicy, Metric, dataset, exactMatch, example, scoreZero)
+import Shikumi.Eval (Dataset, FailurePolicy (..), Metric, dataset, exactMatch, example, scoreZero)
 import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.Optimize (Optimizer (..), freezeProgram, fromLegacyOptimizer, optimizeWith)
 import Shikumi.Optimize.Execution
@@ -38,7 +38,18 @@ tests :: TestTree
 tests =
   testGroup
     "Execution"
-    [ testCase "invalid controls reject without dispatch" $ do
+    [ testCase "strategy selection preserves its accepted reservation" $ do
+        r <- run $ runSearchSession (cfg 8 1) $ \s -> do
+          reserved <- reserveCandidate s
+          case reserved of
+            Nothing -> throwError (ValidationFailure "missing reservation")
+            Just ix -> do
+              _ <- evaluateCandidate s ix ds (runProgramObserved sentimentProg) (const FailAbort) exactMatch qualityPolicy (scalarObjectives exactMatch)
+              setSelectedCandidate s (Just ix) "held-out gate accepted baseline"
+        check r $ \(_, report) -> do
+          selectedCandidate report @?= Just 0
+          selectionReason report @?= "held-out gate accepted baseline",
+      testCase "invalid controls reject without dispatch" $ do
         r <- run (runSearchSession (cfg (-1) 1) (const (pure ())))
         assertBool "invalid" (isLeft r),
       testCase "caught budget error cannot admit cap+1" $ do

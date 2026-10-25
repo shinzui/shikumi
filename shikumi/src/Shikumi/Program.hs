@@ -62,6 +62,7 @@ module Shikumi.Program
     -- * Per-node field metadata (EP-16)
     NodeFields (..),
     nodeFieldsIndexed,
+    nodeDecisionFieldsIndexed,
     nodeInstructionsIndexed,
 
     -- * Execution internals (reused by alternative executors, e.g. @runProgramTraced@)
@@ -89,7 +90,9 @@ module Shikumi.Program
 where
 
 import Baikai (Model, emptyModel)
-import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, (.!=), (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), object, withObject, (.!=), (.:), (.:?), (.=))
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
 import Data.Bifunctor (first)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
@@ -576,6 +579,29 @@ nodeFieldsIndexed = go
     go (PredictCaptured _ sig ps) = go (Predict sig ps)
     go (Predict sig _) =
       [NodeFields (map fieldName (inputFields sig)) (map fieldName (outputFields sig))]
+    go (Compose a b) = go a ++ go b
+    go (FMap _ p) = go p
+    go (Map _ p) = go p
+    go (Parallel a b) = go a ++ go b
+    go (Retry _ p) = go p
+    go (RetryWhen _ _ p) = go p
+    go (Validate _ p) = go p
+    go (MajorityVote _ _ _ p) = go p
+    go (Ensemble ps _) = concatMap go ps
+    go (Embed _) = []
+
+-- | Rich decision fields in parameter traversal order. Native booleans and
+-- enums remain ordinary generation and are not calibration targets.
+nodeDecisionFieldsIndexed :: Program i o -> [[Judgment]]
+nodeDecisionFieldsIndexed = go
+  where
+    go :: forall x y. Program x y -> [[Judgment]]
+    go (PredictCaptured _ sig ps) = go (Predict sig ps)
+    go (Predict (_ :: Signature x y) _) =
+      let schema = deriveSchema @y
+          props = case schema of Object o | Just (Object ps) <- KM.lookup "properties" o -> ps; _ -> KM.empty
+          rich j = case KM.lookup (Key.fromText (judgmentField j)) props of Just (Object p) -> KM.member "x-shikumi-decision" p; _ -> False
+       in [filter rich (fst (judgmentsInSchema schema))]
     go (Compose a b) = go a ++ go b
     go (FMap _ p) = go p
     go (Map _ p) = go p
