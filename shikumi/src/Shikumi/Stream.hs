@@ -55,6 +55,7 @@ import Baikai
     emptyTextContent,
   )
 import Control.Lens ((&), (.~))
+import Control.Monad (when)
 import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
@@ -62,11 +63,11 @@ import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor, attachNativeRender, attachSchema, nativeRenderPieces)
-import Shikumi.Error (ShikumiError)
+import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor, attachNativeRender, attachSchema, evidenceFields, nativeRenderPieces)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM, stream)
 import Shikumi.Program
-  ( Params,
+  ( Params (..),
     Program (Compose, Embed, FMap, MajorityVote, Map, Parallel, Predict, PredictCaptured, Retry, RetryWhen, Validate),
     acceptOrReject,
     effectiveSignature,
@@ -238,7 +239,7 @@ streamProgram prog i cb = case prog of
 
 -- | Stream a single 'Predict', mirroring 'Shikumi.Program.runPredict' exactly so
 -- the streamed and blocking paths share one wire + decode definition. It overlays
--- 'Params' via the exported 'effectiveSignature', renders model-agnostically, stamps
+-- t'Params' via the exported 'effectiveSignature', renders model-agnostically, stamps
 -- the derived schema and the native render alternative onto the metadata channel
 -- (so the router can attach a native @responseFormat@ and swap the native prompt for
 -- native-capable models), streams the first output field's chunks bracketed by
@@ -260,6 +261,7 @@ streamPredict ::
   (StreamEvent -> Eff es ()) ->
   Eff es o
 streamPredict sig ps i cb = do
+  when (not (null (evidenceFields @o (decisionSettings ps)))) (throwError (ValidationFailure "decision outputs do not support streaming"))
   sig' <- effectiveSignature sig ps
   let adapter = adapterFor emptyModel
       (ctx, opts0) = render adapter sig' i

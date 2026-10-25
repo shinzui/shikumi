@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add ReAnchor calibration for decision thresholds, score cuts and choice weights.
+  Candidate trials use run-local response replay above admission, retain only strict
+  improvements that pass held-out folds, and preserve absent settings on rejection.
+  Instructions and demos stay unchanged. Reports include retained settings, score
+  summaries, evidence ranges and fold counters; optional validation is report-only.
+- Expose accepted-candidate selection for strategies with an additional selection
+  gate. Unaccepted trials remain diagnostic and cannot become the reported winner.
+
 ## 0.3.0.2 — 2026-10-16
 
 ### Changed

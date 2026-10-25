@@ -320,7 +320,7 @@ setDecisionSetting   :: Text -> DecisionSetting -> Params -> Params
 clearDecisionSetting :: Text -> Params -> Params
 ```
 
-Consumed from EP-63, to be reconciled with the landed code: `NoulEvidence`, `ChoiceEvidence`, `ScoreEvidence`, `FieldEvidence`, `Judgment`/`JudgmentKind`, `judgmentsInSchema`, and `deriveNoul`/`deriveScore`/`deriveChoice`. `deriveField` returns the field's JSON exactly as the output type's `FromModel` instance expects: the rich object for `Noul`/`Choice`/`Score`, or the bare value for a native `Bool`/enum field. EP-63's decoding and EP-66's decoding both call it.
+Consumed from EP-63, to be reconciled with the landed code: `NoulEvidence`, `ChoiceEvidence`, `ScoreEvidence`, `FieldEvidence`, `Judgment`/`JudgmentKind`, `judgmentsInSchema`, and `deriveNoul`/`deriveScore`/`deriveChoice`. `deriveField` returns normalized rich evidence with a private derived-answer annotation. `evidenceObject` uses the original property marker to preserve that object for rich FromModel leaves or project its scalar answer for native Bool/enum fields. EP-63's decoding and EP-66's decoding both call it.
 
 This plan adds no new package dependencies. `containers` and `aeson` are already dependencies of `shikumi`. The tests use `shikumi-testing`, per ADR-9.
 

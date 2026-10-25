@@ -5,7 +5,7 @@ description: Keep closed decision domains, probability evidence, local answer de
 docId: ADR-15
 status: Accepted
 date: 2026-10-24
-timestamp: 2026-10-25T17:58:00Z
+timestamp: 2026-10-25T18:14:37Z
 generated:
   by: agent:openai/gpt-6.1-sol
   at: 2026-10-25T04:43:42Z
@@ -65,6 +65,23 @@ normalizes evidence with a private derived-answer annotation before rich leaf
 decoding; the annotation is constructed locally, never copied from provider data.
 The three public evidence codecs remain unchanged.
 
+Generative requests replace rich decision fields with closed evidence objects.
+Bare Bool and enum fields opt in only through explicit settings. Probabilities and
+confidence must be finite and in [0,1], with exact declared keys; distributions
+need not sum to one. Both native JSON and marker replies enter the same derivation.
+Free-form fields can coexist with decisions on generative models.
+
+State and evidence schemas have separate private stamps. Judgment-only routing
+selects the original answer schema; generative routing selects the evidence schema.
+All stamps are stripped before transport. Numeric setting values never enter them.
+Streaming is refused at the program and routed LLM boundaries.
+
+The prompt classes live in the leaf module Shikumi.Adapter.Prompt, re-exported
+from Shikumi.Adapter, to avoid an Adapter/Decision import cycle. toPromptJSON
+preserves typed state with derived demo answers. toEvidenceJSON preserves supplied
+rich evidence and derived answers in generative task examples; no probability
+mass is invented for labeled demos. Both generative formats omit demo turns.
+
 ## Consequences
 
 Generative and provider-backed paths can share evidence and local derivation
@@ -73,7 +90,7 @@ the provider-neutral compiler in `mori://shinzui/baikai`; the shared Assessment 
 `Baikai.Judgment.compileJudgments`. No local replacement for upstream structured
 content is introduced.
 
-`ToPrompt` gains a generic JSON method. Hand-written instances whose generic
+`ToPrompt` gains generic state and evidence JSON methods. Hand-written instances whose generic
 fields cannot be traversed must implement it explicitly; this public class
 change needs a compatibility review before release. Existing prompt and routed
 request regression tests protect callers that do not use decisions.

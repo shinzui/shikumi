@@ -133,7 +133,7 @@ No cross-repository ADR in `mori://shinzui/baikai` covers judgment models yet; B
 | 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | Complete |
 | 64 | Derive decision values locally from probability evidence | [64-derive-decision-values-locally-from-probability-evidence.md](../plans/64-derive-decision-values-locally-from-probability-evidence.md) | EP-63 milestone 1 (pure settings); milestone 2 (runtime settings) | None | Complete |
 | 65 | Calibrate decision settings with a ReAnchor optimizer | [65-calibrate-decision-settings-with-a-reanchor-optimizer.md](../plans/65-calibrate-decision-settings-with-a-reanchor-optimizer.md) | EP-64 | EP-66 | Complete |
-| 66 | Request probability evidence from generative models | [66-request-probability-evidence-from-generative-models.md](../plans/66-request-probability-evidence-from-generative-models.md) | EP-64 | None | Not Started |
+| 66 | Request probability evidence from generative models | [66-request-probability-evidence-from-generative-models.md](../plans/66-request-probability-evidence-from-generative-models.md) | EP-64 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled. The IR-10 row mirrors the Baikai record's `status` field, which is authoritative (`proposed`, `accepted`, `completed`), followed by the registry status of Baikai MasterPlan 14's children. On 2026-10-22 Baikai split the provider-neutral judgment layer and the judgment-only catalog facts out of EP-84 into EP-99 (`mori://shinzui/baikai/plans/99-add-a-provider-neutral-judgment-layer-and-judgment-only-catalog-facts-to-core`, artifact-level URI pending), so the three capabilities in Dependency Graph map to EP-83, EP-99 and EP-84 respectively. Shikumi still depends on the capabilities, not on the plan numbers.
 
@@ -202,6 +202,13 @@ EP-65 adds `nodeDecisionFieldsIndexed :: Program i o -> [[Judgment]]` to core. E
 
 The private marker carries only what the decoder needs (`kind`), never anything the provider must see. EP-63 milestone 3 adds a parity test: for the `Assessment` fixture, `judgmentsInSchema` and `compileJudgments` agree on field order, kinds, labels, level count and criteria. EP-66 derives its *evidence* schema (probabilities per key) from the same metadata, through a function EP-63 exports rather than by re-deriving it.
 
+**Generative schema ownership.** EP-66 retains the original answer schema under
+`metaDecisionSchemaKey` while the ordinary response-schema stamp holds evidence
+objects. DecisionOnly routing chooses the original schema; generative routing
+chooses evidence. Both are stripped. Prompt classes live in the re-exported leaf
+`Shikumi.Adapter.Prompt` to avoid an Adapter/Decision cycle. Demo evidence and
+structured-state labels use separate JSON projections.
+
 **The routing capability.** EP-63 adds `DecisionOnly` to `Shikumi.Adapter.ModelCapability` and extends `capabilityFor` and `Shikumi.Routing.translateForWire`. The reserved metadata key for the rendered state (`shikumi.decision.state`) is defined in `Shikumi.Adapter` next to the existing `shikumi.*` keys and stripped before transport like them. EP-66 adds a second key for evidence-mode generative requests in the same place. Until Baikai's capability ships, `capabilityFor` returns `DecisionOnly` for provider `typesafe`, which is the provider name Baikai's catalog will use; when Baikai EP-99 lands, EP-63 switches to `isJudgmentOnly m`, tested before the `declaredStructuredOutput` derivation that ADR-14 describes. For a `DecisionOnly` model the wire context is exactly what Baikai's preflight accepts: no system prompt, no tools, one user message with one `UserData` part holding the state.
 
 **Request defaults (`shikumi/src/Shikumi/LLM/Defaults.hs`, EP-63 owns the change).** `withRequestDefaults` runs after `routeLLM`, so it sees the real model. Baikai's judgment providers refuse any explicit `thinking`, non-standard `speed`, `maxTokens`, `temperature` and the other sampling controls. EP-63 makes the defaults layer skip the thinking, speed and token-ceiling defaults when `isJudgmentOnly` holds for the routed model, while the evidence default still applies. Explicit controls are not touched by Shikumi: a stamped per-sample temperature from a sampling combinator reaches Baikai and is refused there as a typed, terminal error. This is the only cross-plan change to the ADR-12 layer; `RequestDefaultsSpec` must cover it.
@@ -212,7 +219,7 @@ The private marker carries only what the decoder needs (`kind`), never anything 
 
 **Fixtures.** Per ADR-9, EP-63 adds decision fixtures and a System One stub responder to `shikumi-testing`; later plans extend them.
 
-Candidate ADRs, to be written when implemented, not now:
+Durable decisions are recorded in [ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md), with defaults in [ADR-12](../adr/0012-apply-request-defaults-before-cache-and-observation.md), capability selection in [ADR-14](../adr/0014-separate-schema-enforcement-from-tool-calling-capability.md), and calibration in [ADR-5](../adr/0005-own-optimizer-admission-and-diagnostic-reports-in-search-sessions.md):
 
 - decision values are always derived locally from evidence and never copied from a provider's pick;
 - decision settings are serialized `Params`, excluded from request identity;
@@ -223,23 +230,35 @@ Candidate ADRs, to be written when implemented, not now:
 
 ## Progress
 
-EP-63 is Complete (2026-10-25). Published Baikai 0.9.0.0, provider 0.1.0.0,
-Claude/OpenAI 0.7.2.0 and effectful 0.4.0.4 deliver the upstream handoff without a
-local override. Typed stub results, compiler parity, request-defaults exemption,
-cache codec persistence, loopback payloads and typed HTTP refusal/decode errors
-pass; the full repository test suite passes. EP-64 is Complete: runtime settings, cache reuse, trace replay, old JSON and compiled persistence pass. EP-65 is Complete: replay-backed fitting and held-out selection pass. EP-66 generative evidence is next.
+All four Shikumi children and the external integration gates are Complete
+(2026-10-25). The published Baikai 0.9 cohort provides structured content,
+judgment-only routing and the TypeSafe adapter without a local override. The same
+decision program decodes System One, native JSON and marker evidence through local
+settings. Cache keys stay equal when numeric settings change; trace replay and
+compiled settings restore correctly. ReAnchor fits thresholds, cuts and weights
+with replay above admission and strict held-out selection.
+
+Acceptance includes build-all, the full repository test suite, compiler-rejection
+diagnostics, TypeSafe loopback requests/refusals/malformed replies, compiler parity,
+source-distribution inclusion, Haddock identifier checks and strict ADR validation.
+Redis tests skip without a reachable socket and live calls remain opt-in; no live
+provider calls were run.
 
 The Hackage registry and upstream package-prefixed release tags were checked on
-2026-10-25. Baikai core 0.10.0.0 and Claude/OpenAI 0.7.3.0 are newer, but the
-published TypeSafe 0.1.0.0 and effectful 0.4.0.4 bounds require core 0.9. Shikumi
-uses that complete released cohort rather than an unpublished compatibility override.
+2026-10-25. Baikai core 0.10.0.0 and Claude/OpenAI 0.7.3.0 were newer, but the
+then-published TypeSafe 0.1.0.0 and effectful 0.4.0.4 bounds required core 0.9.
+Shikumi uses the complete released cohort, with no compatibility override.
 
 - [x] `typesafe-hs` 0.1.0.0 is on Hackage.
-- [x] Baikai EP-83, EP-99 and EP-84 are Complete and the required packages are published.
-- [x] `shikumi` and the repository tests build against published packages with no local override.
+- [x] Baikai EP-83, EP-99 and EP-84 are Complete; IR-10 is completed and the required packages are published.
+- [x] The repository builds and tests against published packages with no local override.
 
 
 ## Surprises & Discoveries
+
+- 2026-10-25: The upstream content, judgment and provider capabilities had shipped since the prior handoff. Hackage and package-prefixed upstream tags confirmed a complete 0.9 cohort, which removed the integration blocker. IR-10 is completed and all three upstream children are Complete.
+- 2026-10-25: Plain Predict observations intentionally omit typed JSON output. ReAnchor captures raw responses by structural node path so it can fit ordinary predict programs. Its replay is inside candidate admission; accepted-candidate reporting pins the held-out winner and excludes rejected trials from the reported frontier. ADR-5 records this boundary.
+- 2026-10-25: Generative evidence and judgment answer schemas must coexist on the model-agnostic request. A separate original-schema stamp and the prompt-class leaf module resolve routing ownership and the import cycle; ADR-15 records the shared contract.
 
 - 2026-10-21: Baikai refuses, rather than drops, every explicit generation and reasoning control on a judgment-only model (Baikai MasterPlan 14, "Consumer handoff"; EP-84 Decision Log 2026-09-26). This MasterPlan and EP-63 assumed a silent drop. The consequence is a Shikumi change this initiative had not planned: `Shikumi.LLM.Defaults` fills thinking, speed and token ceiling after routing, so without an exemption every routed Jev call would be refused. EP-63 now owns that exemption.
 - 2026-10-21: TypeSafe's OpenAPI 0.2.0 document contradicts the DSPy 3.4.0 client this initiative was planned against. Choice and score answers carry a required provider `confidence`, score answers carry a required `score` and `legend`, and noul questions accept optional criteria. Shikumi's evidence records already had `confidence :: Maybe Double` on `ChoiceEvidence` and `ScoreEvidence`, so no type changes; the `Maybe` stays for the generative path. The noul criteria of `NoulWith t f` are now a documented feature, but EP-63's draft hid them inside the stripped `x-shikumi-decision` marker, where Baikai would never see them. EP-63 now emits them as `anyOf` `const` branches.
@@ -282,7 +301,17 @@ uses that complete released cohort rather than an unpublished compatibility over
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25 through EP-63, EP-64, EP-65 and EP-66. Users can declare rich
+decisions, route them to Jev or a generative model, tune serialized settings without
+changing an existing evidence request, and calibrate those settings through the
+shared search session. Unsupported judgment outputs and decision streams fail
+before dispatch. The published-dependency and offline HTTP gates are satisfied.
+
+The ADR distillation pass reviewed every child's decisions, discoveries and
+outcomes. ADR-5 owns replay/admission and held-out selection, ADR-12 the defaults
+exemption, ADR-14 capability selection, and ADR-15 evidence, schema, state, demo
+and local-derivation boundaries. No initiative-level friction remained to triage.
+Live provider verification and package publication were not part of this execution.
 
 
 ## Revision Notes
@@ -292,3 +321,8 @@ uses that complete released cohort rather than an unpublished compatibility over
 2026-10-22: Baikai split its EP-84 into EP-99 (judgment-only catalog facts, the TypeSafe API tag and catalog entries, and the provider-neutral judgment layer, all in core) and EP-84 (the `baikai-typesafe` provider). The Dependency Graph, registry, Progress and Integration Points now name EP-99 for the second capability, use Baikai's actual names (`prepareJudgment`, `judgmentMethod`), and record the question-order rule the parity test relies on. EP-63 was cascaded.
 
 2026-10-24: Started implementation and completed the offline EP-63 and pure EP-64 milestones. Registered both children In Progress, made EP-64's milestone dependency explicit in the registry, recorded the landed Choice/state interfaces and added ADR-15. Upstream provider integration and release gates remain open.
+
+2026-10-25: Completed runtime integration against published dependencies, local
+settings and persistence, ReAnchor calibration, and generative evidence. All
+children and cross-repository gates are accepted; durable context was distilled
+into ADR-5, ADR-12, ADR-14 and ADR-15.

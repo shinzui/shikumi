@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: Distill ADR-14 judgment routing and ADR-15 generative evidence/schema/demo boundaries; clarify ADR-5 accepted selection frontier.
 * **Update**: Extend ADR-5 for ReAnchor replay placement, held-out selection and accepted reservation reporting.
 * **Update**: Extend ADR-15 with local settings, persistent Params compatibility and evidence normalization.
 * **Update**: Amend ADR-12 for judgment-only request defaults and ADR-15 for structured evidence routing and compiler parity.

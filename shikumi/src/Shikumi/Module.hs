@@ -115,6 +115,7 @@ instance (FromModel o) => FromModel (WithReasoning o) where
 -- Render without leaning on @o@'s @Show@: reuse @o@'s own t'ToPrompt'.
 instance (ToPrompt o) => ToPrompt (WithReasoning o) where
   toPromptFields wr = ("reasoning", reasoning wr) : toPromptFields (value wr)
+  toEvidenceJSON = toPromptJSON
   toPromptJSON wr = case toPromptJSON (value wr) of
     Object fields -> Object (KM.insert "reasoning" (String (reasoning wr)) fields)
     v -> v

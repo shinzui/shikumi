@@ -116,13 +116,17 @@ import Shikumi.Adapter
     attachDecisionState,
     attachNativeRender,
     attachSchema,
+    evidenceFields,
+    evidenceSchema,
     fallbackAdapter,
     nativeAdapter,
     nativeRenderPieces,
+    renderEvidenceRequest,
+    responseValue,
     stampTemperature,
   )
 import Shikumi.Decision (Judgment (..), judgmentsInSchema, renderDecisionState)
-import Shikumi.Decision.Runtime (evidenceObject, evidenceOf)
+import Shikumi.Decision.Runtime (decodeDecisionEvidence, evidenceObject, evidenceOf)
 import Shikumi.Decision.Setting (DecisionSetting, validateSetting)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), Response, complete)
@@ -377,7 +381,7 @@ runPredict sig ps i = do
       (Settings.toList (decisionSettings ps))
   sig' <- effectiveSignature sig ps
   let adapter = adapterFor placeholderModel
-      (ctx, opts0) = render adapter sig' i
+      (ctx0, opts0) = render adapter sig' i
       -- Stamp the derived schema onto the metadata channel regardless of which
       -- adapter rendered the prompt; the router attaches a real @responseFormat@
       -- from it for native-capable models and strips it otherwise.
@@ -388,7 +392,9 @@ runPredict sig ps i = do
       -- (and strips them for fallback models / un-routed runs).
       (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
       schema = deriveSchema @o
-      renderedOpts = attachNativeRender nativeSys nativeDemos (attachSchema schema opts0)
+      (ctx, renderedOpts)
+        | null (evidenceFields @o (decisionSettings ps)) = (ctx0, attachNativeRender nativeSys nativeDemos (attachSchema schema opts0))
+        | otherwise = renderEvidenceRequest (decisionSettings ps) sig' i
       opts
         | null (fst (judgmentsInSchema schema)) = renderedOpts
         | otherwise = attachDecisionState (renderDecisionState sig' i) renderedOpts
@@ -422,11 +428,31 @@ parseResponseWithSettings :: forall i o. (FromModel o, ToSchema o, Validatable o
 parseResponseWithSettings settings sig' resp
   | Just ev <- evidenceOf (fst (judgmentsInSchema (deriveSchema @o))) resp =
       ev >>= evidenceObject (deriveSchema @o) (fst (judgmentsInSchema (deriveSchema @o))) settings >>= fromModelChecked
+  | not (null selected) = do
+      raw <- responseValue (evidenceSchema (deriveSchema @o) selected) resp
+      evidence <- case raw of
+        Object fields ->
+          Settings.fromList
+            <$> traverse
+              ( \j -> do
+                  let name = judgmentField j
+                  value <- maybe (Left (MissingField name)) Right (KM.lookup (Key.fromText name) fields)
+                  ev <- decodeDecisionEvidence j value
+                  pure (name, ev)
+              )
+              selected
+        _ -> Left (SchemaMismatch "decision response: expected object")
+      normalized <- evidenceObject (deriveSchema @o) selected settings evidence
+      case (normalized, raw) of
+        (Object derived, Object fields) -> fromModelChecked (Object (KM.union derived fields))
+        _ -> Left (SchemaMismatch "decision response: expected object")
   | otherwise = case assistantJSON resp of
       -- The body is JSON: the native wire shape. Keep the native parser's error.
       Right _ -> parse (nativeAdapter @i @o) sig' resp
       -- Not JSON: the fallback / marker wire shape. Exact prior behaviour.
       Left _ -> parse (fallbackAdapter @i @o) sig' resp
+  where
+    selected = evidenceFields @o settings
 
 -- | The per-sample temperatures for a 'MajorityVote' of @k@ samples (at least
 -- one — @k@ is clamped up to 1 here so the executors need not). 'Nothing' leaves

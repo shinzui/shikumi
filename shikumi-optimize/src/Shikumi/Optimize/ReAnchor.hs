@@ -15,7 +15,7 @@ where
 
 import Baikai (Response)
 import Control.Monad (foldM, when)
-import Data.Aeson (FromJSON, Result (..), ToJSON, Value (..), fromJSON)
+import Data.Aeson (ToJSON, Value (..), object, (.=))
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
 import Data.List (nub)
@@ -23,16 +23,15 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Concurrent (Concurrent)
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Prim.IORef (Prim, newIORef, readIORef)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (assistantJSON)
+import Shikumi.Adapter (evidenceSchema, responseValue)
 import Shikumi.Compile.Types (CompiledProgram (..))
 import Shikumi.Decision
-import Shikumi.Decision.Runtime (evidenceOf)
+import Shikumi.Decision.Runtime (decodeDecisionEvidence, evidenceOf)
 import Shikumi.Decision.Setting
 import Shikumi.Effect.Time (Time)
 import Shikumi.Error (ShikumiError (..))
@@ -224,8 +223,8 @@ readEvidence :: Judgment -> Response -> Either ShikumiError FieldEvidence
 readEvidence j response = case evidenceOf [j] response of
   Just result -> result >>= \fields -> maybe (Left (MissingField (judgmentField j))) Right (Map.lookup (judgmentField j) fields)
   Nothing -> do
-    value <- assistantJSON response
-    raw <- case value of Object fields -> maybe (Left (MissingField (judgmentField j))) Right (KM.lookup (K.fromText (judgmentField j)) fields); _ -> Left (SchemaMismatch "ReAnchor: expected evidence object")
-    let decode :: (FromJSON a) => (a -> FieldEvidence) -> Either ShikumiError FieldEvidence
-        decode x = case fromJSON raw of Success e -> Right (x e); Error err -> Left (SchemaMismatch (judgmentField j <> ": " <> T.pack err))
-    case judgmentKind j of JudgeBoolean {} -> decode FieldNoul; JudgeChoice {} -> decode FieldChoice; JudgeOrdered {} -> decode FieldScore
+    value <- responseValue (evidenceSchema (object ["properties" .= object []]) [j]) response
+    raw <- case value of
+      Object fields -> maybe (Left (MissingField (judgmentField j))) Right (KM.lookup (K.fromText (judgmentField j)) fields)
+      _ -> Left (SchemaMismatch "ReAnchor: expected evidence object")
+    decodeDecisionEvidence j raw

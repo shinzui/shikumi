@@ -1,5 +1,5 @@
 -- | Response builders for offline programs and agents.
-module Shikumi.Testing.Response (markerResponse, mkTextResponse, mkUsageResponse, mkToolCallResponse, mkToolCallsResponse) where
+module Shikumi.Testing.Response (evidenceJSONResponse, evidenceMarkerResponse, markerResponse, mkTextResponse, mkUsageResponse, mkToolCallResponse, mkToolCallsResponse) where
 
 import Baikai
   ( AssistantContent (..),
@@ -10,10 +10,14 @@ import Baikai
     emptyToolCall,
   )
 import Control.Lens ((&), (.~))
-import Data.Aeson (Value)
+import Data.Aeson (Value (..), encode)
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy qualified as BL
 import Data.Generics.Labels ()
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding (decodeUtf8)
 import Data.Vector qualified as V
 import Numeric.Natural (Natural)
 
@@ -60,3 +64,10 @@ mkToolCallsResponse calls =
         [ AssistantToolCall (emptyToolCall & #id_ .~ callId & #name .~ nm & #arguments .~ args)
         | (callId, nm, args) <- calls
         ]
+
+-- | Evidence fixtures use the same field payloads in either generative wire shape.
+evidenceJSONResponse :: [(Text, Value)] -> Response
+evidenceJSONResponse = mkTextResponse . decodeUtf8 . BL.toStrict . encode . Object . KM.fromList . map (\(k, v) -> (Key.fromText k, v))
+
+evidenceMarkerResponse :: [(Text, Value)] -> Response
+evidenceMarkerResponse = markerResponse . map (\(k, v) -> (k, case v of String t -> t; _ -> decodeUtf8 (BL.toStrict (encode v))))

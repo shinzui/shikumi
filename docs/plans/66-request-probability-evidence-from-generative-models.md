@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T03:38:28Z
       mode: "update"
       note: "Note anyOf noul criteria for evidenceSchema; describe questionJSON as a prompt rendering mirroring Baikai's wire"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T18:11:32Z
+      mode: "implement"
+      note: "Implement native and marker evidence requests, strict decoding, bare-field opt-in and cross-backend cache/calibration parity"
 ---
 
 # Request probability evidence from generative models
@@ -43,17 +48,32 @@ To see it working, run the offline test suite (see Validation and Acceptance). A
 
 ## Progress
 
-- [ ] Milestone 1: evidence-mode rendering. For a signature whose output type contains decision fields, `runPredict` stamps an evidence-mode request: an evidence JSON schema, a system prompt that embeds each field's question, and demos moved into the instructions. Pure rendering tests pass for both the native and marker shapes.
-- [ ] Milestone 2: evidence decoding. Generative evidence JSON, from a native JSON body or from marker sections, is validated, turned into EP-63's evidence records, and derived through EP-64's settings. Offline stub tests pass for both shapes, including the typed-error cases.
-- [ ] Milestone 3: opt-in for native fields, backend parity and cache reuse. Bare `Bool` and enum outputs switch to evidence mode only when their field has a decision-settings entry. A parity test shows the Jev stub and a generative stub producing equal results for equal evidence. A cache test shows that a threshold change reuses the cached response.
+- [x] (2026-10-25) Milestone 1: evidence-mode rendering. For a signature whose output type contains decision fields, `runPredict` stamps an evidence-mode request: an evidence JSON schema, a system prompt that embeds each field's question, and demos moved into the instructions. Pure rendering tests pass for both the native and marker shapes.
+- [x] (2026-10-25) Milestone 2: evidence decoding. Generative evidence JSON, from a native JSON body or from marker sections, is validated, turned into EP-63's evidence records, and derived through EP-64's settings. Offline stub tests pass for both shapes, including the typed-error cases.
+- [x] (2026-10-25) Milestone 3: opt-in for native fields, backend parity and cache reuse. Bare `Bool` and enum outputs switch to evidence mode only when their field has a decision-settings entry. A parity test shows the Jev stub and a generative stub producing equal results for equal evidence. A cache test shows that a threshold change reuses the cached response.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-10-25: Adapter could not import Decision/Setting while Decision imported
+Adapter for prompt classes. The classes now live in the internal leaf module
+Shikumi.Adapter.Prompt and remain re-exported from Adapter. toEvidenceJSON and
+promptEvidenceJSON preserve supplied rich demonstration evidence separately from
+typed state labels. Custom polymorphic wrappers preserve their explicit projection.
+
+2026-10-25: A single schema stamp cannot serve both backends once evidence mode
+replaces answer properties. metaDecisionSchemaKey retains the original answer
+schema for DecisionOnly routing; the ordinary response-schema stamp carries the
+generative evidence schema. Both stamps are stripped before transport and neither
+contains numeric setting values. The pre-existing decision routing fixture now
+asserts the evidence schema and supplies the newly required generative confidence.
 
 
 ## Decision Log
+
+- Decision: Keep prompt classes in a re-exported leaf module and retain a separate original-answer schema stamp alongside evidence mode.
+  Rationale: This removes the import cycle without duplicating types, keeps provider questions distinct from generative evidence objects, and preserves one model-agnostic Program.
+  Date: 2026-10-25
 
 - Decision: Evidence mode is decided from the output type and `Params`, never from the model. `runPredict` stamps both the System One state (EP-63) and the generative evidence-mode render, and the router picks one once the real model is known.
   Rationale: `runPredict` is deliberately model-agnostic. It renders against a placeholder model, and `Shikumi.Routing.translateForWire` specializes the request later. That design is described in Context and Orientation.
@@ -70,7 +90,20 @@ To see it working, run the offline test suite (see Validation and Acceptance). A
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. The full repository suite passes. DecisionEvidenceSpec
+covers native/marker equivalence with a free-form text field, strict field-local
+evidence errors, evidence-preserving task examples, backend parity, native Bool
+and enum opt-in, and zero-dispatch streaming refusal. The cache suite demonstrates
+one call and equal request keys across threshold changes on all three backends.
+ReAnchor fits the same threshold on both generative formats with ten calls for ten
+inputs. Existing ordinary adapter/routing/serialization regressions still pass.
+
+Build-all, compiler-rejection diagnostics, source-distribution module inclusion,
+Haddock identifier checks and strict ADR validation pass. ADR-14 and ADR-15 hold
+the durable routing and generative boundaries; ADR-5 records accepted-candidate
+selection. The user guides and changelogs document settings, evidence shapes,
+demonstrations and excluded runtimes. Live calls remain opt-in and were not run.
+No material workflow friction was recorded.
 
 
 ## Context and Orientation
@@ -135,7 +168,7 @@ On the way back, `parseResponse` (`Program.hs`, around line 372) looks at the bo
 - [ADR-9](../adr/0009-centralize-offline-harness-and-diverse-fixtures.md) puts reusable stub interpreters and fixtures in the internal `shikumi-testing` package, so the evidence-response builders added here go there. Its stub interpreters include `runStubLLM`, `runScriptLLM` and `captureLLMRequests` in `shikumi-testing/src/Shikumi/Testing/StubLLM.hs`, and response builders such as `mkTextResponse` and `markerResponse` in `shikumi-testing/src/Shikumi/Testing/Response.hs`.
 - [ADR-12](../adr/0012-apply-request-defaults-before-cache-and-observation.md) fixes the request order: routing, then default filling, then cache and trace observation, then metadata stripping and transport. It also excludes schemas and private metadata from the defaults vocabulary. So the evidence stamps below must survive `withRequestDefaults` untouched, and must be stripped only in `translateForWire`, like the existing keys.
 
-No ADR covers decision outputs yet.
+[ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md) records the shared decision boundaries and is amended with the generative path in this change.
 
 
 ## Plan of Work
@@ -176,7 +209,7 @@ A demo output whose decision field holds a rich value keeps its JSON (value plus
 
 `translateForWire` must add the new key to its strip list. It must also refuse, with a typed `ValidationFailure`, a streaming LLM operation that carries the key, because evidence cannot be decoded from a partial stream. EP-63's `DecisionOnly` branch keeps using the state stamp and ignores the evidence stamps. For every other capability the existing logic applies unchanged, because the evidence alternatives were stamped into the same keys.
 
-**Acceptance.** Add `shikumi/test/DecisionEvidenceRenderSpec.hs` with these tests:
+**Acceptance.** Cover rendering alongside decoding in the harness-owned `shikumi-testing/test/DecisionEvidenceSpec.hs`:
 
 - A three-field signature (a Noul, a three-label Choice with descriptions, a three-level Score) plus one free-form `Text` field renders a native request. Its `responseFormat` schema has the evidence objects for the three decision fields and a plain string for the `Text` field.
 - The marker render contains the question JSON under each decision field.
@@ -207,7 +240,7 @@ A demo output whose decision field holds a rich value keeps its JSON (value plus
 
 Also add a shared decision fixture signature to `shikumi-testing/src/Shikumi/Testing/Fixtures.hs`, extending the one EP-63 added rather than copying it.
 
-**Acceptance.** Add `shikumi/test/DecisionEvidenceSpec.hs`.
+**Acceptance.** Add the harness-owned `shikumi-testing/test/DecisionEvidenceSpec.hs`, per the fixture ownership established in EP-63.
 
 The positive tests run the fixture program under `routeLLM` with an OpenAI Chat Completions model over `runStubLLM`, which is the native shape. They also run it under an un-routed or `PromptFallback` model, which is the marker shape. Both are given the evidence:
 
@@ -219,7 +252,7 @@ Both must decode:
 
 - `urgent` to value `True` with probability 0.83;
 - `category` to `"technical"`;
-- `severity` to value 1.5 and level 1, using the default cuts `[0.5, 1.5]`.
+- `severity` to value 1.5 and level 2, using the default cuts `[0.5, 1.5]`.
 
 The negative tests each expect a typed error naming the field:
 
@@ -257,7 +290,7 @@ Build and run the focused suites while working:
 
 ```bash
 cabal build shikumi shikumi-testing
-cabal test shikumi-test --test-options='-p DecisionEvidence'
+cabal test shikumi-testing --test-options='-p DecisionEvidence'
 ```
 
 The expected shape of a passing run:
@@ -298,7 +331,7 @@ Intention: intention_01m3dwyjr6enwaaym2xsg39gz5
 
 The plan is accepted when all of the following hold:
 
-- `cabal test shikumi-test` passes, including the new `DecisionEvidenceRenderSpec` and `DecisionEvidenceSpec`.
+- `cabal test shikumi shikumi-testing` passes, including the shared `DecisionEvidenceSpec` rendering and decoding cases.
 - Every pre-existing adapter, routing, golden and serialization test passes unmodified. This proves that programs without decision outputs render and decode exactly as before.
 - The three Milestone 3 tests pass: native-field opt-in, System One versus generative parity, and a single model call across a threshold change.
 
@@ -329,9 +362,14 @@ It consumes:
 - EP-63's `Shikumi.Decision` types, evidence records, `judgmentsOf`, `questionJSON` and `DecisionOnly` routing;
 - EP-64's `decisionSettingFor`, `DecisionSetting` and `deriveField`.
 
-It must not define a second evidence type or a second derivation. No new package dependencies are needed. Baikai is used as it is today, and this plan has no dependency on `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10`.
+It must not define a second evidence type or a second derivation. No new production package dependencies are needed. Baikai uses the released judgment-capable cohort, and this plan has no dependency on `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10`.
 
 
 ## Revision Notes
 
 2026-10-21: Cascaded from the MasterPlan's reconciliation with Baikai: a `NoulWith` with criteria renders as `anyOf` `const` branches, so `evidenceSchema` must key on the field's `Judgment`; `questionJSON` is described as a prompt rendering mirroring Baikai's wire rather than the wire itself. No interface change.
+
+2026-10-25: Completed all milestones. Rendering/decoding fixtures live in the
+shared harness; prompt classes moved to a re-exported leaf; original answer and
+generative evidence schemas use separate stamps. Default cuts give level 2 for
+mean 1.5; the earlier level-1 acceptance example was corrected to match EP-64.

@@ -1,13 +1,14 @@
 -- | Extraction of provider-neutral probability evidence. Provider selections are
 -- deliberately ignored; the typed decoder derives every answer locally.
-module Shikumi.Decision.Runtime (evidenceOf, evidenceObject) where
+module Shikumi.Decision.Runtime (evidenceOf, evidenceObject, decodeDecisionEvidence) where
 
 import Baikai (AssistantContent (..), Response)
 import Control.Lens ((^.))
-import Data.Aeson (Value (..), toJSON)
+import Data.Aeson (Result (..), Value (..), fromJSON)
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
+import Data.List (sort)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -29,6 +30,9 @@ evidenceOf js response = case [d | AssistantData d <- V.toList (response ^. #mes
         ( \j -> do
             let name = judgmentField j
             probs <- maybe (Left (MissingField name)) Right (Map.lookup name ps)
+            if all (\p -> not (isNaN p || isInfinite p) && p >= 0 && p <= 1) (Map.elems probs ++ maybe [] pure (Map.lookup name cs))
+              then pure ()
+              else Left (ValidationFailure (name <> ": probability/confidence must be finite and in [0,1]"))
             ev <- case judgmentKind j of
               JudgeBoolean {} -> FieldNoul . NoulEvidence <$> get name "true" probs
               JudgeChoice labels -> do
@@ -63,3 +67,32 @@ evidenceObject schema js settings evidence = Object . KM.fromList <$> traverse f
               JudgeChoice {} -> result
             _ -> derived
       pure (K.fromText name, if rich then derived else native)
+
+-- | Strict generative evidence grammar. Shape errors and range violations keep
+-- the field path. No provider-supplied derived-answer annotation is accepted.
+decodeDecisionEvidence :: Judgment -> Value -> Either ShikumiError FieldEvidence
+decodeDecisionEvidence j value = do
+  fields <- case value of Object o -> Right o; _ -> shape "expected evidence object"
+  let expected = case judgmentKind j of JudgeBoolean {} -> ["noul"]; _ -> ["confidence", "probabilities"]
+  if sort (KM.keys fields) == sort expected then pure () else shape "missing or extra evidence keys"
+  case judgmentKind j of
+    JudgeBoolean {} -> FieldNoul . NoulEvidence <$> (get "noul" fields >>= number)
+    kind -> do
+      probs <- get "probabilities" fields >>= \case Object p -> Right p; _ -> shape "expected probabilities object"
+      let keys = case kind of JudgeChoice ls -> map (K.fromText . fst) ls; JudgeOrdered ls -> map (K.fromText . T.pack . show) [0 .. length ls - 1]; _ -> []
+      if sort (KM.keys probs) == sort keys then pure () else shape "missing or extra probability keys"
+      ps <- traverse number probs
+      confidence <- get "confidence" fields >>= number
+      let mapping = Map.fromList [(K.toText key, p) | (key, p) <- KM.toList ps]
+      case kind of
+        JudgeChoice {} -> pure (FieldChoice (ChoiceEvidence mapping (Just confidence)))
+        JudgeOrdered {} -> pure (FieldScore (ScoreEvidence (V.fromList [mapping Map.! K.toText key | key <- keys]) (Just confidence)))
+        _ -> shape "unexpected judgment kind"
+  where
+    shape :: Text -> Either ShikumiError a
+    shape msg = Left (SchemaMismatch (judgmentField j <> ": " <> msg))
+    get key fields = maybe (shape ("missing " <> K.toText key)) Right (KM.lookup key fields)
+    number (Number n) = case fromJSON (Number n) of
+      Success p | not (isNaN p || isInfinite p) && p >= 0 && p <= (1 :: Double) -> Right p
+      _ -> Left (ValidationFailure (judgmentField j <> ": probability/confidence must be finite and in [0,1]"))
+    number _ = shape "expected numeric probability/confidence"

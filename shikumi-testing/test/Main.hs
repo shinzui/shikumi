@@ -3,6 +3,7 @@ module Main (main) where
 import Data.Either (isLeft)
 import Data.List (nub)
 import Data.Text qualified as T
+import DecisionEvidenceSpec qualified
 import DecisionParamsSpec qualified
 import DecisionSpec qualified
 import Shikumi.Combinator (TempSchedule (..))
@@ -17,7 +18,8 @@ main =
   defaultMain $
     testGroup
       "shikumi-testing"
-      [ DecisionParamsSpec.tests,
+      [ DecisionEvidenceSpec.tests,
+        DecisionParamsSpec.tests,
         DecisionSpec.tests,
         testCase "instructedSig has a non-empty instruction" $
           assertBool "instruction" (not (T.null (getInstruction instructedSig))),

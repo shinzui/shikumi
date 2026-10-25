@@ -5,7 +5,7 @@ description: Derive native-schema routing from Baikai's declared structured-outp
 docId: ADR-14
 status: Accepted
 date: 2026-09-30
-timestamp: 2026-09-30T17:00:00Z
+timestamp: 2026-10-25T18:14:37Z
 generated:
   by: agent:anthropic/claude-opus-5-5
   at: 2026-09-30T17:00:00Z
@@ -26,6 +26,9 @@ format, but it cannot know whether a third-party host enforces it.
 
 ## Decision
 
+`capabilityFor` first returns `DecisionOnly` when Baikai's `isJudgmentOnly`
+holds. That path submits structured state and closed judgments, with terminal
+pre-dispatch refusal for free-form outputs and streaming. For generative models,
 `capabilityFor` is a schema-enforcement check only. It returns `NativeSchema` when Baikai
 declares `NativeJsonSchema` for the model's `api` and either the `api` is a CLI tag
 (`AnthropicMessagesCli`, `OpenAICompletionsCli`) or the `(provider, api)` pair is a

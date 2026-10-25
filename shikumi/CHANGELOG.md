@@ -2,14 +2,21 @@
 
 ## Unreleased
 
-- Add offline decision types (`NoulWith`/`Noul`, `Choice`, `Score`), probability
-  evidence codecs, judgment schemas, local default derivation and pure calibration
-  settings. Jev transport and runtime application of settings remain pending the
-  upstream integration milestones.
-- Add `ToPrompt.toPromptJSON` and `PromptValue.promptValueJSON` for structured
-  decision state. Custom `ToPrompt` instances that cannot use the generic default
-  need an explicit JSON implementation; review this class change before release.
-  Existing text prompts and native demo rendering are unchanged.
+- Add probability-backed `NoulWith`/`Noul`, `Choice` and `Score` outputs on
+  judgment-only and generative models. Closed evidence schemas, typed preflight
+  refusals and strict evidence decoding feed shared local derivation.
+- Store per-field decision settings in `Params`, preserving old JSON and omitting
+  empty settings. Changing thresholds, cuts or weights reuses cached/replayed
+  evidence. The `Params` constructor gains a field; prefer `emptyParams` updates.
+- Route judgment-only models through structured state using the published
+  `mori://shinzui/baikai/packages/baikai` 0.9 cohort. Judgment models receive only
+  the evidence request default; explicit generation controls retain typed refusals.
+- Add `ToPrompt.toPromptJSON` / `toEvidenceJSON` and the corresponding PromptValue
+  methods for structured state and evidence-preserving demonstrations. Custom
+  prompt instances that cannot use generic defaults must implement them explicitly.
+  Existing ordinary text prompts and native demo rendering retain their behavior.
+- Decision streaming is explicitly refused before dispatch. Nested decision
+  containers, recursive sessions and ReAct submissions remain outside this feature.
 
 ## 0.4.1.1 — 2026-10-16
 

@@ -208,7 +208,7 @@ setSelectedCandidate s chosen reason = do
         (owner == reserved s && any (\c -> candidateId c == ix && candidateStatus c == CandidateCompleted) (candidates current))
         (throwError (ValidationFailure "selected candidate must be completed in this session"))
       pure (Just ix)
-  modifyReport s (\r -> r {selectedCandidate = ident, resultStatus = Just (maybe Unscored (const CandidateCompleted) ident), selectionReason = reason})
+  modifyReport s (\r -> r {selectedCandidate = ident, frontier = maybe [] (: []) ident, resultStatus = Just (maybe Unscored (const CandidateCompleted) ident), selectionReason = reason})
 
 addPredictedWork :: (Prim :> es) => SearchSession es -> Int -> Eff es ()
 addPredictedWork s n = modifyReport s (\r -> r {predictedWork = predictedWork r + max 0 n})

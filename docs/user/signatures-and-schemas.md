@@ -403,3 +403,69 @@ settings; a requested setting is not evidence that the provider used it. Native
 schema support does not imply support for every neutral `Options` field.
 See [the runtime guide](effects-and-runtime.md#a-complete-responses-workflow)
 for separate provider registration and the offline command.
+
+## Probability-backed decisions
+
+Use `Noul` for a yes/no decision, `Choice a` for a closed set of labels, and
+`Score '["Low", "Medium", "High"]` for ordered levels. Import them from
+`Shikumi.Decision`. They carry the model's probability evidence alongside locally
+derived answers. `NoulWith "Service unavailable" "Workaround available"` also
+declares criteria for the two answers. `ChoiceOptions a` supplies labels and
+optional criteria, with a generic default for nullary constructor enums.
+
+```haskell
+data Assessment = Assessment
+  { urgent :: Field "Is service blocked?" Noul
+  , severity :: Field "Rate impact." (Score '["Low", "Medium", "High"])
+  }
+  deriving stock Generic
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable, DecisionOutputs)
+```
+
+`DecisionOutputs` is an optional compile-time guarantee that every output field
+is a judgment. A free-form text field fails that check. Ordinary generative
+programs can mix rich decisions with generated text without deriving it.
+
+A judgment-only model sends one structured state containing instructions, typed
+inputs and labeled demonstrations. It refuses free-form outputs before dispatch.
+For Jev, add `mori://shinzui/baikai/packages/baikai-typesafe` to your application,
+register its `Baikai.Provider.TypeSafe.Api.typesafeProvider` in an explicit Baikai
+registry, and run with `runLLMWith` and `routeLLM` using the catalog's
+`typesafe_jev_latest` model. Shikumi withholds thinking, speed and token-ceiling
+defaults for judgment-only models. Explicit unsupported controls are terminal errors.
+
+Generative models receive an evidence schema. A Noul returns `{"noul":0.83}`;
+Choice and Score return `{"probabilities":{...},"confidence":0.8}`. Choice keys
+are the declared labels; Score keys are decimal level indices starting at `"0"`.
+Missing or extra evidence keys, nonnumeric probabilities and values outside
+[0,1] fail with a located typed error. Distributions need not sum to one; Score
+normalizes when computing its expected level index. Zero effective mass is an error.
+Native JSON and marker replies share these rules. Question criteria appear in the
+field guide. Demonstrations move into a `Task examples (labels or evidence)` block
+and preserve supplied labels or rich evidence without inventing distributions.
+
+Settings are per-field entries in the node's `Params`:
+
+```haskell
+import Shikumi.Decision.Setting (DecisionSetting (..))
+import Shikumi.Program (mapParams, setDecisionSetting)
+
+tuned = mapParams (setDecisionSetting "urgent" (NoulSetting 0.7)) program
+```
+
+A Noul is true when P(true) is at least its threshold, default 0.5. Its confidence
+is `abs (p - threshold) / max threshold (1 - threshold)`. Score's continuous value
+is the probability-weighted mean index; its level counts cuts at or below that
+value. Default cuts lie at 0.5, 1.5 and so on. Choice maximizes probability times
+weight, default 1; zero disables a label. Weighted ties prefer the raw probability
+winner, then declaration order. Choice and Score confidence remains backend-reported.
+
+Settings validate before a model call, serialize with compiled programs, and stay
+outside request identity. Changing an existing threshold, cut or weight reuses
+cached or recorded evidence. Bare Bool and enum fields retain ordinary generation
+until a settings entry opts them into evidence mode; that initial opt-in changes
+the request schema. Rich decision types always request evidence.
+
+Decision streaming, decision types nested in containers, recursive-session outputs
+and ReAct submissions are outside this feature. Custom prompt instances can supply
+`toPromptJSON` for typed state and `toEvidenceJSON` for rich demonstrations.

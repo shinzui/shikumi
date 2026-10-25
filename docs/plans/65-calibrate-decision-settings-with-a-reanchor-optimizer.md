@@ -105,7 +105,7 @@ the accepted completed reservation while leaving all trials in diagnostics.
 
 ## Outcomes & Retrospective
 
-Completed 2026-10-25. Eight focused ReAnchor tests and the full repository
+Completed 2026-10-25. Nine focused ReAnchor tests and the full repository
 suite pass. Threshold fitting improves 0.7 to 1.0 with exactly ten admitted model
 calls for ten distinct inputs, regardless of candidate count. Tests cover tidy
 and bounded gaps, adjacent floats, zero thresholds, fold refusal, exact absent-entry
@@ -117,7 +117,8 @@ are observed by node path instead of requiring typed NodeObservation output;
 public trace contracts remain intact. ReAnchor's report records retained settings,
 score vectors summarized as means, observation ranges and fold counters. Validation
 is optional and report-only. See ADR-5 for durable admission and selection context.
-No material workflow friction was recorded.
+Native JSON and marker generative evidence also fit the same threshold with ten
+provider calls for ten inputs after EP-66 integration. No material workflow friction was recorded.
 
 
 ## Context and Orientation
@@ -173,7 +174,7 @@ The code calls this shared order "the ordering law", and ReAnchor relies on it t
   - `clearDecisionSetting :: Text -> Params -> Params`;
   - this plan's own helper `effectiveDecisionSetting j ps = fromMaybe (defaultSetting j) (decisionSettingFor (judgmentField j) ps)`, which returns the stored value or the type default.
 
-  The default is computed from the node's field metadata: the output's kind and its number of levels or labels. Neither EP-63 nor EP-64 exposes it per node. Milestone 1 of this plan therefore adds `nodeDecisionFieldsIndexed :: Program i o -> [[Judgment]]` to core, next to `nodeFieldsIndexed`, with the same traversal order. It is computed as `fst (judgmentsInSchema (deriveSchema @o))` at each `Predict` node.
+  The default is computed from the node's field metadata: the output's kind and its number of levels or labels. Neither EP-63 nor EP-64 exposes it per node. Milestone 1 of this plan therefore adds `nodeDecisionFieldsIndexed :: Program i o -> [[Judgment]]` to core, next to `nodeFieldsIndexed`, with the same traversal order. It filters `judgmentsInSchema (deriveSchema @o)` at each Predict node to properties carrying the rich decision marker; native booleans and enums are excluded from calibration.
 
 **Relevant ADRs.**
 
@@ -250,7 +251,12 @@ The scope is a new internal module `shikumi-optimize/src/Shikumi/Optimize/ReAnch
 
 The crucial placement is that the replay is installed *inside* the runner passed to `evaluateCandidate`, for example `\inp -> withReplay store (runProgramObserved candidateProgram inp)`. Effectful's `interpose` handles an operation at the innermost installation first, so a replayed call never reaches the candidate's operation counter or the session's admission, while a miss does.
 
-`observeEvidence` takes the `[NodeObservation]` from `runProgramObserved`, the target node's `NodePath` (from `programNodePaths` at the node's index), and a field name. It decodes that field of each matching observation's `observationOutput` into the evidence record for the field's kind, in call order.
+`runResponses` walks the program with `walkProgramWith`, collecting raw responses
+under each structural NodePath inside the candidate runner. This works for both
+ordinary Predict and PredictCaptured without widening their constraints. The
+public optimizer reads the target field from those responses through the core
+evidence decoder. Typed NodeObservation output remains useful to other optimizers
+but is not a prerequisite for ReAnchor.
 
 At the end of the milestone, a test in `shikumi-optimize/test/ReAnchorSpec.hs` runs a one-node Noul program over three inputs with a counting System One stub from `shikumi-testing`. It runs once with threshold 0.5 and once with threshold 0.9, sharing one store. It asserts that the stub was called exactly three times in total, and that an input whose recorded P(true) is 0.7 answers true under 0.5 and false under 0.9.
 
@@ -359,7 +365,7 @@ Everything is additive: two new internal modules, one public module, one test sp
 This plan defines:
 
 - `Shikumi.Optimize.ReAnchor`: `reAnchor`, `reAnchorWith`, `ReAnchorConfig`, `defaultReAnchorConfig`, `ReAnchorReport`, `FieldCalibration`;
-- internal `Shikumi.Optimize.ReAnchor.Replay`: `ReplayStore`, `newReplayStore`, `withReplay`, `observeEvidence`;
+- internal `Shikumi.Optimize.ReAnchor.Replay`: `ReplayStore`, `newReplayStore`, `withReplay`, `runResponses`;
 - internal `Shikumi.Optimize.ReAnchor.Fit`: the pure selection core.
 
 It consumes:

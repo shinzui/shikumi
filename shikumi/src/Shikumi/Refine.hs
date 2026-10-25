@@ -312,6 +312,7 @@ data MultiChainInput i o = MultiChainInput
 -- | Render the original input, then each attempt as a "Student Attempt #k" line:
 -- @"I tried to \<reasoning\>; my answer is \<answer\>"@ (mirroring DSPy's rendering).
 instance (ToPrompt i, ToPrompt o) => ToPrompt (MultiChainInput i o) where
+  toEvidenceJSON = toPromptJSON
   toPromptJSON = Object . KM.fromList . map (\(k, v) -> (Key.fromText k, String v)) . toPromptFields
   toPromptFields mci =
     toPromptFields (original mci)

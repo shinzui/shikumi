@@ -53,7 +53,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import GHC.Generics
 import GHC.TypeLits (ErrorMessage (..), KnownSymbol, Nat, Symbol, TypeError, symbolVal, type (+))
-import Shikumi.Adapter (PromptValue (..), ToPrompt (..))
+import Shikumi.Adapter.Prompt (PromptValue (..), ToPrompt (..))
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Schema (FromModel (..), ToSchema (..), Validatable)
 import Shikumi.Schema.Types (Field, FieldMeta (..), FieldPath, renderPath)
@@ -494,11 +494,14 @@ instance Validatable (Score ss)
 instance PromptValue (NoulWith t f) where
   promptValue (Noul v _ _) = if v then "true" else "false"
   promptValueJSON (Noul v _ _) = Bool v
+  promptEvidenceJSON n@(Noul v _ c) = case toJSON n of Object o -> Object (KM.insert "value" (Bool v) (KM.insert "confidence" (toJSON c) o)); x -> x
 
 instance (ChoiceOptions a) => PromptValue (Choice a) where
   promptValue (Choice a _ _) = fromMaybe "" (lookup a [(v, n) | (n, v, _) <- choiceOptions @a])
   promptValueJSON = String . promptValue
+  promptEvidenceJSON c = case toJSON c of Object o -> Object (KM.insert "value" (String (promptValue c)) o); x -> x
 
 instance PromptValue (Score ss) where
   promptValue (Score _ l _ _) = T.pack (show l)
   promptValueJSON (Score _ l _ _) = toJSON l
+  promptEvidenceJSON s@(Score v l _ _) = case toJSON s of Object o -> Object (KM.insert "value" (toJSON v) (KM.insert "level" (toJSON l) o)); x -> x

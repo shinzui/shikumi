@@ -60,6 +60,12 @@ module Shikumi.Adapter
     metaNativePromptKey,
     metaNativeDemosKey,
     metaDecisionStateKey,
+    metaDecisionSchemaKey,
+    metaDecisionEvidenceKey,
+    evidenceFields,
+    evidenceSchema,
+    renderEvidenceRequest,
+    responseValue,
     attachDecisionState,
     stripDecisionMarkers,
     attachNativeRender,
@@ -94,7 +100,6 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy qualified as LBS
 import Data.Generics.Labels ()
-import Data.Kind (Type)
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -103,13 +108,15 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Vector qualified as V
-import GHC.Generics
+import Shikumi.Adapter.Prompt
 import Shikumi.Adapter.Xml (decodeXmlFields, renderXmlFields, xmlSchemaGuide)
+import Shikumi.Decision (Judgment (..), JudgmentKind (..), judgmentsInSchema, questionJSON)
+import Shikumi.Decision.Setting (DecisionSetting)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Multimodal (GImageFieldNames (..), GImageFields (..), Image, imageToContent)
+import Shikumi.Multimodal (imageToContent)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModelChecked)
-import Shikumi.Schema.Types (Constrained (..), Field (..), FieldMeta (..))
-import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, outputFields)
+import Shikumi.Schema.Types (FieldMeta (..))
+import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, inputFields, outputFields)
 
 -- ---------------------------------------------------------------------------
 -- ToPrompt: render an input record (and demo outputs) as labeled text
@@ -117,112 +124,6 @@ import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, output
 
 -- | Render a record as labeled text for the prompt. 'toPromptFields' yields the
 -- @(fieldName, valueText)@ pairs; 'toPrompt' joins them as @"name: value"@ lines.
-class ToPrompt a where
-  toPromptFields :: a -> [(Text, Text)]
-  default toPromptFields :: (Generic a, GToPromptFields (Rep a)) => a -> [(Text, Text)]
-  toPromptFields = gToPromptFields . from
-
-  toPrompt :: a -> Text
-  toPrompt = T.intercalate "\n" . map (\(k, v) -> k <> ": " <> v) . toPromptFields
-
-  -- | Structured fields for decision state. Unlike prompt text, strings such as
-  -- @"null"@ or @"123"@ stay strings, and numbers, lists and optional values keep
-  -- their JSON types. Override for a custom input representation.
-  toPromptJSON :: a -> Value
-  default toPromptJSON :: (Generic a, GToPromptFields (Rep a)) => a -> Value
-  toPromptJSON = Object . KM.fromList . gToPromptJSON . from
-
-  -- | The 'Image' values an /input/ record carries, in field order (EP-24). The
-  -- adapter lowers these to baikai @UserImage@ blocks in 'userTurn'. The generic
-  -- default walks the record, so any 'Generic' input gets it for free; a record
-  -- with no image field yields @[]@ and renders byte-for-byte as before. A
-  -- hand-written instance whose fields are polymorphic (e.g.
-  -- "Shikumi.Module".@WithReasoning@) cannot be walked generically and overrides
-  -- this to @[]@.
-  imageFields :: a -> [Image]
-  default imageFields :: (Generic a, GImageFields (Rep a)) => a -> [Image]
-  imageFields = gImageFields . from
-
-  -- | The names of an input record's image fields, in field order (EP-24). The
-  -- text renderer in 'userTurn' drops these so an image is not also rendered as
-  -- prose. Same defaulting story as 'imageFields'.
-  imageFieldNames :: a -> [Text]
-  default imageFieldNames :: (Generic a, GImageFieldNames (Rep a)) => a -> [Text]
-  imageFieldNames = gImageFieldNames . from
-
-class GToPromptFields (f :: Type -> Type) where
-  gToPromptFields :: f p -> [(Text, Text)]
-  gToPromptJSON :: f p -> [(Key.Key, Value)]
-
-instance (GToPromptFields cs) => GToPromptFields (D1 d cs) where
-  gToPromptFields (M1 x) = gToPromptFields x
-  gToPromptJSON (M1 x) = gToPromptJSON x
-
-instance (GToPromptFields cs) => GToPromptFields (C1 c cs) where
-  gToPromptFields (M1 x) = gToPromptFields x
-  gToPromptJSON (M1 x) = gToPromptJSON x
-
-instance (GToPromptFields a, GToPromptFields b) => GToPromptFields (a :*: b) where
-  gToPromptFields (a :*: b) = gToPromptFields a ++ gToPromptFields b
-  gToPromptJSON (a :*: b) = gToPromptJSON a ++ gToPromptJSON b
-
-instance (Selector s, PromptValue t) => GToPromptFields (S1 s (K1 R t)) where
-  gToPromptFields m@(M1 (K1 v)) = [(T.pack (selName m), promptValue v)]
-  gToPromptJSON m@(M1 (K1 v)) = [(Key.fromString (selName m), promptValueJSON v)]
-
--- | Render a leaf value to text. Text stays as-is; lists join with commas;
--- 'Maybe' renders its contents or @""@; a 'Shikumi.Schema.Types.Field' unwraps;
--- everything else falls back to 'Show'.
-class PromptValue a where
-  promptValue :: a -> Text
-
-  -- | JSON counterpart of the prompt leaf. Custom structured leaves should
-  -- override this instead of encoding JSON through 'Show'.
-  promptValueJSON :: a -> Value
-  promptValueJSON = String . promptValue
-
-instance {-# OVERLAPPABLE #-} (Show a) => PromptValue a where
-  promptValue = T.pack . show
-
-instance PromptValue Text where
-  promptValue = id
-
-instance PromptValue Bool where
-  promptValue = T.pack . show
-  promptValueJSON = toJSON
-
-instance PromptValue Int where
-  promptValue = T.pack . show
-  promptValueJSON = toJSON
-
-instance PromptValue Integer where
-  promptValue = T.pack . show
-  promptValueJSON = toJSON
-
-instance PromptValue Double where
-  promptValue = T.pack . show
-  promptValueJSON = toJSON
-
-instance (PromptValue a) => PromptValue [a] where
-  promptValue = T.intercalate ", " . map promptValue
-  promptValueJSON = toJSON . map promptValueJSON
-
-instance (PromptValue a) => PromptValue (Maybe a) where
-  promptValue = maybe "" promptValue
-  promptValueJSON = maybe Null promptValueJSON
-
--- Preserve the existing textual representation of described fields. Decision
--- state uses the unwrapped JSON value without changing legacy prompts.
-instance (Show a, PromptValue a) => PromptValue (Field d a) where
-  promptValue = T.pack . show
-  promptValueJSON = promptValueJSON . unField
-
--- | A t'Constrained' field renders as its inner value (the constraint is a
--- compile-time/decode-time concern, not a prompt concern). EP-26.
-instance (PromptValue a) => PromptValue (Constrained cs a) where
-  promptValue = promptValue . unConstrained
-  promptValueJSON = promptValueJSON . unConstrained
-
 -- ---------------------------------------------------------------------------
 -- The seam
 -- ---------------------------------------------------------------------------
@@ -713,3 +614,67 @@ isStringLike (Object o) =
       Just (Array alts) -> any isStringLike (V.toList alts)
       _ -> False
 isStringLike _ = False
+
+-- | Evidence mode and its original answer schema are independent of numeric
+-- settings. The router chooses the answer schema for judgment-only models.
+metaDecisionEvidenceKey, metaDecisionSchemaKey :: Text
+metaDecisionEvidenceKey = "shikumi.decision.evidence"
+metaDecisionSchemaKey = "shikumi.decision.schema"
+
+evidenceFields :: forall o. (ToSchema o) => Map Text DecisionSetting -> [Judgment]
+evidenceFields settings = filter selected (fst (judgmentsInSchema schema))
+  where
+    schema = deriveSchema @o
+    selected j =
+      Map.member (judgmentField j) settings || case propertySchema (judgmentField j) schema of
+        Just (Object p) -> KM.member "x-shikumi-decision" p
+        _ -> False
+
+-- | Replace selected answer properties with closed probability objects.
+evidenceSchema :: Value -> [Judgment] -> Value
+evidenceSchema (Object root) fields = case KM.lookup "properties" root of
+  Just (Object props) -> Object (KM.insert "properties" (Object (foldl replace props fields)) root)
+  _ -> Object root
+  where
+    probability = Aeson.object ["type" Aeson..= ("number" :: Text), "minimum" Aeson..= (0 :: Int), "maximum" Aeson..= (1 :: Int)]
+    closed props = Aeson.object ["type" Aeson..= ("object" :: Text), "properties" Aeson..= Object props, "required" Aeson..= map Key.toText (KM.keys props), "additionalProperties" Aeson..= False]
+    replace props j =
+      let keys = case judgmentKind j of JudgeBoolean {} -> []; JudgeChoice ls -> map fst ls; JudgeOrdered ls -> map (T.pack . show) [0 .. length ls - 1]
+          shape = case judgmentKind j of
+            JudgeBoolean {} -> closed (KM.singleton "noul" probability)
+            _ -> closed (KM.fromList [("probabilities", closed (KM.fromList [(Key.fromText k, probability) | k <- keys])), ("confidence", probability)])
+          described = case shape of Object p -> Object (KM.insert "description" (String (jsonText (questionJSON j))) p); _ -> shape
+       in KM.insert (Key.fromText (judgmentField j)) described props
+evidenceSchema v _ = v
+
+jsonText :: Value -> Text
+jsonText = decodeUtf8 . LBS.toStrict . Aeson.encode
+
+-- | Render probability requests without demonstration turns. Task examples keep
+-- labels or actual evidence and never invent probability distributions.
+renderEvidenceRequest :: forall i o. (ToSchema o, ToPrompt i, ToPrompt o) => Map Text DecisionSetting -> Signature i o -> i -> (Context, Options)
+renderEvidenceRequest settings sig input =
+  let fields = evidenceFields @o settings
+      original = deriveSchema @o
+      schema = evidenceSchema original fields
+      example (Demo i o) = case (toPromptJSON i, toEvidenceJSON o) of
+        (Object a, Object b) -> Object (KM.fromList [(k, v) | (k, v) <- KM.toList (KM.union b a), Key.toText k `elem` map fieldName (inputFields sig ++ outputFields sig)])
+        _ -> Null
+      examples = if null (getDemos sig) then "" else "\n\nTask examples (labels or evidence):\n" <> jsonText (toJSON (map example (getDemos sig)))
+      header = getInstruction sig <> examples <> "\n\nEach probability and confidence must be between 0 and 1. Choice and Score probabilities should sum to one.\n"
+      describe f = case filter ((== fieldName f) . judgmentField) fields of
+        j : _ -> jsonText (questionJSON j)
+        [] -> fromMaybe "" (fieldDesc f)
+      native = header <> "Reply with a JSON object containing these fields:\n" <> T.unlines [fieldName f <> ": " <> describe f | f <- outputFields sig]
+      markerGuide = header <> "Reply using these sections, each marker on its own line:\n" <> T.unlines [marker (fieldName f) <> "  -- " <> describe f <> maybe "" (\s -> "\nJSON shape: " <> renderShape s) (propertySchema (fieldName f) schema) | f <- outputFields sig] <> marker "completed"
+      opts =
+        attachNativeRender native [] (attachSchema schema emptyOptions)
+          & #metadata . at metaDecisionEvidenceKey ?~ toJSON [Aeson.object ["field" Aeson..= judgmentField j, "kind" Aeson..= (case judgmentKind j of JudgeBoolean {} -> "noul"; JudgeChoice {} -> "choice"; JudgeOrdered {} -> "score" :: Text)] | j <- fields]
+          & #metadata . at metaDecisionSchemaKey ?~ original
+   in (buildContext markerGuide [userTurn input], opts)
+
+-- | Read either JSON text or marker sections with schema-driven object coercion.
+responseValue :: Value -> Response -> Either ShikumiError Value
+responseValue schema response = case assistantJSON response of
+  Right value -> Right value
+  Left _ -> Right (sectionsToObject schema (parseMarkers (responseText response)))

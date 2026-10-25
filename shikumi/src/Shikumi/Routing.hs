@@ -48,6 +48,7 @@ module Shikumi.Routing
 where
 
 import Baikai (Context, JsonSchemaFormat (strict), Message (..), Model, Options, ResponseFormat (..), assistant, jsonSchemaFormat, userData)
+import Control.Applicative ((<|>))
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (FromJSON, Result (..), Value, fromJSON)
 import Data.Generics.Labels ()
@@ -61,6 +62,8 @@ import Effectful.Error.Static (Error, throwError)
 import Shikumi.Adapter
   ( ModelCapability (..),
     capabilityFor,
+    metaDecisionEvidenceKey,
+    metaDecisionSchemaKey,
     metaDecisionStateKey,
     metaNativeDemosKey,
     metaNativePromptKey,
@@ -108,7 +111,7 @@ routeLLM = interpose $ \_ -> \case
     complete m ctx' opts'
   Stream _placeholder ctx opts -> do
     m <- currentModel
-    if capabilityFor m == DecisionOnly then throwError (ValidationFailure "decision outputs do not support streaming") else pure ()
+    if capabilityFor m == DecisionOnly || Map.member metaDecisionEvidenceKey (opts ^. #metadata) then throwError (ValidationFailure "decision outputs do not support streaming") else pure ()
     (ctx', opts') <- either throwError pure (translateForWire m ctx opts)
     either throwError pure (validateRequestContinuation m ctx' opts')
     stream m ctx' opts'
@@ -124,7 +127,7 @@ routeLLM = interpose $ \_ -> \case
 translateForWire :: Model -> Context -> Options -> Either ShikumiError (Context, Options)
 translateForWire m ctx opts =
   let md = opts ^. #metadata
-      mSchema = Map.lookup metaResponseSchemaKey md
+      mSchema = (if capabilityFor m == DecisionOnly then Map.lookup metaDecisionSchemaKey md else Nothing) <|> Map.lookup metaResponseSchemaKey md
       mTemp = Map.lookup metaTemperatureKey md >>= valueToDouble
       mNativeSys = Map.lookup metaNativePromptKey md >>= fromJSONMaybe
       mNativeDemos = Map.lookup metaNativeDemosKey md >>= fromJSONMaybe
@@ -132,7 +135,7 @@ translateForWire m ctx opts =
         foldr
           Map.delete
           md
-          [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey, metaDecisionStateKey]
+          [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey, metaDecisionStateKey, metaDecisionSchemaKey, metaDecisionEvidenceKey]
       isNative = capabilityFor m /= PromptFallback
       withSchema o
         | isNative,

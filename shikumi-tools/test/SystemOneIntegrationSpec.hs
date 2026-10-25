@@ -1,11 +1,10 @@
 module SystemOneIntegrationSpec (tests) where
 
 import Baikai qualified as B
-import Control.Lens ((&), (.~))
 import Data.Aeson
 import Data.Aeson.KeyMap qualified as KM
 import Data.Map.Strict qualified as Map
-import Data.Text (Text)
+import Data.Text qualified as T
 import Effectful (runEff)
 import Effectful.Dispatch.Dynamic (interpose)
 import Effectful.Error.Static (runErrorNoCallStack)
@@ -16,7 +15,7 @@ import Shikumi.LLM qualified as L
 import Shikumi.LLM.Defaults
 import Shikumi.Program
 import Shikumi.Routing
-import Shikumi.Schema (field)
+import Shikumi.Schema (field, unField)
 import Shikumi.Testing.DecisionFixtures
 import Shikumi.Testing.Responses (fixtureOptions, withTransportOptions)
 import Shikumi.Testing.SystemOne
@@ -47,7 +46,10 @@ tests =
             runEff . runErrorNoCallStack @ShikumiError . runRouting model . L.runLLMWith registry . withTransportOptions fixtureOptions . withRequestDefaults defaults . routeLLM $
               runProgram (Predict assessmentSig emptyParams) (Ticket (field "Checkout is unavailable."))
           case result of
-            Right (Assessment _ _ _) -> pure ()
+            Right (Assessment u s c) -> do
+              case unField u of Noul value p _ -> do value @?= True; p @?= 0.83
+              case unField s of Score value level _ confidence -> do value @?= 1.5; level @?= 2; confidence @?= Just 0.55
+              case unField c of Choice value _ confidence -> do value @?= Technical; confidence @?= Just 0.65
             Left err -> assertFailure (show err)
           bodies <- requests
           bodies @?= [object ["model" .= String "jev-latest", "state" .= renderDecisionState assessmentSig (Ticket (field "Checkout is unavailable.")), "questions" .= Map.fromList [(judgmentField j, questionJSON j) | j <- judgmentsOf @Assessment]]],
@@ -56,15 +58,25 @@ tests =
           result <-
             runEff . runErrorNoCallStack @ShikumiError . runRouting model . L.runLLMWith registry . withTransportOptions fixtureOptions . routeLLM . interpose (\_ -> \case L.Complete m c o -> L.complete m c (stampTemperature 0.7 o); L.Stream m c o -> L.stream m c o) $
               runProgram (Predict assessmentSig emptyParams) (Ticket (field "x"))
-          assertBool "terminal refusal" (case result of Left (SchemaMismatch _) -> True; _ -> False)
+          assertBool "terminal refusal" (case result of Left (SchemaMismatch msg) -> "temperature" `T.isInfixOf` msg; _ -> False)
           requests >>= (@?= []),
-      testCase "malformed confidence is a terminal decode failure" $
-        let bad = case reply of Object o -> Object (adjust (\case Object a -> Object (adjust (\case Object c -> Object (KM.delete "confidence" c); v -> v) "category" a); v -> v) "answers" o); v -> v
-         in withSystemOneFixture bad $ \model registry _ -> do
+      testCase "missing wire evidence or undeclared answers fail after one HTTP request" $ do
+        let modifyAnswer name f = modifyObject "answers" (adjust (\case Object o -> Object (f o); v -> v) name) reply
+            malformed = [modifyAnswer "category" (KM.delete "confidence"), modifyAnswer "severity" (KM.delete "score"), modifyAnswer "severity" (KM.delete "legend"), modifyObject "answers" (KM.insert "unexpected" (object ["type" .= String "noul", "noul" .= (0.5 :: Double)])) reply]
+        mapM_
+          ( \bad -> withSystemOneFixture bad $ \model registry requests -> do
               result <-
                 runEff . runErrorNoCallStack @ShikumiError . runRouting model . L.runLLMWith registry . withTransportOptions fixtureOptions . routeLLM $
                   runProgram (Predict assessmentSig emptyParams) (Ticket (field "x"))
-              assertBool "InvalidJSON" (case result of Left (InvalidJSON _) -> True; _ -> False)
+              assertBool "terminal InvalidJSON" (case result of Left (InvalidJSON _) -> True; _ -> False)
+              requests >>= (\xs -> length xs @?= 1)
+          )
+          malformed
     ]
 
+adjust :: (a -> a) -> Key -> KM.KeyMap a -> KM.KeyMap a
 adjust f k o = maybe o (\v -> KM.insert k (f v) o) (KM.lookup k o)
+
+modifyObject :: Key -> (KM.KeyMap Value -> KM.KeyMap Value) -> Value -> Value
+modifyObject key f (Object fields) = Object (adjust (\case Object o -> Object (f o); v -> v) key fields)
+modifyObject _ _ v = v

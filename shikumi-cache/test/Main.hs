@@ -30,6 +30,7 @@ import Baikai
 import Baikai qualified as B
 import Baikai.Cost qualified as BC
 import Baikai.Evidence qualified as E
+import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Baikai.Speed (Speed (..))
 import Baikai.ThinkingLevel (ThinkingLevel (..))
 import Baikai.Usage qualified as BU
@@ -77,6 +78,8 @@ import Shikumi.Program qualified as P
 import Shikumi.Routing (routeLLM, runRouting)
 import Shikumi.Schema (field)
 import Shikumi.Testing.DecisionFixtures
+import Shikumi.Testing.Response (evidenceJSONResponse, evidenceMarkerResponse)
+import Shikumi.Testing.StubLLM (captureLLMRequests)
 import Shikumi.Testing.SystemOne (systemOneModel, systemOneResponder, systemOneResponse)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
@@ -146,19 +149,30 @@ main = do
       defaultMain $
         testGroup
           "shikumi-cache"
-          [ testCase "Decision settings change answers with one cached request" $ do
-              cache <- newMemoryCache
-              calls <- newIORef 0
-              let response = systemOneResponse [("urgent", FieldNoul (NoulEvidence 0.6)), ("severity", FieldScore (ScoreEvidence (V.fromList [0.1, 0.3, 0.6]) Nothing)), ("category", FieldChoice (ChoiceEvidence (Map.fromList [("billing", 0.2), ("technical", 0.8)]) Nothing))]
-                  program = P.Predict assessmentSig P.emptyParams
-              result <- runEff . runConcurrent . runTime . runErrorNoCallStack @ShikumiError . runRouting (systemOneModel "jev-latest") . runCountingLLM calls response . runCacheMemory cache . cachedLLM . routeLLM $ do
-                a <- P.runProgram program (Ticket (field "x"))
-                b <- P.runProgram (P.mapParams (P.setDecisionSetting "urgent" (NoulSetting 0.7)) program) (Ticket (field "x"))
-                pure (a, b)
-              case result of
-                Right (a, b) -> assertBool "threshold flips result" (a /= b)
-                Left err -> assertFailure (show err)
-              readIORef calls >>= (@?= 1),
+          [ testCase "Decision settings reuse evidence with identical cache keys on all backends" $ do
+              let fields = [("urgent", FieldNoul (NoulEvidence 0.6)), ("severity", FieldScore (ScoreEvidence (V.fromList [0.1, 0.3, 0.6]) (Just 0.8))), ("category", FieldChoice (ChoiceEvidence (Map.fromList [("billing", 0.2), ("technical", 0.8)]) (Just 0.8)))]
+                  payload = \case FieldNoul e -> toJSON e; FieldChoice e -> toJSON e; FieldScore e -> toJSON e
+                  values = [(k, payload e) | (k, e) <- fields]
+              mapM_
+                ( \(model, response) -> do
+                    cache <- newMemoryCache
+                    calls <- newIORef 0
+                    seen <- newIORef []
+                    let program = P.Predict assessmentSig P.emptyParams
+                    result <- runEff . runConcurrent . runTime . runErrorNoCallStack @ShikumiError . runRouting model . runCountingLLM calls response . runCacheMemory cache . cachedLLM . captureLLMRequests seen . routeLLM $ do
+                      a <- P.runProgram program (Ticket (field "x"))
+                      b <- P.runProgram (P.mapParams (P.setDecisionSetting "urgent" (NoulSetting 0.7)) program) (Ticket (field "x"))
+                      pure (a, b)
+                    case result of
+                      Right (a, b) -> assertBool "threshold flips result" (a /= b)
+                      Left err -> assertFailure (show err)
+                    readIORef calls >>= (@?= 1)
+                    requests <- readIORef seen
+                    case [cacheKey m c o | (m, c, o) <- requests] of
+                      [a, b] -> a @?= b
+                      _ -> assertFailure "expected two logical requests"
+                )
+                [(systemOneModel "jev-latest", systemOneResponse fields), (openai_gpt_4o_mini, evidenceJSONResponse values), (emptyModel, evidenceMarkerResponse values)],
             testCase "Decision AssistantData cache codec round-trip" $ do
               let response = systemOneResponse [("flag", FieldNoul (NoulEvidence 0.8))]
               eitherDecode (encode response) @?= Right response,

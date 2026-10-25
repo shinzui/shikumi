@@ -17,7 +17,7 @@ import Data.Vector qualified as V
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (ToPrompt (..), metaDecisionStateKey, stripDecisionMarkers)
+import Shikumi.Adapter (ToPrompt (..), evidenceSchema, metaDecisionStateKey, stripDecisionMarkers)
 import Shikumi.Decision
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program (runProgram)
@@ -179,7 +179,7 @@ tests =
             let sig = setDemos [assessmentDemo] assessmentSig
                 params = case assessmentDemo of
                   Sig.Demo di dout -> Program.emptyParams {Program.demos = [Program.Demo (toJSON di) (toJSON dout)]}
-                body = "{\"urgent\":{\"noul\":0.83},\"severity\":{\"probabilities\":{\"0\":0.1,\"1\":0.3,\"2\":0.6}},\"category\":{\"probabilities\":{\"billing\":0.2,\"technical\":0.8}}}"
+                body = "{\"urgent\":{\"noul\":0.83},\"severity\":{\"probabilities\":{\"0\":0.1,\"1\":0.3,\"2\":0.6},\"confidence\":0.55},\"category\":{\"probabilities\":{\"billing\":0.2,\"technical\":0.8},\"confidence\":0.65}}"
             mapM_
               ( \routed -> do
                   ref <- newIORef []
@@ -195,7 +195,7 @@ tests =
                   requests <- readIORef ref
                   map (\(_, _, opts) -> Map.lookup metaDecisionStateKey (opts ^. #metadata)) requests @?= [if routed then Nothing else Just expectedState]
                   if routed
-                    then map (\(_, _, opts) -> opts ^. #responseFormat) requests @?= [Just (JsonSchema ((jsonSchemaFormat "output" (stripDecisionMarkers expectedSchema)) {strict = True}))]
+                    then map (\(_, _, opts) -> opts ^. #responseFormat) requests @?= [Just (JsonSchema ((jsonSchemaFormat "output" (stripDecisionMarkers (evidenceSchema expectedSchema expectedJudgments))) {strict = True}))]
                     else pure ()
               )
               [False, True]

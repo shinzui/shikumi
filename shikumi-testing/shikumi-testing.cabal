@@ -59,7 +59,7 @@ library
     aeson,
     baikai >=0.9.0.0 && <0.10,
     baikai-openai >=0.7.2.0 && <0.8,
-    baikai-typesafe >=0.1.0.0 && <0.1.0.1,
+    baikai-typesafe >=0.1.0.0 && <0.2,
     base >=4.20 && <5,
     bytestring,
     containers,
@@ -80,6 +80,7 @@ test-suite shikumi-testing-test
   hs-source-dirs: test
   main-is: Main.hs
   other-modules:
+    DecisionEvidenceSpec
     DecisionParamsSpec
     DecisionSpec
 

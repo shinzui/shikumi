@@ -5,7 +5,7 @@ description: Separate shared operation admission and candidate lifecycle from se
 docId: ADR-5
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-10-25T18:04:41Z
+timestamp: 2026-10-25T18:14:37Z
 generated:
   by: process:codex
   at: 2026-09-07T04:01:05Z
@@ -73,7 +73,9 @@ Predict leaves without adding typed capture requirements. Training trials fit
 only serialized decision settings; validation is report-only. Strict gain and a
 deterministic held-out fold check decide retention, restoring an absent entry
 exactly on rejection. setSelectedCandidate pins that accepted completed reservation
-so generic objective ranking cannot override an additional strategy gate.
+so generic objective ranking cannot override an additional strategy gate. The
+reported frontier contains that retained reservation; validation-only candidates
+and rejected training trials remain diagnostic.
 
 ## Consequences
 

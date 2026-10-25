@@ -48,6 +48,7 @@ tests =
               setSelectedCandidate s (Just ix) "held-out gate accepted baseline"
         check r $ \(_, report) -> do
           selectedCandidate report @?= Just 0
+          frontier report @?= [0]
           selectionReason report @?= "held-out gate accepted baseline",
       testCase "invalid controls reject without dispatch" $ do
         r <- run (runSearchSession (cfg (-1) 1) (const (pure ())))

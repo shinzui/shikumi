@@ -626,3 +626,30 @@ Run the offline demonstration and assertions with:
 ```bash
 nix develop .#ghc9124-ci --command cabal test shikumi-trace-otel --test-options='-p /EP-61/' --test-show-details=direct
 ```
+
+## Calibrating decision settings
+
+`Shikumi.Optimize.ReAnchor` fits decision thresholds, cuts and weights against your
+metric. It leaves instructions and demonstrations unchanged:
+
+```haskell
+(compiled, diagnostics) <-
+  optimizeWith runConfig (reAnchor defaultReAnchorConfig) train metric program
+```
+
+Use a larger candidate limit, such as 2000, for a full calibration search. The
+first pass records responses; later candidates replay them inside the admission
+layer, so repeated requests consume no model-operation budget. Changed downstream
+inputs still create admitted calls. Every candidate uses the shared search report.
+
+A setting is retained only for a strict training improvement that also passes a
+deterministic held-out fold check. Rejected fits restore the original entry exactly,
+including an absent entry. Candidate-budget exhaustion keeps settings accepted so
+far. `reAnchorWith` exposes the per-field report, including evidence ranges,
+candidates tried, original and retained scores, and fold-check counters. Optional
+validation data is scored for that report and never used to fit settings.
+
+Calibration targets rich decision fields, including ordinary `predict` leaves,
+and works with judgment-only, native JSON and marker evidence. Native booleans and
+enums are not automatically promoted by this optimizer. Persist the resulting
+compiled parameter state using the usual compiler serialization functions.

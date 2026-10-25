@@ -2,8 +2,10 @@
 
 module ReAnchorSpec (tests) where
 
+import Baikai qualified
+import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Control.Lens ((^.))
-import Data.Aeson (Value (..), eitherDecode, encode)
+import Data.Aeson (Value (..), eitherDecode, encode, toJSON)
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
 import Data.IORef (modifyIORef', newIORef, readIORef)
@@ -33,6 +35,7 @@ import Shikumi.Routing
 import Shikumi.Schema (field, unField)
 import Shikumi.Signature (mkSignature)
 import Shikumi.Testing.DecisionFixtures
+import Shikumi.Testing.Response (evidenceJSONResponse, evidenceMarkerResponse)
 import Shikumi.Testing.StubLLM
 import Shikumi.Testing.SystemOne
 import Test.Tasty
@@ -175,6 +178,22 @@ tests =
             map decisionSettings (foldParams tuned) @?= [Map.empty]
             R.selectedCandidate diagnostics @?= Just 0
           Left err -> assertFailure (show err),
+      testCase "generative JSON and marker evidence fit the same threshold" $ do
+        let payload = \case FieldNoul e -> toJSON e; FieldChoice (ChoiceEvidence ps _) -> toJSON (ChoiceEvidence ps (Just 0.8)); FieldScore (ScoreEvidence ps _) -> toJSON (ScoreEvidence ps (Just 0.8))
+        mapM_
+          ( \builder -> do
+              result <-
+                runEff . runPrim . runTime . runConcurrent . runErrorNoCallStack @ShikumiError . runRouting openai_gpt_4o_mini . runStubLLM (\ctx -> builder [(k, payload e) | (k, e) <- response (numberFromContext ctx)]) . routeLLM $
+                  optimizeWith cfg (reAnchor defaultReAnchorConfig) train metric (Predict assessmentSig emptyParams)
+              case result of
+                Right (CompiledProgram tuned, diagnostics) -> do
+                  case decisionSettingFor "urgent" (head (foldParams tuned)) of
+                    Just (NoulSetting t) -> assertBool "fitted gap" (t > 0.65 && t <= 0.75)
+                    _ -> assertFailure "missing threshold"
+                  R.admittedOperations diagnostics @?= 10
+                Left err -> assertFailure (show err)
+          )
+          [evidenceJSONResponse, evidenceMarkerResponse],
       testCase "no decision output fails before dispatch" $ do
         let program = embed (\input -> pure input) :: Program Ticket Ticket
         result <-
@@ -182,3 +201,10 @@ tests =
             optimizeWith cfg (reAnchor defaultReAnchorConfig) (E.dataset [E.example (Ticket (field "x")) (Ticket (field "x"))]) E.exactMatch program
         assertBool "typed refusal" (case result of Left (ValidationFailure _) -> True; _ -> False)
     ]
+
+-- Native contexts retain the ordinary user turn. Its typed Field Show spelling
+-- contains the ticket number; use the shared prompt text projection for fixtures.
+numberFromContext :: Baikai.Context -> Double
+numberFromContext ctx = case [t | Baikai.UserMessage p <- V.toList (ctx ^. #messages), Baikai.UserText (Baikai.TextContent t) <- V.toList (p ^. #content)] of
+  t : _ -> case reads (T.unpack (T.filter (\c -> c `elem` ("0123456789." :: String)) t)) of (p, _) : _ -> p; _ -> 0
+  _ -> 0
