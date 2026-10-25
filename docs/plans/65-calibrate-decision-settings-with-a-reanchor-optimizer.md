@@ -72,9 +72,9 @@ The algorithm is restated in full below, so the implementer does not need that c
 
 ## Progress
 
-- [ ] Milestone 1: an in-memory response replay and evidence observation layer. A test shows that a second run of a stubbed decision program over the same inputs, with different decision settings, makes zero provider calls yet returns answers derived with the new settings.
-- [ ] Milestone 2: the pure fitting core (gap candidates, fold selection, per-type fitters) with property and example tests that reproduce the DSPy behaviours listed under Plan of Work.
-- [ ] Milestone 3: `reAnchor` runs inside the shared `SearchSession`. It fits a Noul, a Choice and a Score on stubbed System One evidence, refuses a gain confined to one fold, restores absent entries, and produces the report. Acceptance test `ReAnchorSpec` passes under `cabal test shikumi-optimize`.
+- [x] (2026-10-25) Milestone 1: an in-memory response replay and evidence observation layer. A test shows that a second run of a stubbed decision program over the same inputs, with different decision settings, makes zero provider calls yet returns answers derived with the new settings.
+- [x] (2026-10-25) Milestone 2: the pure fitting core (gap candidates, fold selection, per-type fitters) with property and example tests that reproduce the DSPy behaviours listed under Plan of Work.
+- [x] (2026-10-25) Milestone 3: `reAnchor` runs inside the shared `SearchSession`. It fits a Noul, a Choice and a Score on stubbed System One evidence, refuses a gain confined to one fold, restores absent entries, and produces the report. Acceptance test `ReAnchorSpec` passes under `cabal test shikumi-optimize`.
 
 
 ## Surprises & Discoveries
@@ -105,7 +105,19 @@ the accepted completed reservation while leaving all trials in diagnostics.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. Eight focused ReAnchor tests and the full repository
+suite pass. Threshold fitting improves 0.7 to 1.0 with exactly ten admitted model
+calls for ten distinct inputs, regardless of candidate count. Tests cover tidy
+and bounded gaps, adjacent floats, zero thresholds, fold refusal, exact absent-entry
+restoration, cut fitting, two- and three-label weight fitting, changed downstream
+requests, candidate-budget stops, parameter JSON and no-decision refusal.
+
+The shared execution selection extension was committed separately. Raw responses
+are observed by node path instead of requiring typed NodeObservation output;
+public trace contracts remain intact. ReAnchor's report records retained settings,
+score vectors summarized as means, observation ranges and fold counters. Validation
+is optional and report-only. See ADR-5 for durable admission and selection context.
+No material workflow friction was recorded.
 
 
 ## Context and Orientation

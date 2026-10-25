@@ -20,6 +20,7 @@ import ObjectiveSpec qualified
 import OptimizeSpec qualified
 import ProposeSpec qualified
 import RandomSearchSpec qualified
+import ReAnchorSpec qualified
 import SearchSpec qualified
 import SeedingSpec qualified
 import StructureSpec qualified
@@ -44,6 +45,7 @@ main =
         GepaSpec.tests,
         FeedbackSpec.tests,
         KNNSpec.tests,
+        ReAnchorSpec.tests,
         RandomSearchSpec.tests,
         SearchSpec.tests,
         SeedingSpec.tests,

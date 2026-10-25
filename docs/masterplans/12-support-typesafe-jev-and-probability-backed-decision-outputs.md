@@ -132,7 +132,7 @@ No cross-repository ADR in `mori://shinzui/baikai` covers judgment models yet; B
 | IR-10 | Support TypeSafe System One judgment models (Baikai, external) | `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10` | `typesafe-hs` on Hackage (for Baikai EP-84) | None | Completed (Baikai EP-83, EP-99 and EP-84 Complete) |
 | 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | Complete |
 | 64 | Derive decision values locally from probability evidence | [64-derive-decision-values-locally-from-probability-evidence.md](../plans/64-derive-decision-values-locally-from-probability-evidence.md) | EP-63 milestone 1 (pure settings); milestone 2 (runtime settings) | None | Complete |
-| 65 | Calibrate decision settings with a ReAnchor optimizer | [65-calibrate-decision-settings-with-a-reanchor-optimizer.md](../plans/65-calibrate-decision-settings-with-a-reanchor-optimizer.md) | EP-64 | EP-66 | In Progress |
+| 65 | Calibrate decision settings with a ReAnchor optimizer | [65-calibrate-decision-settings-with-a-reanchor-optimizer.md](../plans/65-calibrate-decision-settings-with-a-reanchor-optimizer.md) | EP-64 | EP-66 | Complete |
 | 66 | Request probability evidence from generative models | [66-request-probability-evidence-from-generative-models.md](../plans/66-request-probability-evidence-from-generative-models.md) | EP-64 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled. The IR-10 row mirrors the Baikai record's `status` field, which is authoritative (`proposed`, `accepted`, `completed`), followed by the registry status of Baikai MasterPlan 14's children. On 2026-10-22 Baikai split the provider-neutral judgment layer and the judgment-only catalog facts out of EP-84 into EP-99 (`mori://shinzui/baikai/plans/99-add-a-provider-neutral-judgment-layer-and-judgment-only-catalog-facts-to-core`, artifact-level URI pending), so the three capabilities in Dependency Graph map to EP-83, EP-99 and EP-84 respectively. Shikumi still depends on the capabilities, not on the plan numbers.
@@ -227,7 +227,7 @@ EP-63 is Complete (2026-10-25). Published Baikai 0.9.0.0, provider 0.1.0.0,
 Claude/OpenAI 0.7.2.0 and effectful 0.4.0.4 deliver the upstream handoff without a
 local override. Typed stub results, compiler parity, request-defaults exemption,
 cache codec persistence, loopback payloads and typed HTTP refusal/decode errors
-pass; the full repository test suite passes. EP-64 is Complete: runtime settings, cache reuse, trace replay, old JSON and compiled persistence pass. EP-65 calibration is next; EP-66 has not started.
+pass; the full repository test suite passes. EP-64 is Complete: runtime settings, cache reuse, trace replay, old JSON and compiled persistence pass. EP-65 is Complete: replay-backed fitting and held-out selection pass. EP-66 generative evidence is next.
 
 The Hackage registry and upstream package-prefixed release tags were checked on
 2026-10-25. Baikai core 0.10.0.0 and Claude/OpenAI 0.7.3.0 are newer, but the

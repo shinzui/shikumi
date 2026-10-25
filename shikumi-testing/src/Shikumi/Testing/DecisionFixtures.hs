@@ -2,7 +2,7 @@
 
 -- | Shared decision fixtures, used by the harness's schema/state acceptance
 -- tests and by consumer suites without copying task records or evidence.
-module Shikumi.Testing.DecisionFixtures (Ticket (..), Assessment (..), Category (..), assessmentSig, assessmentDemo) where
+module Shikumi.Testing.DecisionFixtures (Ticket (..), Assessment (..), Category (..), assessmentSig, assessmentDemo, CalibrationLabel (..), ChoiceAssessment (..)) where
 
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Map.Strict qualified as Map
@@ -46,3 +46,12 @@ assessmentDemo =
   Demo
     (Ticket (field "Incorrect invoice"))
     (Assessment (field (Noul False 0 1)) (field (Score 0 0 (V.fromList [1, 0, 0]) Nothing)) (field (Choice Billing (Map.fromList [("billing", 1), ("technical", 0)]) Nothing)))
+
+-- | Three-label calibration fixture, kept separate from the two-label wire golden.
+data CalibrationLabel = FirstLabel | SecondLabel | ThirdLabel
+  deriving stock (Generic, Eq, Show)
+  deriving anyclass (ChoiceOptions)
+
+newtype ChoiceAssessment = ChoiceAssessment {selection :: Choice CalibrationLabel}
+  deriving stock (Generic, Eq, Show)
+  deriving anyclass (ToSchema, FromModel, ToPrompt, Validatable, ToJSON)

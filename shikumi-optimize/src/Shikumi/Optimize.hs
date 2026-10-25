@@ -29,6 +29,7 @@ module Shikumi.Optimize
     module Shikumi.Optimize.Pareto,
     module Shikumi.Optimize.KNN,
     module Shikumi.Optimize.RandomSearch,
+    module Shikumi.Optimize.ReAnchor,
     module Shikumi.Optimize.Ensemble,
   )
 where
@@ -53,6 +54,7 @@ import Shikumi.Optimize.LabeledFewShot
 import Shikumi.Optimize.MIPRO
 import Shikumi.Optimize.Pareto
 import Shikumi.Optimize.RandomSearch
+import Shikumi.Optimize.ReAnchor
 import Shikumi.Optimize.Report (CandidateStatus (Unscored), OptimizationReport (..), RunStatus (BudgetStopped))
 import Shikumi.Optimize.Search
 import Shikumi.Optimize.Structure

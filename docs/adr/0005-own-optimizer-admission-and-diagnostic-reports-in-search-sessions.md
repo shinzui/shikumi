@@ -5,7 +5,7 @@ description: Separate shared operation admission and candidate lifecycle from se
 docId: ADR-5
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-09-07T04:01:05Z
+timestamp: 2026-10-25T18:04:41Z
 generated:
   by: process:codex
   at: 2026-09-07T04:01:05Z
@@ -65,6 +65,15 @@ bounds exclude them before Pareto selection. Primary objective, ordered ties and
 creation order choose one frontier member. Unscored baselines and partial validation
 are never represented as completed winners. A budget stop retains an eligible
 completed winner, otherwise the original student.
+
+ReAnchor places run-local response replay inside each candidate runner, above
+admission, so replay hits consume candidate slots but no operations. New downstream
+requests still cross admission. Node-path response capture supports ordinary
+Predict leaves without adding typed capture requirements. Training trials fit
+only serialized decision settings; validation is report-only. Strict gain and a
+deterministic held-out fold check decide retention, restoring an absent entry
+exactly on rejection. setSelectedCandidate pins that accepted completed reservation
+so generic objective ranking cannot override an additional strategy gate.
 
 ## Consequences
 
