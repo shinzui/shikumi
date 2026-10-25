@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add offline decision types (`NoulWith`/`Noul`, `Choice`, `Score`), probability
+  evidence codecs, judgment schemas, local default derivation and pure calibration
+  settings. Jev transport and runtime application of settings remain pending the
+  upstream integration milestones.
+- Add `ToPrompt.toPromptJSON` and `PromptValue.promptValueJSON` for structured
+  decision state. Custom `ToPrompt` instances that cannot use the generic default
+  need an explicit JSON implementation; review this class change before release.
+  Existing text prompts and native demo rendering are unchanged.
+
 ## 0.4.1.1 — 2026-10-16
 
 ### Changed

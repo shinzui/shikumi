@@ -7,6 +7,7 @@ import CliSchemaSpec qualified
 import CombinatorSpec qualified
 import ConstraintSpec qualified
 import ContinuationSpec qualified
+import DecisionDeriveSpec qualified
 import EndToEndSpec qualified
 import ErrorSpec qualified
 import FallbackGuideSpec qualified
@@ -38,6 +39,7 @@ main =
     testGroup
       "shikumi"
       [ ResponsesSpec.tests,
+        DecisionDeriveSpec.tests,
         RequestDefaultsSpec.tests,
         ContinuationSpec.tests,
         ErrorSpec.tests,

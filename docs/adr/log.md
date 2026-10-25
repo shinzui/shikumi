@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-25
+* **Added**: ADR-15: derive decision answers locally from probability evidence and preserve judgment schema and state boundaries.
+
 ## 2026-09-30
 * **Added**: ADR-14: separate schema enforcement from tool-calling capability; CLI transports route natively.
 

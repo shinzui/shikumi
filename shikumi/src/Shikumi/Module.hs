@@ -31,7 +31,7 @@ where
 
 import Baikai (emptyContext, emptyModel, emptyOptions, user)
 import Control.Lens ((&), (.~))
-import Data.Aeson (Object, ToJSON (..), Value (Object))
+import Data.Aeson (Object, ToJSON (..), Value (Object, String))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
@@ -115,6 +115,9 @@ instance (FromModel o) => FromModel (WithReasoning o) where
 -- Render without leaning on @o@'s @Show@: reuse @o@'s own t'ToPrompt'.
 instance (ToPrompt o) => ToPrompt (WithReasoning o) where
   toPromptFields wr = ("reasoning", reasoning wr) : toPromptFields (value wr)
+  toPromptJSON wr = case toPromptJSON (value wr) of
+    Object fields -> Object (KM.insert "reasoning" (String (reasoning wr)) fields)
+    v -> v
 
   -- @value@ is polymorphic in @o@, so the generic image walk cannot resolve; a
   -- t'WithReasoning' is a text-only output wrapper and carries no image fields.

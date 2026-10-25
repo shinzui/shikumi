@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T03:38:28Z
       mode: "update"
       note: "Correct test commands and expected output to the tasty runner"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:40:48Z
+      mode: "implement"
+      note: "Implement pure decision settings and derivation tests; runtime application awaits evidence integration"
 ---
 
 # Derive decision values locally from probability evidence
@@ -53,17 +58,23 @@ You can see it working in three ways:
 
 ## Progress
 
-- [ ] Milestone 1: The settings types, their validation, and the pure derivation functions exist in `Shikumi.Decision`. Property and unit tests reproduce the worked examples in this plan.
+The pure milestone is complete as of 2026-10-24, following EP-63's offline types. Runtime application remains pending EP-63's evidence-decoding integration. Settings live in the leaf module `Shikumi.Decision.Setting`.
+
+- [x] (2026-10-24) Milestone 1: settings and tagged JSON codecs live in `Shikumi.Decision.Setting`; pure derivation lives in `Shikumi.Decision`. All 13 `DecisionDeriveSpec` tests pass, including the worked examples, validation rules and a 100-case property checking cut-independent score value and monotone levels.
 - [ ] Milestone 2: `Params` carries per-field decision settings with a backward-compatible JSON codec. `runPredict` applies them, and an invalid setting fails with `ValidationFailure` before any LLM call.
 - [ ] Milestone 3: Tests in `shikumi-cache` and `shikumi-trace` prove that a settings change is a cache hit, that replay with new settings yields new values with zero provider calls, and that a compiled program round-trips its settings.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-10-24: The original `deriveChoice` signature carried only maps and could not recover declaration order. EP-63 now exposes `deriveChoice :: [Text] -> Map Text Double -> ChoiceEvidence -> Either Text Text`; pass the labels from `JudgeChoice` in declaration order. Pure tests cover both raw ties and weighted ties that prefer the raw winner.
 
 
 ## Decision Log
+
+- Decision: Put `DecisionSetting`, its JSON codecs, `defaultSetting` and `validateSetting` in `Shikumi.Decision.Setting`. Derivation remains in `Shikumi.Decision`; runtime storage and application are not implemented in the pure milestone. Follow [ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md).
+  Rationale: This keeps the settings vocabulary independent of `Program` and leaves the future decode integration free to import it without a cycle.
+  Date: 2026-10-24
 
 - Decision: Settings are keyed by output field name (the Haskell record selector, which is also the JSON property name the schema uses). They live in a new `Params` field, `decisionSettings`, not in the signature.
   Rationale: `Params` is the uniform, serializable overlay that optimizers and `shikumi-compile` already traverse (`paramsTraversal`, `programParams`). The MasterPlan assigns this field to this plan alone, so EP-65's calibrator can read and write it through the accessors defined here.
@@ -115,7 +126,7 @@ Some terms used in this plan:
 - **Noul.** `Noul` (a synonym for `NoulWith "" ""`) holds a derived `value :: Bool`, `probability :: Double` (P(true)) and a derived `confidence :: Double`. Its evidence record is `NoulEvidence { pTrue :: Double }`.
 - **Choice.** `Choice a` is for an enumeration `a` of nullary constructors, in declaration order. It holds a derived `value :: a`, `probabilities` over the labels in declaration order, and a backend `confidence :: Maybe Double`. Its evidence record is `ChoiceEvidence { probabilities :: Map Text Double, confidence :: Maybe Double }`. Declaration order comes from the field's `Judgment` (`JudgeChoice` lists labels in order), not from the map.
 - **Score.** `Score (levels :: [Symbol])` holds a derived `value :: Double`, a derived `level :: Int`, `levelProbabilities :: Vector Double` over the level indices 0..N−1, and a backend `confidence :: Maybe Double`. Its evidence record is `ScoreEvidence { levelProbabilities :: Vector Double, confidence :: Maybe Double }`. `FieldEvidence = FieldNoul NoulEvidence | FieldChoice ChoiceEvidence | FieldScore ScoreEvidence` wraps one field's evidence.
-- **Default derivation.** EP-63 exports the pure functions `deriveNoul :: Double -> NoulEvidence -> (Bool, Double)`, `deriveScore :: [Double] -> ScoreEvidence -> Either Text (Double, Int)` and `deriveChoice :: Map Text Double -> ChoiceEvidence -> Either Text Text`, and calls them with fixed defaults: threshold 0.5, cuts `[0.5, 1.5, …, N−1.5]`, all weights 1.0. This plan owns the settings that feed them. It does not redefine them, but it tightens them to the exact rules below if EP-63's versions differ.
+- **Default derivation.** EP-63 exports the pure functions `deriveNoul :: Double -> NoulEvidence -> (Bool, Double)`, `deriveScore :: [Double] -> ScoreEvidence -> Either Text (Double, Int)` and `deriveChoice :: [Text] -> Map Text Double -> ChoiceEvidence -> Either Text Text`, and calls them with fixed defaults: threshold 0.5, cuts `[0.5, 1.5, …, N−1.5]`, all weights 1.0. This plan owns the settings that feed them. It does not redefine them, but it tightens them to the exact rules below if EP-63's versions differ.
 - **Output field metadata.** `Judgment { judgmentField :: Text, judgmentInstruction :: Maybe Text, judgmentKind :: JudgmentKind }`, where `JudgmentKind = JudgeBoolean … | JudgeChoice [(Text, Maybe Value)] | JudgeOrdered [Value]`, gives each field's name, kind, ordered labels and level count. Obtain the judgments of any output type with `judgmentsInSchema (deriveSchema @o)`, which returns the judgments and the free-form property names. Do not use `judgmentsOf`, which requires `DecisionOutputs o`: settings must also apply to bare `Bool` and nullary-enum fields, whose schemas are judgments too.
 
 
@@ -123,7 +134,7 @@ Some terms used in this plan:
 
 ### Milestone 1: settings and pure derivation
 
-Add the settings vocabulary and the derivation functions to `shikumi/src/Shikumi/Decision.hs`, or to a new internal module `Shikumi.Decision.Derive` that `Shikumi.Decision` re-exports, if EP-63's module is already large. Everything in this milestone is pure. At the end, the functions below exist with tests, and no runtime path uses them yet.
+Add the settings vocabulary and the derivation functions to `shikumi/src/Shikumi/Decision.hs`, and put the setting type, JSON codecs and validation in the exposed leaf module `Shikumi.Decision.Setting`. Everything in this milestone is pure. At the end, the functions below exist with tests, and no runtime path uses them yet.
 
 Define the per-field setting as a sum type:
 
@@ -156,7 +167,7 @@ Derivation functions take evidence plus an *effective* setting. The effective se
   - `level` = the number of cuts `c` with `c <= value`
 
   A zero probability sum is an error. Confidence passes through from evidence unchanged. Worked example (from DSPy's documentation): probabilities `[0.1, 0.3, 0.6]` give value 1.5. Cuts `[0.5, 1.6]` give level 1, and cuts `[0.5, 1.5]` give level 2. Cuts never change `value`.
-- **`deriveChoice :: Map Text Double -> ChoiceEvidence -> Either Text Text`** returns the chosen label:
+- **`deriveChoice :: [Text] -> Map Text Double -> ChoiceEvidence -> Either Text Text`** returns the chosen label:
   1. Compute `score_k = p_k * w_k` for each label, with `w_k` defaulting to 1.0.
   2. If every score is 0, return `Left` ("no remaining probability mass").
   3. The *raw winner* is the label with maximal `p_k`, with ties going to the earliest declared label.
@@ -276,7 +287,7 @@ deriveField     :: Judgment -> Maybe DecisionSetting -> FieldEvidence -> Either 
 -- consumed from EP-63, not redefined:
 -- deriveNoul   :: Double -> NoulEvidence -> (Bool, Double)
 -- deriveScore  :: [Double] -> ScoreEvidence -> Either Text (Double, Int)
--- deriveChoice :: Map Text Double -> ChoiceEvidence -> Either Text Text
+-- deriveChoice :: [Text] -> Map Text Double -> ChoiceEvidence -> Either Text Text
 
 -- Shikumi.Program
 data Params = Params
@@ -297,3 +308,5 @@ This plan adds no new package dependencies. `containers` and `aeson` are already
 ## Revision Notes
 
 2026-10-21: Test commands and expected output corrected to the tasty runner the `shikumi` suites actually use (`-p`, `OK`), found while reconciling the MasterPlan with Baikai's revised plans. No interface change.
+
+2026-10-24: Completed pure settings and derivation, added the exposed `Shikumi.Decision.Setting` module, and reconciled Choice derivation with the explicit declared-label argument. Runtime settings, response-cache reuse, trace replay and compiled round-trips remain pending evidence integration.

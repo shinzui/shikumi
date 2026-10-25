@@ -38,6 +38,7 @@
 module Shikumi.Adapter
   ( -- * Input rendering
     ToPrompt (..),
+    PromptValue (..),
 
     -- * The seam
     Adapter (..),
@@ -58,6 +59,9 @@ module Shikumi.Adapter
     metaTemperatureKey,
     metaNativePromptKey,
     metaNativeDemosKey,
+    metaDecisionStateKey,
+    attachDecisionState,
+    stripDecisionMarkers,
     attachNativeRender,
     nativeRenderPieces,
     renderOutputNative,
@@ -103,7 +107,7 @@ import Shikumi.Adapter.Xml (decodeXmlFields, renderXmlFields, xmlSchemaGuide)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.Multimodal (GImageFieldNames (..), GImageFields (..), Image, imageToContent)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModelChecked)
-import Shikumi.Schema.Types (Constrained (..), FieldMeta (..))
+import Shikumi.Schema.Types (Constrained (..), Field (..), FieldMeta (..))
 import Shikumi.Signature (Demo (..), Signature, getDemos, getInstruction, outputFields)
 
 -- ---------------------------------------------------------------------------
@@ -119,6 +123,13 @@ class ToPrompt a where
 
   toPrompt :: a -> Text
   toPrompt = T.intercalate "\n" . map (\(k, v) -> k <> ": " <> v) . toPromptFields
+
+  -- | Structured fields for decision state. Unlike prompt text, strings such as
+  -- @"null"@ or @"123"@ stay strings, and numbers, lists and optional values keep
+  -- their JSON types. Override for a custom input representation.
+  toPromptJSON :: a -> Value
+  default toPromptJSON :: (Generic a, GToPromptFields (Rep a)) => a -> Value
+  toPromptJSON = Object . KM.fromList . gToPromptJSON . from
 
   -- | The 'Image' values an /input/ record carries, in field order (EP-24). The
   -- adapter lowers these to baikai @UserImage@ blocks in 'userTurn'. The generic
@@ -140,18 +151,23 @@ class ToPrompt a where
 
 class GToPromptFields (f :: Type -> Type) where
   gToPromptFields :: f p -> [(Text, Text)]
+  gToPromptJSON :: f p -> [(Key.Key, Value)]
 
 instance (GToPromptFields cs) => GToPromptFields (D1 d cs) where
   gToPromptFields (M1 x) = gToPromptFields x
+  gToPromptJSON (M1 x) = gToPromptJSON x
 
 instance (GToPromptFields cs) => GToPromptFields (C1 c cs) where
   gToPromptFields (M1 x) = gToPromptFields x
+  gToPromptJSON (M1 x) = gToPromptJSON x
 
 instance (GToPromptFields a, GToPromptFields b) => GToPromptFields (a :*: b) where
   gToPromptFields (a :*: b) = gToPromptFields a ++ gToPromptFields b
+  gToPromptJSON (a :*: b) = gToPromptJSON a ++ gToPromptJSON b
 
 instance (Selector s, PromptValue t) => GToPromptFields (S1 s (K1 R t)) where
   gToPromptFields m@(M1 (K1 v)) = [(T.pack (selName m), promptValue v)]
+  gToPromptJSON m@(M1 (K1 v)) = [(Key.fromString (selName m), promptValueJSON v)]
 
 -- | Render a leaf value to text. Text stays as-is; lists join with commas;
 -- 'Maybe' renders its contents or @""@; a 'Shikumi.Schema.Types.Field' unwraps;
@@ -159,22 +175,52 @@ instance (Selector s, PromptValue t) => GToPromptFields (S1 s (K1 R t)) where
 class PromptValue a where
   promptValue :: a -> Text
 
+  -- | JSON counterpart of the prompt leaf. Custom structured leaves should
+  -- override this instead of encoding JSON through 'Show'.
+  promptValueJSON :: a -> Value
+  promptValueJSON = String . promptValue
+
 instance {-# OVERLAPPABLE #-} (Show a) => PromptValue a where
   promptValue = T.pack . show
 
 instance PromptValue Text where
   promptValue = id
 
+instance PromptValue Bool where
+  promptValue = T.pack . show
+  promptValueJSON = toJSON
+
+instance PromptValue Int where
+  promptValue = T.pack . show
+  promptValueJSON = toJSON
+
+instance PromptValue Integer where
+  promptValue = T.pack . show
+  promptValueJSON = toJSON
+
+instance PromptValue Double where
+  promptValue = T.pack . show
+  promptValueJSON = toJSON
+
 instance (PromptValue a) => PromptValue [a] where
   promptValue = T.intercalate ", " . map promptValue
+  promptValueJSON = toJSON . map promptValueJSON
 
 instance (PromptValue a) => PromptValue (Maybe a) where
   promptValue = maybe "" promptValue
+  promptValueJSON = maybe Null promptValueJSON
+
+-- Preserve the existing textual representation of described fields. Decision
+-- state uses the unwrapped JSON value without changing legacy prompts.
+instance (Show a, PromptValue a) => PromptValue (Field d a) where
+  promptValue = T.pack . show
+  promptValueJSON = promptValueJSON . unField
 
 -- | A t'Constrained' field renders as its inner value (the constraint is a
 -- compile-time/decode-time concern, not a prompt concern). EP-26.
 instance (PromptValue a) => PromptValue (Constrained cs a) where
   promptValue = promptValue . unConstrained
+  promptValueJSON = promptValueJSON . unConstrained
 
 -- ---------------------------------------------------------------------------
 -- The seam
@@ -266,6 +312,20 @@ metaNativePromptKey = "shikumi.native.systemPrompt"
 -- 'metaNativePromptKey'.
 metaNativeDemosKey :: Text
 metaNativeDemosKey = "shikumi.native.demos"
+
+-- | Reserved structured state for judgment routing. Stripped before transport.
+metaDecisionStateKey :: Text
+metaDecisionStateKey = "shikumi.decision.state"
+
+-- | Attach decision state without changing the native or marker prompt.
+attachDecisionState :: Value -> Options -> Options
+attachDecisionState state opts = opts & #metadata . at metaDecisionStateKey ?~ state
+
+-- | Remove private decoder metadata recursively before sending a schema.
+stripDecisionMarkers :: Value -> Value
+stripDecisionMarkers (Object o) = Object (fmap stripDecisionMarkers (KM.delete "x-shikumi-decision" o))
+stripDecisionMarkers (Array xs) = Array (fmap stripDecisionMarkers xs)
+stripDecisionMarkers v = v
 
 -- | Stamp the derived JSON schema onto a request's private metadata channel. This
 -- is no longer a no-op: it records the schema under 'metaResponseSchemaKey' so the

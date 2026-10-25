@@ -3,6 +3,7 @@ module Main (main) where
 import Data.Either (isLeft)
 import Data.List (nub)
 import Data.Text qualified as T
+import DecisionSpec qualified
 import Shikumi.Combinator (TempSchedule (..))
 import Shikumi.Schema (validate)
 import Shikumi.Signature (getInstruction)
@@ -15,7 +16,8 @@ main =
   defaultMain $
     testGroup
       "shikumi-testing"
-      [ testCase "instructedSig has a non-empty instruction" $
+      [ DecisionSpec.tests,
+        testCase "instructedSig has a non-empty instruction" $
           assertBool "instruction" (not (T.null (getInstruction instructedSig))),
         testCase "validate rejects out-of-range confidence" $ do
           assertBool "above range" (isLeft (validate (Answer "x" 1.5)))

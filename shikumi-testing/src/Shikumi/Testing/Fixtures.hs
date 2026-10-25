@@ -28,6 +28,7 @@ module Shikumi.Testing.Fixtures
     -- * Diversified parameter fixtures
     diverseTemps,
     diverseGlobPatterns,
+    module Shikumi.Testing.DecisionFixtures,
   )
 where
 
@@ -42,6 +43,7 @@ import Shikumi.Module (predict)
 import Shikumi.Program (Program)
 import Shikumi.Schema (FromModel, ToSchema, Validatable (..))
 import Shikumi.Signature (Signature, mkSignature)
+import Shikumi.Testing.DecisionFixtures
 import Shikumi.Testing.Response (markerResponse)
 import Shikumi.Testing.StubLLM (systemContains)
 

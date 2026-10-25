@@ -13,6 +13,7 @@ author: Nadeem Bitar
 maintainer: nadeem@gmail.com
 build-type: Simple
 extra-doc-files: CHANGELOG.md
+extra-source-files: test/compile-fail/*.hs
 
 common common-options
   ghc-options:
@@ -41,6 +42,8 @@ library
     Shikumi.Adapter
     Shikumi.Combinator
     Shikumi.Compaction
+    Shikumi.Decision
+    Shikumi.Decision.Setting
     Shikumi.Effect.Time
     Shikumi.Error
     Shikumi.LLM
@@ -96,6 +99,7 @@ test-suite shikumi-test
     CombinatorSpec
     ConstraintSpec
     ContinuationSpec
+    DecisionDeriveSpec
     EndToEndSpec
     ErrorSpec
     FallbackGuideSpec

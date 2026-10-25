@@ -60,10 +60,12 @@ import Effectful.Error.Static (Error, throwError)
 import Shikumi.Adapter
   ( ModelCapability (..),
     capabilityFor,
+    metaDecisionStateKey,
     metaNativeDemosKey,
     metaNativePromptKey,
     metaResponseSchemaKey,
     metaTemperatureKey,
+    stripDecisionMarkers,
   )
 import Shikumi.Error (ShikumiError)
 import Shikumi.LLM (LLM (..), complete, stream)
@@ -127,12 +129,12 @@ translateForWire m ctx opts =
         foldr
           Map.delete
           md
-          [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey]
+          [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey, metaDecisionStateKey]
       isNative = case capabilityFor m of NativeSchema -> True; PromptFallback -> False
       withSchema o
         | isNative,
           Just s <- mSchema =
-            o & #responseFormat .~ Just (JsonSchema ((jsonSchemaFormat "output" s) {strict = True}))
+            o & #responseFormat .~ Just (JsonSchema ((jsonSchemaFormat "output" (stripDecisionMarkers s)) {strict = True}))
         | otherwise = o
       withTemp o = case mTemp of
         Just t -> o & #temperature .~ Just t

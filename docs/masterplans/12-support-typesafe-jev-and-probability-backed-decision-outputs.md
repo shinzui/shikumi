@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:38:28Z
       mode: "update"
       note: "Reconcile with Baikai MP14/EP-83/EP-84 and typesafe-hs: capability-level deps, DataContent mapping, request-defaults exemption, noul criteria placement, release gates"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:33:29Z
+      mode: "implement"
+      note: "Start EP-63 offline work while upstream integration remains pending"
 ---
 
 # Support TypeSafe Jev and probability-backed decision outputs
@@ -120,8 +125,8 @@ No cross-repository ADR in `mori://shinzui/baikai` covers judgment models yet; B
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | IR-10 | Support TypeSafe System One judgment models (Baikai, external) | `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10` | `typesafe-hs` on Hackage (for Baikai EP-84) | None | Proposed (Baikai EP-83 and EP-84 Not Started) |
-| 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | Not Started |
-| 64 | Derive decision values locally from probability evidence | [64-derive-decision-values-locally-from-probability-evidence.md](../plans/64-derive-decision-values-locally-from-probability-evidence.md) | EP-63 | None | Not Started |
+| 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | In Progress |
+| 64 | Derive decision values locally from probability evidence | [64-derive-decision-values-locally-from-probability-evidence.md](../plans/64-derive-decision-values-locally-from-probability-evidence.md) | EP-63 milestone 1 (pure settings); milestone 2 (runtime settings) | None | In Progress |
 | 65 | Calibrate decision settings with a ReAnchor optimizer | [65-calibrate-decision-settings-with-a-reanchor-optimizer.md](../plans/65-calibrate-decision-settings-with-a-reanchor-optimizer.md) | EP-64 | EP-66 | Not Started |
 | 66 | Request probability evidence from generative models | [66-request-probability-evidence-from-generative-models.md](../plans/66-request-probability-evidence-from-generative-models.md) | EP-64 | None | Not Started |
 
@@ -163,7 +168,7 @@ EP-63 defines these in `Shikumi.Decision`:
 - **Evidence records.** `NoulEvidence { pTrue }`, `ChoiceEvidence { probabilities :: Map Text Double, confidence }`, `ScoreEvidence { levelProbabilities :: Vector Double, confidence }`, and the per-field wrapper `FieldEvidence`.
 - **Field metadata.** `Judgment { judgmentField, judgmentInstruction, judgmentKind }` with `JudgmentKind = JudgeBoolean | JudgeChoice | JudgeOrdered`. `judgmentsInSchema :: Value -> ([Judgment], [Text])` works for any output type, including bare `Bool` and enum fields. `IsDecision`, `DecisionOutputs` and `judgmentsOf` are the compile-time System One guarantee only. Baikai's `Baikai.Judgment` has the isomorphic `Judgment { name, instructions :: Value, kind }` with `JudgmentKind = PredicateJudgment (Maybe (Value, Value)) | ChoiceJudgment (Vector (Text, Maybe Value)) | ScoreJudgment (Vector (Maybe Value))`; Shikumi keeps its own names and types because they exist before Baikai's release and serve the generative path too.
 - **Question rendering.** `questionJSON :: Judgment -> Value`.
-- **Pure derivation.** `deriveNoul`, `deriveScore` and `deriveChoice`, each taking explicit settings.
+- **Pure derivation.** `deriveNoul`, `deriveScore` and `deriveChoice`, each taking explicit settings; `deriveChoice` also takes declared labels in order before the weights map.
 
 EP-63 also defines, in `Shikumi.Adapter` and `Shikumi.Testing.SystemOne`:
 
@@ -213,7 +218,9 @@ Candidate ADRs, to be written when implemented, not now:
 
 ## Progress
 
-Phase 1 is filed in Baikai as IR-10 (status `proposed`) and planned as Baikai MasterPlan 14 with EP-83, EP-99 and EP-84, all Not Started as of 2026-10-22. Baikai's plans were revised on 2026-10-21 (TypeSafe OpenAPI 0.2.0 wire, provider-neutral `Baikai.Judgment` in core, in-house `typesafe-hs` client) and on 2026-10-22 (the judgment layer split into EP-99); this MasterPlan and EP-63 were reconciled to both. No Shikumi child plan has started. EP-63 milestone 1 is implementable now; milestone 2 waits on Baikai EP-83 and milestone 3 on Baikai EP-99 and EP-84. Open cross-plan gates:
+EP-63 milestone 1 and EP-64 milestone 1 are complete as of 2026-10-24. The offline types, evidence codecs, judgment schemas, typed decision state, default derivation and pure settings validation build against published Baikai 0.8.0.0 without a local override. The focused decision suites pass 30 tests, including 100 property cases, and the compiler-rejection check covers free-form output fields and invalid Score level counts. Both children remain In Progress because their runtime integration milestones are unfinished; EP-65 and EP-66 remain Not Started. The full repository test run passes; Redis backend tests skip without a reachable Redis socket, and live provider tests remain opt-in.
+
+Phase 1 remains externally owned and is being worked on separately. The inspected upstream checkouts still recorded unfinished work. The registered `mori://shinzui/baikai` checkout did not contain the judgment-layer split described here; reconcile the landed capabilities at handoff rather than assuming the cited plan decomposition is present. EP-63 milestone 2 needs the upstream content carrier; milestone 3 needs the judgment capability and provider. EP-64's runtime milestones wait on that evidence integration. Open cross-plan gates:
 
 - [ ] `typesafe-hs` has a first release on Hackage (its own MasterPlan 1, EP-6).
 - [ ] Baikai EP-83, EP-99 and EP-84 are Complete, core `baikai` and `baikai-typesafe` are published, and IR-10's status is `completed`.
@@ -231,6 +238,10 @@ Phase 1 is filed in Baikai as IR-10 (status `proposed`) and planned as Baikai Ma
 
 
 ## Decision Log
+
+- Decision: Complete EP-63's offline types and EP-64's pure settings milestone while upstream capabilities are developed separately. Choice derivation takes ordered labels explicitly; state uses typed `ToPrompt` JSON methods. The durable boundaries are recorded in [ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md).
+  Rationale: These milestones need only published core dependencies. They establish the shared evidence and judgment interfaces without introducing a private transport carrier or weakening any release gate.
+  Date: 2026-10-24
 
 - Decision: Track the Baikai phase as the improvement request `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10` rather than as a Shikumi ExecPlan, and ask for provider-neutral `AssistantData`/`UserData` content instead of a text-body stopgap.
   Rationale: Probabilities are the product of a System One call. Carrying them as JSON in a text part would leak one provider's format into every caller, and would lose them in Baikai's trace and cost-log encodings.
@@ -267,3 +278,5 @@ Phase 1 is filed in Baikai as IR-10 (status `proposed`) and planned as Baikai Ma
 2026-10-21: Reconciled with Baikai's revised plans of the same day (Baikai MasterPlan 14, EP-83 and EP-84, and the new `mori://shinzui/typesafe-hs` client). The wire authority moved from DSPy 3.4.0 to TypeSafe's OpenAPI 0.2.0; the content carrier, the judgment-only capability and the core judgment layer now have concrete names; Baikai refuses rather than drops generation controls, which adds a request-defaults exemption to EP-63; noul criteria move out of the private schema marker; the integration gate gains the `typesafe-hs` and core-major release steps; ADR-11's consequences are stated precisely and ADR-14 is cited. EP-63, EP-64, EP-65 and EP-66 were cascaded accordingly.
 
 2026-10-22: Baikai split its EP-84 into EP-99 (judgment-only catalog facts, the TypeSafe API tag and catalog entries, and the provider-neutral judgment layer, all in core) and EP-84 (the `baikai-typesafe` provider). The Dependency Graph, registry, Progress and Integration Points now name EP-99 for the second capability, use Baikai's actual names (`prepareJudgment`, `judgmentMethod`), and record the question-order rule the parity test relies on. EP-63 was cascaded.
+
+2026-10-24: Started implementation and completed the offline EP-63 and pure EP-64 milestones. Registered both children In Progress, made EP-64's milestone dependency explicit in the registry, recorded the landed Choice/state interfaces and added ADR-15. Upstream provider integration and release gates remain open.

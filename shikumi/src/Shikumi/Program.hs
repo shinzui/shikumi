@@ -104,6 +104,7 @@ import Shikumi.Adapter
     ToPrompt,
     adapterFor,
     assistantJSON,
+    attachDecisionState,
     attachNativeRender,
     attachSchema,
     fallbackAdapter,
@@ -111,6 +112,7 @@ import Shikumi.Adapter
     nativeRenderPieces,
     stampTemperature,
   )
+import Shikumi.Decision (judgmentsInSchema, renderDecisionState)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), Response, complete)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
@@ -350,7 +352,11 @@ runPredict sig ps i = do
       -- swaps in these native pieces once it knows the real model is native-capable
       -- (and strips them for fallback models / un-routed runs).
       (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
-      opts = attachNativeRender nativeSys nativeDemos (attachSchema (deriveSchema @o) opts0)
+      schema = deriveSchema @o
+      renderedOpts = attachNativeRender nativeSys nativeDemos (attachSchema schema opts0)
+      opts
+        | null (fst (judgmentsInSchema schema)) = renderedOpts
+        | otherwise = attachDecisionState (renderDecisionState sig' i) renderedOpts
   resp <- complete placeholderModel ctx opts
   either throwError pure (parseResponse sig' resp)
 

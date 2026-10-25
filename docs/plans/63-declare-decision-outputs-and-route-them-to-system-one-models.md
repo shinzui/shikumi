@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-22T03:38:28Z
       mode: "update"
       note: "Cascade Baikai reconciliation: anyOf noul criteria, DataContent evidenceOf, request-defaults exemption, isJudgmentOnly switch, compileJudgments parity, fromBaikaiError expectations"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:33:29Z
+      mode: "implement"
+      note: "Implement offline decision types, judgment schemas and state rendering"
 ---
 
 # Declare decision outputs and route them to System One models
@@ -79,17 +84,39 @@ Plan 64 makes these settings tunable. This plan hard-codes the defaults.
 
 ## Progress
 
-- [ ] Milestone 1: decision types, their judgment JSON schema, and the rendered decision *state*. This is offline and needs only the current Baikai. Acceptance: `cabal test shikumi` passes new `DecisionSpec` golden tests for the schema and state of the `Assessment` fixture, and for `judgmentsOf @Assessment`.
+- [x] (2026-10-24) Milestone 1: decision types, judgment schemas and decision state are implemented against published Baikai 0.8.0.0. `cabal test shikumi shikumi-testing` passes the 267 core tests and the shared decision schema/state tests. `scripts/check-decision-compile-fail.py` verifies that free-form `summary` outputs and Score declarations outside 2–10 levels fail with the expected diagnostics.
 - [ ] Milestone 2: evidence decoding with fixed default settings, plus typed refusal of non-decision outputs. Acceptance: a stub System One responder returns distributions and `runStub` yields the expected typed `Assessment`; a program with a `Text` output routed to a `DecisionOnly` model fails with `ValidationFailure` and the stub records zero calls; a response carrying evidence round-trips through the response cache codec. Requires Baikai EP-83's content types (`UserData`, `AssistantData`), as the note in Plan of Work explains.
 - [ ] Milestone 3: route a real `jev-*` model through the released `baikai-typesafe` provider against a loopback HTTP fixture, switch `capabilityFor` to Baikai's `isJudgmentOnly`, and exempt judgment-only models from request defaults. **Blocked on Baikai EP-99 (capability and judgment layer), Baikai EP-84 (provider) and the Hackage release of `typesafe-hs`.** Acceptance: the fixture observes the systemone payload Baikai EP-84 specifies, the program returns the typed result, a routed call with request defaults configured is not refused, and `judgmentsInSchema` agrees with `Baikai.Judgment.compileJudgments` on the fixture.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+2026-10-24: `nativeRenderPieces` lives in `Shikumi.Adapter`, and its native demo renderer reconstructs JSON from prompt text using the output schema. It is not a typed input encoder. `runPredict` has no `ToSchema i` dictionary. The implementation adds `ToPrompt.toPromptJSON` and `PromptValue.promptValueJSON` to preserve JSON types for state without strengthening every program's input constraints. Existing textual prompts and native demo rendering retain their behavior. Custom non-generic prompt instances supply the new method explicitly; review the public class change before release.
+
+2026-10-24: The shared Assessment fixture and `DecisionSpec` live in `shikumi-testing`, with the fixture re-exported from `Shikumi.Testing.Fixtures`. Core cannot depend on this harness; pointing core's source directories outside its package also breaks source distributions. Core owns the pure setting tests and compile-failure fixtures. Run both packages for this milestone.
+
+2026-10-24: Pure evidence codecs, `FromModel` decoding, default derivation and `questionJSON` were implemented with the types. Milestone 2 still lacks the `DecisionOnly` routing/refusal, upstream structured-content extraction and cache round-trip; it is not complete. No private replacement for upstream structured content was introduced.
+
+The compiler-rejection check reports:
+
+```text
+FreeFormDecision: rejected with expected diagnostic
+TooFewScoreLevels: rejected with expected diagnostic
+TooManyScoreLevels: rejected with expected diagnostic
+```
+
+The first diagnostic contains `Decision output field` and names `summary`.
 
 
 ## Decision Log
+
+- Decision: `deriveChoice` takes declared labels as its first argument, followed by weights and evidence. `FieldEvidence` uses a tagged `kind`/`evidence` envelope, while its three payload codecs retain the planned evidence shapes.
+  Rationale: A probability map cannot recover declaration order for ties, and a numeric-label Choice has the same untagged JSON shape as a Score. Both distinctions must be explicit.
+  Date: 2026-10-24
+
+- Decision: Keep reusable decision fixtures and their schema/state acceptance tests in `shikumi-testing`; keep compiler-rejection fixtures and pure derivation tests in core. Add [ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md) for the evidence, schema and state boundaries.
+  Rationale: This preserves ADR-9's single fixture owner without a package cycle or source paths outside the package.
+  Date: 2026-10-24
 
 - Decision: Detect judgments from the stamped JSON schema at routing time, in the same way DSPy's `lm15` reads a `json_schema`, instead of adding a `DecisionOutputs o` constraint to `Shikumi.Program.runPredict`.
   Rationale: `runPredict` renders model-agnostically and the real model is only known in `Shikumi.Routing.routeLLM`. Adding a class constraint to every `Predict` node would ripple through every combinator. The `DecisionOutputs` class still exists, as an opt-in compile-time guarantee for programs meant only for System One models.
@@ -280,7 +307,7 @@ The field `description` still comes from `Field` through the existing `FieldSche
 - `inputs` as the input record encoded to JSON;
 - `demos` as a flat object per demo, merging the input and output JSON, and omitted when there are no demos.
 
-Implement the JSON encoding of `i` with the same machinery the native adapter uses for demos. Look at `nativeRenderPieces` in `Shikumi.Program`, and reuse or extract its helper rather than writing a new encoder.
+Use `ToPrompt.toPromptJSON` for inputs and demos. Its generic field walk shares `PromptValue` with text rendering but preserves JSON types through `promptValueJSON`; rich decision leaves encode derived demo answers there. The pre-existing native demo renderer uses schema-guided text coercion and remains unchanged. Custom prompt records and structured leaves can override the JSON methods.
 
 In `Shikumi.Adapter`, add the key `metaDecisionStateKey = "shikumi.decision.state"` beside the other reserved keys. Add `attachDecisionState`, and have `runPredict` call it whenever `fst (judgmentsInSchema (deriveSchema @o))` is non-empty. Do not change the marker or native rendering. Milestone 1 ends with golden tests only: no routing and no provider.
 
@@ -315,7 +342,7 @@ The value is always derived from the probabilities, never copied from Jev's `"ch
 ```haskell
 deriveNoul   :: Double -> NoulEvidence -> (Bool, Double)                      -- threshold → (value, confidence)
 deriveScore  :: [Double] -> ScoreEvidence -> Either Text (Double, Int)        -- cuts → (value, level)
-deriveChoice :: Map Text Double -> ChoiceEvidence -> Either Text Text         -- weights → chosen label
+deriveChoice :: [Text] -> Map Text Double -> ChoiceEvidence -> Either Text Text -- declared labels → weights → chosen label
 ```
 
 Also export `questionJSON :: Judgment -> Value`. It renders the question object exactly as it is sent to Jev under `questions.<field>`. The routing code uses it, and EP-66 reuses it to describe evidence fields to generative models.
@@ -338,7 +365,7 @@ Add the `Assessment` / `Ticket` fixture beside the existing fixtures in `shikumi
 2. Switch `capabilityFor` to `isJudgmentOnly m` instead of the provider-name match, keeping it ahead of the `declaredStructuredOutput` derivation.
 3. Send the state as `UserData`.
 4. Exempt judgment-only models from request defaults in `Shikumi.LLM.Defaults.withRequestDefaults`: when `isJudgmentOnly model` holds, apply only the evidence default. Add a case to `shikumi/test/RequestDefaultsSpec.hs` showing that a routed `jev-latest` call under configured thinking, speed and token-ceiling defaults reaches the stub with those three fields still `Nothing`, and that a generative model under the same defaults still has them filled. Amend ADR-12 in the same commit.
-5. Add a parity test in `shikumi/test/DecisionSpec.hs`: `judgmentsInSchema` on the `Assessment` schema (markers stripped) and `Baikai.Judgment.compileJudgments` on the same schema agree on field order, kinds, labels, level count and criteria. Both order questions by the schema's `required` array when it lists every property, which Shikumi's `deriveSchema` always does, in declaration order.
+5. Add a parity test in `shikumi-testing/test/DecisionSpec.hs`: `judgmentsInSchema` on the `Assessment` schema (markers stripped) and `Baikai.Judgment.compileJudgments` on the same schema agree on field order, kinds, labels, level count and criteria. Both order questions by the schema's `required` array when it lists every property, which Shikumi's `deriveSchema` always does, in declaration order.
 
 Add a scripted JSON loopback fixture, `withSystemOneFixture`, to `shikumi-testing`, modelled on `Shikumi.Testing.Responses`, but as one JSON reply rather than SSE. Add `shikumi-tools/test/SystemOneIntegrationSpec.hs`. That spec registers the Baikai TypeSafe provider in an isolated registry with an explicit `Options.apiKey` (Baikai does not forward the default credential to a non-official host) and the fixture's base URL, runs `assess` under `routeLLM` with a `jev-latest` model, and asserts four things:
 
@@ -356,7 +383,7 @@ Run everything from the repository root inside `nix develop`.
 
 ```bash
 cabal build shikumi shikumi-testing
-cabal test shikumi --test-options='-p Decision'
+cabal test shikumi shikumi-testing --test-options='-p Decision'
 cabal test shikumi-cache
 cabal test shikumi-tools --test-options='-p SystemOne'   # milestone 3 only
 just test                                                # before each commit
@@ -379,7 +406,7 @@ If the local Baikai override is used for milestone 2, remember that a green loca
 
 ## Validation and Acceptance
 
-**Milestone 1.** `cabal test shikumi` passes. Golden tests check three things:
+**Milestone 1.** `cabal test shikumi shikumi-testing` and `python3 scripts/check-decision-compile-fail.py` pass. Golden tests check three things:
 
 - the `Assessment` schema is exactly the lm15-convention shape plus `x-shikumi-decision` markers;
 - `judgmentsOf @Assessment` lists `urgent` (boolean, criteria true/false), `severity` (ordered, three levels) and `category` (choice, two labels), in that order;
@@ -433,3 +460,5 @@ External dependencies, all requested as `mori://shinzui/baikai/okf/improvement-r
 2026-10-21: Reconciled with Baikai's revised EP-83 and EP-84 and with TypeSafe's OpenAPI 0.2.0 document. Noul criteria move from the private marker into `anyOf` `const` branches; the reply sample gains the required `confidence`, `score` and `legend`; `evidenceOf` is specified against Baikai's `DataContent`; milestone 3 gains the request-defaults exemption, the `isJudgmentOnly` switch and the `compileJudgments` parity test; error expectations follow the actual `fromBaikaiError` mapping; `capabilityFor` is described as ADR-14 left it; test commands use tasty's `-p`.
 
 2026-10-22: Baikai split EP-84; the capability, the API tag and catalog entries, and `Baikai.Judgment` now come from Baikai EP-99, and only the `baikai-typesafe` provider from EP-84. Milestone 3's blocking statement, interim-comment pointer and interfaces follow the split, and the parity test records Baikai's `required`-then-ascending question-order rule.
+
+2026-10-24: Implemented the offline milestone and pure evidence decoding. Reconciled typed state encoding, explicit Choice label order, the internal evidence-wrapper tag and the shared-fixture test location with the working implementation. Integration remains gated by upstream structured content and judgment/provider releases.
