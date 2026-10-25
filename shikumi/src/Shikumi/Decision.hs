@@ -448,17 +448,25 @@ validateMass ps
 decodeEvidence :: (FromJSON a) => FieldPath -> Value -> Either ShikumiError a
 decodeEvidence path = first (SchemaMismatch . ((renderPath path <> ": ") <>) . T.pack) . parseEither parseJSON
 
+-- Internal normalized decode values, supplied after local derivation. These
+-- annotations are never accepted from a provider evidence object.
+derivedAt :: (FromJSON a) => FieldPath -> Value -> a -> Either ShikumiError a
+derivedAt path (Object o) fallback = maybe (Right fallback) (decodeEvidence path) (KM.lookup "x-shikumi-derived" o)
+derivedAt _ _ fallback = Right fallback
+
 instance FromModel (NoulWith t f) where
   fromModelP path v = do
     e@(NoulEvidence p) <- decodeEvidence path v
     let (answer, c) = deriveNoul 0.5 e
-    pure (Noul answer p c)
+    (answer', c') <- derivedAt path v (answer, c)
+    pure (Noul answer' p c')
 
 instance (ChoiceOptions a) => FromModel (Choice a) where
   fromModelP path v = do
     e@(ChoiceEvidence ps c) <- decodeEvidence path v
     label <- first (SchemaMismatch . ((renderPath path <> ": ") <>)) (deriveChoice [n | (n, _, _) <- choiceOptions @a] Map.empty e)
-    case [a | (n, a, _) <- choiceOptions @a, n == label] of
+    label' <- derivedAt path v label
+    case [a | (n, a, _) <- choiceOptions @a, n == label'] of
       a : _ -> pure (Choice a ps c)
       [] -> Left (SchemaMismatch (renderPath path <> ": undeclared choice label"))
 
@@ -468,7 +476,8 @@ instance (KnownLevels ss, CheckLevels (Length ss)) => FromModel (Score ss) where
     let n = length (levelNames (Proxy @ss))
     if V.length ps == n then pure () else Left (SchemaMismatch (renderPath path <> ": score level count does not match declaration"))
     (answer, l) <- first (SchemaMismatch . ((renderPath path <> ": ") <>)) (deriveScore [fromIntegral k + 0.5 | k <- [0 .. n - 2]] e)
-    pure (Score answer l ps c)
+    (answer', l') <- derivedAt path v (answer, l)
+    pure (Score answer' l' ps c)
 
 instance ToJSON (NoulWith t f) where toJSON (Noul _ p _) = toJSON (NoulEvidence p)
 

@@ -32,6 +32,7 @@ import Shikumi.Program
   ( Demo (..),
     Params (..),
     Program,
+    emptyParams,
     foldParams,
     mapParamsAt,
     pipeline,
@@ -104,4 +105,4 @@ tests =
   where
     -- node 1 should remain the default overlay
     emptyParamsLike :: Params
-    emptyParamsLike = Params Nothing []
+    emptyParamsLike = emptyParams

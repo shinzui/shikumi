@@ -67,13 +67,17 @@ import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned, stripMessageTimestamps)
 import Shikumi.Cache.ResponseJSON ()
 import Shikumi.Decision
+import Shikumi.Decision.Setting
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
 import Shikumi.LLM.Continuation (contextIdentity, requestOrigin, stampContinuation)
 import Shikumi.LLM.Defaults
+import Shikumi.Program qualified as P
 import Shikumi.Routing (routeLLM, runRouting)
-import Shikumi.Testing.SystemOne (systemOneResponse)
+import Shikumi.Schema (field)
+import Shikumi.Testing.DecisionFixtures
+import Shikumi.Testing.SystemOne (systemOneModel, systemOneResponder, systemOneResponse)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
 import System.FilePath ((</>))
@@ -142,7 +146,20 @@ main = do
       defaultMain $
         testGroup
           "shikumi-cache"
-          [ testCase "Decision AssistantData cache codec round-trip" $ do
+          [ testCase "Decision settings change answers with one cached request" $ do
+              cache <- newMemoryCache
+              calls <- newIORef 0
+              let response = systemOneResponse [("urgent", FieldNoul (NoulEvidence 0.6)), ("severity", FieldScore (ScoreEvidence (V.fromList [0.1, 0.3, 0.6]) Nothing)), ("category", FieldChoice (ChoiceEvidence (Map.fromList [("billing", 0.2), ("technical", 0.8)]) Nothing))]
+                  program = P.Predict assessmentSig P.emptyParams
+              result <- runEff . runConcurrent . runTime . runErrorNoCallStack @ShikumiError . runRouting (systemOneModel "jev-latest") . runCountingLLM calls response . runCacheMemory cache . cachedLLM . routeLLM $ do
+                a <- P.runProgram program (Ticket (field "x"))
+                b <- P.runProgram (P.mapParams (P.setDecisionSetting "urgent" (NoulSetting 0.7)) program) (Ticket (field "x"))
+                pure (a, b)
+              case result of
+                Right (a, b) -> assertBool "threshold flips result" (a /= b)
+                Left err -> assertFailure (show err)
+              readIORef calls >>= (@?= 1),
+            testCase "Decision AssistantData cache codec round-trip" $ do
               let response = systemOneResponse [("flag", FieldNoul (NoulEvidence 0.8))]
               eitherDecode (encode response) @?= Right response,
             defaultsTests,

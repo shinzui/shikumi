@@ -55,6 +55,7 @@ import Shikumi.Program
     Params (..),
     Program (Predict),
     TempSchedule (..),
+    emptyParams,
     runProgram,
     runProgramConc,
   )
@@ -220,7 +221,7 @@ nativeReceivesJsonDemos =
           Demo
             (object ["subject" .= ("dogs" :: Text)])
             (object ["points" .= (["one", "two"] :: [Text])])
-        node = Predict topicToOutline (Params Nothing [demo])
+        node = Predict topicToOutline (emptyParams {demos = [demo]})
     captured <- captureRouted openai_gpt_4o_mini node (Topic "cats")
     case captured of
       [(_, ctx, _)] -> case assistantTexts ctx of

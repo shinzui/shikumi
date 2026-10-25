@@ -1,14 +1,19 @@
--- | Pure per-field calibration settings. Runtime storage and application belong
--- to the later evidence-decoding milestone; these types do not alter requests.
-module Shikumi.Decision.Setting (DecisionSetting (..), defaultSetting, validateSetting) where
+-- | Pure per-field calibration settings and local derivation. These values never
+-- enter provider requests or response-cache identity.
+module Shikumi.Decision.Setting (DecisionSetting (..), defaultSetting, validateSetting, deriveField) where
 
-import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), object, toJSON, withObject, (.:), (.=))
+import Data.Aeson.KeyMap qualified as KM
 import Data.Aeson.Types (Parser)
+import Data.Bifunctor (first)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Shikumi.Decision (Judgment (..), JudgmentKind (..))
+import Shikumi.Decision qualified as D
+import Shikumi.Error (ShikumiError (..))
 
 data DecisionSetting
   = NoulSetting {threshold :: !Double}
@@ -57,3 +62,24 @@ validateSetting j setting = case (judgmentKind j, setting) of
   where
     bad rule = Left (judgmentField j <> ": " <> rule)
     finite x = not (isNaN x || isInfinite x)
+
+-- | Derive once, after validating settings and evidence. The private annotation
+-- is consumed only by the rich FromModel leaves; it never enters request identity
+-- or the public evidence codecs. Native fields receive an ordinary scalar.
+deriveField :: Judgment -> Maybe DecisionSetting -> D.FieldEvidence -> Either ShikumiError Value
+deriveField j stored ev = do
+  setting <- first ValidationFailure (validateSetting j (fromMaybe (defaultSetting j) stored))
+  case (judgmentKind j, setting, ev) of
+    (JudgeBoolean {}, NoulSetting t, D.FieldNoul e@(D.NoulEvidence _)) ->
+      let answer = D.deriveNoul t e in pure (annotate (toJSON answer) (toJSON e))
+    (JudgeChoice labels, ChoiceSetting ws, D.FieldChoice e) -> do
+      label <- first located (D.deriveChoice (map fst labels) ws e)
+      pure (annotate (toJSON label) (toJSON e))
+    (JudgeOrdered _, ScoreSetting cs, D.FieldScore e) -> do
+      answer <- first located (D.deriveScore cs e)
+      pure (annotate (toJSON answer) (toJSON e))
+    _ -> Left (located "evidence kind does not match judgment")
+  where
+    located msg = SchemaMismatch (judgmentField j <> ": " <> msg)
+    annotate result (Object o) = Object (KM.insert "x-shikumi-derived" result o)
+    annotate _ v = v

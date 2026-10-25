@@ -47,6 +47,10 @@ module Shikumi.Program
     Params (..),
     Demo (..),
     emptyParams,
+    decisionSettingFor,
+    setDecisionSetting,
+    clearDecisionSetting,
+    parseResponseWithSettings,
     TempSchedule (..),
 
     -- * Construction & execution
@@ -85,11 +89,13 @@ module Shikumi.Program
 where
 
 import Baikai (Model, emptyModel)
-import Data.Aeson (FromJSON, ToJSON, Value)
+import Data.Aeson (FromJSON (..), ToJSON (..), Value, object, withObject, (.!=), (.:), (.:?), (.=))
+import Data.Bifunctor (first)
 import Data.Functor.Const (Const (..))
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Settings
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -112,8 +118,9 @@ import Shikumi.Adapter
     nativeRenderPieces,
     stampTemperature,
   )
-import Shikumi.Decision (judgmentsInSchema, renderDecisionState)
+import Shikumi.Decision (Judgment (..), judgmentsInSchema, renderDecisionState)
 import Shikumi.Decision.Runtime (evidenceObject, evidenceOf)
+import Shikumi.Decision.Setting (DecisionSetting, validateSetting)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), Response, complete)
 import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel, fromModelChecked)
@@ -133,13 +140,28 @@ import Shikumi.Signature qualified as Sig
 -- @i@/@o@ — hence demos are stored as type-agnostic JSON (see t'Demo').
 data Params = Params
   { instructionOverride :: !(Maybe Text),
-    demos :: ![Demo]
+    demos :: ![Demo],
+    decisionSettings :: !(Settings.Map Text DecisionSetting)
   }
   deriving stock (Eq, Show, Generic)
 
-instance ToJSON Params
+instance ToJSON Params where
+  toJSON ps =
+    object $
+      ["instructionOverride" .= instructionOverride ps, "demos" .= demos ps]
+        ++ ["decisionSettings" .= decisionSettings ps | not (Settings.null (decisionSettings ps))]
 
-instance FromJSON Params
+instance FromJSON Params where
+  parseJSON = withObject "Params" $ \o -> Params <$> o .: "instructionOverride" <*> o .: "demos" <*> o .:? "decisionSettings" .!= Settings.empty
+
+decisionSettingFor :: Text -> Params -> Maybe DecisionSetting
+decisionSettingFor name = Settings.lookup name . decisionSettings
+
+setDecisionSetting :: Text -> DecisionSetting -> Params -> Params
+setDecisionSetting name setting ps = ps {decisionSettings = Settings.insert name setting (decisionSettings ps)}
+
+clearDecisionSetting :: Text -> Params -> Params
+clearDecisionSetting name ps = ps {decisionSettings = Settings.delete name (decisionSettings ps)}
 
 -- | A worked input/output example, stored as JSON so it is uniform across nodes
 -- of differing types. At run time each demo is decoded back into the node's typed
@@ -157,7 +179,7 @@ instance FromJSON Demo
 
 -- | The default empty overlay: no instruction override, no demos.
 emptyParams :: Params
-emptyParams = Params Nothing []
+emptyParams = Params Nothing [] Settings.empty
 
 -- | How 'MajorityVote' varies sampling temperature across its @K@ samples.
 -- 'TempFixed' lists an explicit temperature per sample (cycled if shorter than
@@ -341,6 +363,15 @@ runPredict ::
   i ->
   Eff es o
 runPredict sig ps i = do
+  let fields = fst (judgmentsInSchema (deriveSchema @o))
+  either throwError pure $
+    mapM_
+      ( \(name, setting) ->
+          case filter ((== name) . judgmentField) fields of
+            [j] -> () <$ first ValidationFailure (validateSetting j setting)
+            _ -> Left (ValidationFailure (name <> ": unknown decision field"))
+      )
+      (Settings.toList (decisionSettings ps))
   sig' <- effectiveSignature sig ps
   let adapter = adapterFor placeholderModel
       (ctx, opts0) = render adapter sig' i
@@ -359,7 +390,7 @@ runPredict sig ps i = do
         | null (fst (judgmentsInSchema schema)) = renderedOpts
         | otherwise = attachDecisionState (renderDecisionState sig' i) renderedOpts
   resp <- complete placeholderModel ctx opts
-  either throwError pure (parseResponse sig' resp)
+  either throwError pure (parseResponseWithSettings (decisionSettings ps) sig' resp)
 
 -- | Decode a response back into the typed output, tolerant of /either/ wire shape:
 -- a native model (whose @responseFormat@ the router enforced) replies with a JSON
@@ -382,9 +413,12 @@ parseResponse ::
   Signature i o ->
   Response ->
   Either ShikumiError o
-parseResponse sig' resp
+parseResponse = parseResponseWithSettings Settings.empty
+
+parseResponseWithSettings :: forall i o. (FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) => Settings.Map Text DecisionSetting -> Signature i o -> Response -> Either ShikumiError o
+parseResponseWithSettings settings sig' resp
   | Just ev <- evidenceOf (fst (judgmentsInSchema (deriveSchema @o))) resp =
-      ev >>= evidenceObject (deriveSchema @o) (fst (judgmentsInSchema (deriveSchema @o))) >>= fromModelChecked
+      ev >>= evidenceObject (deriveSchema @o) (fst (judgmentsInSchema (deriveSchema @o))) settings >>= fromModelChecked
   | otherwise = case assistantJSON resp of
       -- The body is JSON: the native wire shape. Keep the native parser's error.
       Right _ -> parse (nativeAdapter @i @o) sig' resp

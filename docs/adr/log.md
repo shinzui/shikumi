@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-25
+* **Update**: Extend ADR-15 with local settings, persistent Params compatibility and evidence normalization.
 * **Update**: Amend ADR-12 for judgment-only request defaults and ADR-15 for structured evidence routing and compiler parity.
 * **Added**: ADR-15: derive decision answers locally from probability evidence and preserve judgment schema and state boundaries.
 

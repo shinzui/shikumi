@@ -95,6 +95,7 @@ test-suite shikumi-trace-test
     -with-rtsopts=-N
 
   other-modules:
+    DecisionReplaySpec
     ObservationSpec
     TraceFixtures
 
@@ -110,6 +111,7 @@ test-suite shikumi-trace-test
     lens ^>=5.3,
     shikumi ^>=0.4.1.1,
     shikumi-cache ^>=0.2.0.2,
+    shikumi-testing,
     shikumi-trace ^>=0.3.0.2,
     tasty,
     tasty-hunit,

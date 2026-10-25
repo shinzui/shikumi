@@ -35,10 +35,10 @@ tunedProg =
     $ defaultProg
 
 node0Params :: Params
-node0Params = Params (Just "outline carefully") [Demo (String "a topic") (String "an outline")]
+node0Params = emptyParams {instructionOverride = Just "outline carefully", demos = [Demo (String "a topic") (String "an outline")]}
 
 node1Params :: Params
-node1Params = Params (Just "draft fluently") []
+node1Params = emptyParams {instructionOverride = Just "draft fluently"}
 
 tests :: TestTree
 tests =

@@ -5,7 +5,7 @@ description: Keep closed decision domains, probability evidence, local answer de
 docId: ADR-15
 status: Accepted
 date: 2026-10-24
-timestamp: 2026-10-25T17:50:52Z
+timestamp: 2026-10-25T17:58:00Z
 generated:
   by: agent:openai/gpt-6.1-sol
   at: 2026-10-25T04:43:42Z
@@ -56,7 +56,14 @@ Judgment-only routing uses Baikai's `isJudgmentOnly`, submits exactly one
 `UserData` state without a system prompt or tools, and refuses free-form outputs
 and streaming before dispatch. `AssistantData` probabilities and confidence feed
 the decoder; its provider-selected `value` is ignored. Structured content survives
-the response cache codec. Runtime settings are the next integration milestone.
+the response cache codec.
+
+Decision settings serialize in Params and are applied after response retrieval.
+They never enter request identity, so cached and replayed evidence can yield new
+answers. Missing settings preserve old Params JSON bytes. Parameterized decoding
+normalizes evidence with a private derived-answer annotation before rich leaf
+decoding; the annotation is constructed locally, never copied from provider data.
+The three public evidence codecs remain unchanged.
 
 ## Consequences
 

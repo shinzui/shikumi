@@ -14,6 +14,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 import Shikumi.Decision
+import Shikumi.Decision.Setting (DecisionSetting, deriveField)
 import Shikumi.Error (ShikumiError (..))
 
 evidenceOf :: [Judgment] -> Response -> Maybe (Either ShikumiError (Map Text FieldEvidence))
@@ -44,8 +45,8 @@ evidenceOf js response = case [d | AssistantData d <- V.toList (response ^. #mes
   _ -> Just (Left (SchemaMismatch "decision response: expected one structured data block"))
 
 -- | Rich fields decode evidence; native closed fields decode the derived scalar.
-evidenceObject :: Value -> [Judgment] -> Map Text FieldEvidence -> Either ShikumiError Value
-evidenceObject schema js evidence = Object . KM.fromList <$> traverse field js
+evidenceObject :: Value -> [Judgment] -> Map Text DecisionSetting -> Map Text FieldEvidence -> Either ShikumiError Value
+evidenceObject schema js settings evidence = Object . KM.fromList <$> traverse field js
   where
     props = case schema of
       Object o | Just (Object p) <- KM.lookup "properties" o -> p
@@ -54,10 +55,11 @@ evidenceObject schema js evidence = Object . KM.fromList <$> traverse field js
       let name = judgmentField j
           rich = case KM.lookup (K.fromText name) props of Just (Object p) -> KM.member "x-shikumi-decision" p; _ -> False
       ev <- maybe (Left (MissingField name)) Right (Map.lookup name evidence)
-      v <- if rich then pure (payload ev) else scalar j ev
-      pure (K.fromText name, v)
-    payload = \case FieldNoul e -> toJSON e; FieldChoice e -> toJSON e; FieldScore e -> toJSON e
-    scalar j = \case
-      FieldNoul e -> Right (Bool (fst (deriveNoul 0.5 e)))
-      FieldChoice e -> either (Left . SchemaMismatch) (Right . String) (deriveChoice (case judgmentKind j of JudgeChoice ls -> map fst ls; _ -> []) Map.empty e)
-      FieldScore e@(ScoreEvidence ps _) -> either (Left . SchemaMismatch) (Right . toJSON . snd) (deriveScore [fromIntegral k + 0.5 | k <- [0 .. V.length ps - 2]] e)
+      derived <- deriveField j (Map.lookup name settings) ev
+      let native = case derived of
+            Object o | Just result <- KM.lookup "x-shikumi-derived" o -> case judgmentKind j of
+              JudgeBoolean {} -> case result of Array a -> maybe Null id (a V.!? 0); _ -> Null
+              JudgeOrdered {} -> case result of Array a -> maybe Null id (a V.!? 1); _ -> Null
+              JudgeChoice {} -> result
+            _ -> derived
+      pure (K.fromText name, if rich then derived else native)

@@ -15,6 +15,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time.Clock (UTCTime, addUTCTime)
 import Data.Vector qualified as V
+import DecisionReplaySpec qualified
 import Effectful (Eff, runEff, type (:>))
 import Effectful.Error.Static (runErrorNoCallStack)
 import Effectful.Prim (runPrim)
@@ -101,7 +102,7 @@ main =
   defaultMain $
     testGroup
       "shikumi-trace"
-      [ObservationSpec.tests, spikeTests, treeTests, storeTests, replayTests, e2eTests, nodeTests, correlateTests, feedbackTests]
+      [DecisionReplaySpec.tests, ObservationSpec.tests, spikeTests, treeTests, storeTests, replayTests, e2eTests, nodeTests, correlateTests, feedbackTests]
 
 -- ---------------------------------------------------------------------------
 -- M0

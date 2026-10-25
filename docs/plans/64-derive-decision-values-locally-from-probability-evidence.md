@@ -28,6 +28,11 @@ provenance:
       at: 2026-10-25T04:40:48Z
       mode: "implement"
       note: "Implement pure decision settings and derivation tests; runtime application awaits evidence integration"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T17:55:24Z
+      mode: "implement"
+      note: "Complete runtime settings, backward-compatible Params and cache/replay/compiled persistence proofs"
 ---
 
 # Derive decision values locally from probability evidence
@@ -58,11 +63,11 @@ You can see it working in three ways:
 
 ## Progress
 
-The pure milestone is complete as of 2026-10-24, following EP-63's offline types. Runtime application remains pending EP-63's evidence-decoding integration. Settings live in the leaf module `Shikumi.Decision.Setting`.
+All milestones are accepted as of 2026-10-25. Settings live in `Shikumi.Decision.Setting`, serialize in Params, and apply after response retrieval.
 
 - [x] (2026-10-24) Milestone 1: settings and tagged JSON codecs live in `Shikumi.Decision.Setting`; pure derivation lives in `Shikumi.Decision`. All 13 `DecisionDeriveSpec` tests pass, including the worked examples, validation rules and a 100-case property checking cut-independent score value and monotone levels.
-- [ ] Milestone 2: `Params` carries per-field decision settings with a backward-compatible JSON codec. `runPredict` applies them, and an invalid setting fails with `ValidationFailure` before any LLM call.
-- [ ] Milestone 3: Tests in `shikumi-cache` and `shikumi-trace` prove that a settings change is a cache hit, that replay with new settings yields new values with zero provider calls, and that a compiled program round-trips its settings.
+- [x] (2026-10-25) Milestone 2: `Params` carries per-field decision settings with a backward-compatible JSON codec. `runPredict` applies them, and an invalid setting fails with `ValidationFailure` before any LLM call.
+- [x] (2026-10-25) Milestone 3: Tests in `shikumi-cache` and `shikumi-trace` prove that a settings change is a cache hit, that replay with new settings yields new values with zero provider calls, and that a compiled program round-trips its settings.
 
 
 ## Surprises & Discoveries
@@ -71,6 +76,10 @@ The pure milestone is complete as of 2026-10-24, following EP-63's offline types
 
 
 ## Decision Log
+
+- Decision: Use parameterized response decoding and a private local derived-answer annotation, rather than re-running default derivation after applying settings.
+  Rationale: Generic output decoding has no settings dictionary, and introducing one would change every FromModel instance. The runtime constructs the annotation from validated evidence and settings; provider evidence is never trusted to supply it. Rich evidence codecs stay unchanged.
+  Date: 2026-10-25
 
 - Decision: Put `DecisionSetting`, its JSON codecs, `defaultSetting` and `validateSetting` in `Shikumi.Decision.Setting`. Derivation remains in `Shikumi.Decision`; runtime storage and application are not implemented in the pure milestone. Follow [ADR-15](../adr/0015-derive-decision-answers-from-probability-evidence.md).
   Rationale: This keeps the settings vocabulary independent of `Program` and leaves the future decode integration free to import it without a cycle.
@@ -87,7 +96,18 @@ The pure milestone is complete as of 2026-10-24, following EP-63's offline types
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. The full repository suite passes. DecisionParamsSpec
+proves threshold/cut/weight application in both executors, old JSON bytes and
+pre-dispatch validation. The cache suite changes a threshold while retaining one
+provider call; the trace suite changes cuts using a recorded response and a
+provider-free replay interpreter; the compiled suite restores settings exactly.
+No material friction was recorded.
+
+Parameterized decoding retains the public parseResponse default entry point and
+adds parseResponseWithSettings. deriveField returns normalized evidence with a
+private derived-answer annotation. Rich FromModel leaves consume it without
+reapplying defaults; native fields project its scalar answer. Public evidence
+codecs remain unchanged and settings never enter request metadata.
 
 
 ## Context and Orientation

@@ -79,7 +79,10 @@ test-suite shikumi-testing-test
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: Main.hs
-  other-modules: DecisionSpec
+  other-modules:
+    DecisionParamsSpec
+    DecisionSpec
+
   ghc-options:
     -threaded
     -with-rtsopts=-N

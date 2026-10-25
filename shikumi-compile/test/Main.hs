@@ -22,7 +22,8 @@ import Shikumi.Compile
     zeroShot,
   )
 import Shikumi.Compile.Retriever (Passage (..))
-import Shikumi.Program (Params (..), foldParams)
+import Shikumi.Decision.Setting (DecisionSetting (..))
+import Shikumi.Program (Params (..), emptyParams, foldParams, mapParams, programParams, setDecisionSetting)
 import StructureSpec qualified
 import Test.Capture (runWithCapture)
 import Test.Fixtures
@@ -45,7 +46,12 @@ tests :: TestTree
 tests =
   testGroup
     "shikumi-compile (EP-9)"
-    [ StructureSpec.tests,
+    [ testCase "Decision settings survive compiled round-trip" $ do
+        let tuned = mapParams (setDecisionSetting "flag" (NoulSetting 0.7)) qaBase
+        case decodeCompiledOnto qaBase (encodeCompiled (compile identity tuned)) of
+          Left err -> error (show err)
+          Right compiled -> programParams (compiledProgram compiled) @?= programParams tuned,
+      StructureSpec.tests,
       m0_identity,
       m1_baseline,
       m2_zeroShot,
@@ -221,7 +227,7 @@ m6_serialize =
           Left e -> assertBool "shape mismatch mentioned" (contains "shape mismatch" (T.pack e))
           Right _ -> assertBool "expected a shape-mismatch Left" False,
       testCase "legacy bare Params arrays are rejected with a re-encode hint" $ do
-        let bytes = Aeson.encode [Params (Just "legacy instruction") []]
+        let bytes = Aeson.encode [emptyParams {instructionOverride = Just "legacy instruction"}]
         case decodeCompiledOnto qaBase bytes of
           Left e -> do
             assertBool "legacy format mentioned" (contains "legacy bare parameter arrays" (T.pack e))
