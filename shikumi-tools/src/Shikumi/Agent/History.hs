@@ -204,13 +204,14 @@ protectSession ctx s = s {sessionPrefix = if hasOpaqueContinuation (promptMessag
 -- | Structural projection: provider-owned reasoning and unknown rich extensions
 -- never enter a summarizer request. The full audit retains all original bytes.
 renderSummaryEntry :: HistoryEntry -> Text
-renderSummaryEntry (UserTurn p) = T.intercalate "\n" [case b of B.UserText (B.TextContent t) -> t; B.UserImage _ -> "[image omitted]" | b <- V.toList (p ^. #content)]
+renderSummaryEntry (UserTurn p) = T.intercalate "\n" [case b of B.UserText (B.TextContent t) -> t; B.UserImage _ -> "[image omitted]"; B.UserData _ -> "[structured data omitted]" | b <- V.toList (p ^. #content)]
 renderSummaryEntry (Exchange p outputs correction) = T.intercalate "\n" (map block (V.toList (p ^. #content)) <> map output outputs <> maybe [] (\t -> ["Correction: " <> t]) correction)
   where
     block (B.AssistantText (B.TextContent t)) = t
     block (B.AssistantThinking t)
       | t ^. #redacted = "[redacted reasoning omitted]"
       | otherwise = t ^. #thinking <> "\n[reasoning continuation omitted]"
+    block (B.AssistantData _) = "[structured data omitted]"
     block (B.AssistantToolCall c) = c ^. #name <> " " <> jsonText (c ^. #arguments)
     output (c, o) =
       c ^. #name

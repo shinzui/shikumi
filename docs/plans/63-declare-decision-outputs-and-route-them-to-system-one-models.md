@@ -28,6 +28,11 @@ provenance:
       at: 2026-10-25T04:33:29Z
       mode: "implement"
       note: "Implement offline decision types, judgment schemas and state rendering"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T17:50:52Z
+      mode: "implement"
+      note: "Implement structured evidence routing, released TypeSafe HTTP acceptance and request-defaults exemption"
 ---
 
 # Declare decision outputs and route them to System One models
@@ -85,8 +90,8 @@ Plan 64 makes these settings tunable. This plan hard-codes the defaults.
 ## Progress
 
 - [x] (2026-10-24) Milestone 1: decision types, judgment schemas and decision state are implemented against published Baikai 0.8.0.0. `cabal test shikumi shikumi-testing` passes the 267 core tests and the shared decision schema/state tests. `scripts/check-decision-compile-fail.py` verifies that free-form `summary` outputs and Score declarations outside 2–10 levels fail with the expected diagnostics.
-- [ ] Milestone 2: evidence decoding with fixed default settings, plus typed refusal of non-decision outputs. Acceptance: a stub System One responder returns distributions and `runStub` yields the expected typed `Assessment`; a program with a `Text` output routed to a `DecisionOnly` model fails with `ValidationFailure` and the stub records zero calls; a response carrying evidence round-trips through the response cache codec. Requires Baikai EP-83's content types (`UserData`, `AssistantData`), as the note in Plan of Work explains.
-- [ ] Milestone 3: route a real `jev-*` model through the released `baikai-typesafe` provider against a loopback HTTP fixture, switch `capabilityFor` to Baikai's `isJudgmentOnly`, and exempt judgment-only models from request defaults. **Blocked on Baikai EP-99 (capability and judgment layer), Baikai EP-84 (provider) and the Hackage release of `typesafe-hs`.** Acceptance: the fixture observes the systemone payload Baikai EP-84 specifies, the program returns the typed result, a routed call with request defaults configured is not refused, and `judgmentsInSchema` agrees with `Baikai.Judgment.compileJudgments` on the fixture.
+- [x] (2026-10-25) Milestone 2: evidence decoding with fixed default settings, plus typed refusal of non-decision outputs. Acceptance: a stub System One responder returns distributions and `runStub` yields the expected typed `Assessment`; a program with a `Text` output routed to a `DecisionOnly` model fails with `ValidationFailure` and the stub records zero calls; a response carrying evidence round-trips through the response cache codec. Requires Baikai EP-83's content types (`UserData`, `AssistantData`), as the note in Plan of Work explains.
+- [x] (2026-10-25) Milestone 3: route a real `jev-*` model through the released `baikai-typesafe` provider against a loopback HTTP fixture, switch `capabilityFor` to Baikai's `isJudgmentOnly`, and exempt judgment-only models from request defaults. Published Baikai 0.9.0.0 and TypeSafe 0.1.0.0 satisfy the prerequisites. Acceptance: the fixture observes the systemone payload Baikai EP-84 specifies, the program returns the typed result, a routed call with request defaults configured is not refused, and `judgmentsInSchema` agrees with `Baikai.Judgment.compileJudgments` on the fixture.
 
 
 ## Surprises & Discoveries
@@ -141,7 +146,17 @@ The first diagnostic contains `Decision output field` and names `summary`.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-25. `nix develop --no-write-lock-file -c cabal test all`
+passes with no local dependency override. The shared Decision tests prove typed
+evidence extraction, free-form refusal before dispatch and compiler parity. The
+SystemOne HTTP tests prove state/criteria payloads, defaults exemption, explicit
+temperature refusal with zero HTTP requests and malformed confidence as InvalidJSON.
+The cache suite round-trips AssistantData. RequestDefaultsSpec proves evidence-only
+filling and explicit-control preservation. Streaming is explicitly refused.
+
+The model fixture uses Baikai's released catalog record, preserving its InputData
+modality. Existing agent summary projections explicitly omit the new structured
+content variants. No material tooling friction was recorded.
 
 
 ## Context and Orientation

@@ -11,6 +11,7 @@ where
 
 import Baikai (Options)
 import Baikai.Evidence (EvidenceRequest)
+import Baikai.Model (isJudgmentOnly)
 import Baikai.Speed (Speed)
 import Baikai.ThinkingLevel (ThinkingLevel)
 import Control.Applicative ((<|>))
@@ -57,9 +58,12 @@ withRequestDefaults :: (LLM :> es, Error ShikumiError :> es) => RequestDefaults 
 withRequestDefaults defaults action = do
   when (defaultMaxTokens defaults == Just 0) $
     throwError (ValidationFailure "request defaults: defaultMaxTokens must be positive")
+  let forModel model
+        | isJudgmentOnly model = emptyRequestDefaults {defaultEvidence = defaultEvidence defaults}
+        | otherwise = defaults
   interpose
     ( \_ -> \case
-        Complete model ctx opts -> complete model ctx (applyRequestDefaults defaults opts)
-        Stream model ctx opts -> stream model ctx (applyRequestDefaults defaults opts)
+        Complete model ctx opts -> complete model ctx (applyRequestDefaults (forModel model) opts)
+        Stream model ctx opts -> stream model ctx (applyRequestDefaults (forModel model) opts)
     )
     action

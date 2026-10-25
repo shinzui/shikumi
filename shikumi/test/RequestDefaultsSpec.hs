@@ -2,6 +2,7 @@ module RequestDefaultsSpec (tests) where
 
 import Baikai (ToolChoice (..), emptyContext, emptyModel, emptyOptions, emptyResponse)
 import Baikai.Evidence qualified as E
+import Baikai.Model (OutputKind (..))
 import Baikai.Speed (Speed (..))
 import Baikai.ThinkingLevel (ThinkingLevel (..))
 import Control.Concurrent (forkFinally, newEmptyMVar, putMVar, takeMVar)
@@ -26,7 +27,28 @@ tests :: TestTree
 tests =
   testGroup
     "Request defaults"
-    [ testCase "empty is identity and unrelated policy and metadata survive" $ do
+    [ testCase "judgment-only calls fill evidence alone and keep explicit controls" $ do
+        ref <- newIORef []
+        result <- runEff
+          . runErrorNoCallStack @ShikumiError
+          . interpret
+            ( \_ -> \case
+                Complete _ _ o -> liftIO (modifyIORef' ref (++ [o])) >> pure emptyResponse
+                Stream {} -> pure []
+            )
+          . withRequestDefaults defaults
+          $ do
+            _ <- complete (emptyModel & #outputKind .~ JudgmentOutput) emptyContext emptyOptions
+            _ <- complete (emptyModel & #outputKind .~ JudgmentOutput) emptyContext (emptyOptions & #temperature .~ Just 0.2)
+            pure ()
+        result @?= Right ()
+        captured <- readIORef ref
+        map (^. #thinking) captured @?= [Nothing, Nothing]
+        map (^. #speed) captured @?= [Nothing, Nothing]
+        map (^. #maxTokens) captured @?= [Nothing, Nothing]
+        map (^. #temperature) captured @?= [Nothing, Just 0.2]
+        map (^. #evidence) captured @?= replicate 2 (defaultEvidence defaults),
+      testCase "empty is identity and unrelated policy and metadata survive" $ do
         let opts =
               emptyOptions
                 & #temperature .~ Just 0.7

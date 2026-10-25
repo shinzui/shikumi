@@ -5,7 +5,7 @@ description: Keep closed decision domains, probability evidence, local answer de
 docId: ADR-15
 status: Accepted
 date: 2026-10-24
-timestamp: 2026-10-25T04:43:42Z
+timestamp: 2026-10-25T17:50:52Z
 generated:
   by: agent:openai/gpt-6.1-sol
   at: 2026-10-25T04:43:42Z
@@ -52,16 +52,18 @@ described fields have structured encoders; custom structured leaves supply
 Flattened demos contain derived answers, not evidence records. State travels on
 the reserved metadata channel and is stripped by routing.
 
-The initial implementation is offline. Provider transport, evidence extraction,
-cache round-trips and runtime application of settings remain gated by the
-upstream integration milestones in [MasterPlan 12](../masterplans/12-support-typesafe-jev-and-probability-backed-decision-outputs.md).
+Judgment-only routing uses Baikai's `isJudgmentOnly`, submits exactly one
+`UserData` state without a system prompt or tools, and refuses free-form outputs
+and streaming before dispatch. `AssistantData` probabilities and confidence feed
+the decoder; its provider-selected `value` is ignored. Structured content survives
+the response cache codec. Runtime settings are the next integration milestone.
 
 ## Consequences
 
 Generative and provider-backed paths can share evidence and local derivation
 without sharing a wire client. The schema reader must later be checked against
-the provider-neutral compiler in `mori://shinzui/baikai`; that parity gate remains
-open until the upstream release. No local replacement for upstream structured
+the provider-neutral compiler in `mori://shinzui/baikai`; the shared Assessment fixture pins order, domains and criteria against
+`Baikai.Judgment.compileJudgments`. No local replacement for upstream structured
 content is introduced.
 
 `ToPrompt` gains a generic JSON method. Hand-written instances whose generic

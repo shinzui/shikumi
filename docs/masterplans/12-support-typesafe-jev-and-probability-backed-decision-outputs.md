@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-25T04:33:29Z
       mode: "implement"
       note: "Start EP-63 offline work while upstream integration remains pending"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T17:50:52Z
+      mode: "implement"
+      note: "Integrate released Baikai judgment routing and continue decision runtime implementation"
 ---
 
 # Support TypeSafe Jev and probability-backed decision outputs
@@ -124,8 +129,8 @@ No cross-repository ADR in `mori://shinzui/baikai` covers judgment models yet; B
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| IR-10 | Support TypeSafe System One judgment models (Baikai, external) | `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10` | `typesafe-hs` on Hackage (for Baikai EP-84) | None | Proposed (Baikai EP-83 and EP-84 Not Started) |
-| 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | In Progress |
+| IR-10 | Support TypeSafe System One judgment models (Baikai, external) | `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-10` | `typesafe-hs` on Hackage (for Baikai EP-84) | None | Completed (Baikai EP-83, EP-99 and EP-84 Complete) |
+| 63 | Declare decision outputs and route them to System One models | [63-declare-decision-outputs-and-route-them-to-system-one-models.md](../plans/63-declare-decision-outputs-and-route-them-to-system-one-models.md) | Baikai EP-83 (milestone 2); Baikai EP-84 and the released packages (milestone 3) | None | Complete |
 | 64 | Derive decision values locally from probability evidence | [64-derive-decision-values-locally-from-probability-evidence.md](../plans/64-derive-decision-values-locally-from-probability-evidence.md) | EP-63 milestone 1 (pure settings); milestone 2 (runtime settings) | None | In Progress |
 | 65 | Calibrate decision settings with a ReAnchor optimizer | [65-calibrate-decision-settings-with-a-reanchor-optimizer.md](../plans/65-calibrate-decision-settings-with-a-reanchor-optimizer.md) | EP-64 | EP-66 | Not Started |
 | 66 | Request probability evidence from generative models | [66-request-probability-evidence-from-generative-models.md](../plans/66-request-probability-evidence-from-generative-models.md) | EP-64 | None | Not Started |
@@ -218,13 +223,21 @@ Candidate ADRs, to be written when implemented, not now:
 
 ## Progress
 
-EP-63 milestone 1 and EP-64 milestone 1 are complete as of 2026-10-24. The offline types, evidence codecs, judgment schemas, typed decision state, default derivation and pure settings validation build against published Baikai 0.8.0.0 without a local override. The focused decision suites pass 30 tests, including 100 property cases, and the compiler-rejection check covers free-form output fields and invalid Score level counts. Both children remain In Progress because their runtime integration milestones are unfinished; EP-65 and EP-66 remain Not Started. The full repository test run passes; Redis backend tests skip without a reachable Redis socket, and live provider tests remain opt-in.
+EP-63 is Complete (2026-10-25). Published Baikai 0.9.0.0, provider 0.1.0.0,
+Claude/OpenAI 0.7.2.0 and effectful 0.4.0.4 deliver the upstream handoff without a
+local override. Typed stub results, compiler parity, request-defaults exemption,
+cache codec persistence, loopback payloads and typed HTTP refusal/decode errors
+pass; the full repository test suite passes. EP-64's pure milestone is complete;
+its runtime settings and persistence proofs are next. EP-65 and EP-66 have not started.
 
-Phase 1 remains externally owned and is being worked on separately. The inspected upstream checkouts still recorded unfinished work. The registered `mori://shinzui/baikai` checkout did not contain the judgment-layer split described here; reconcile the landed capabilities at handoff rather than assuming the cited plan decomposition is present. EP-63 milestone 2 needs the upstream content carrier; milestone 3 needs the judgment capability and provider. EP-64's runtime milestones wait on that evidence integration. Open cross-plan gates:
+The Hackage registry and upstream package-prefixed release tags were checked on
+2026-10-25. Baikai core 0.10.0.0 and Claude/OpenAI 0.7.3.0 are newer, but the
+published TypeSafe 0.1.0.0 and effectful 0.4.0.4 bounds require core 0.9. Shikumi
+uses that complete released cohort rather than an unpublished compatibility override.
 
-- [ ] `typesafe-hs` has a first release on Hackage (its own MasterPlan 1, EP-6).
-- [ ] Baikai EP-83, EP-99 and EP-84 are Complete, core `baikai` and `baikai-typesafe` are published, and IR-10's status is `completed`.
-- [ ] `shikumi` builds against the published packages with no `cabal.project.local` override. The core bump is a PVP major, so `just upgrade-baikai` will stop at the build and the bound change is a manual migration.
+- [x] `typesafe-hs` 0.1.0.0 is on Hackage.
+- [x] Baikai EP-83, EP-99 and EP-84 are Complete and the required packages are published.
+- [x] `shikumi` and the repository tests build against published packages with no local override.
 
 
 ## Surprises & Discoveries

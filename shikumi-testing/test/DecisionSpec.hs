@@ -3,6 +3,7 @@
 module DecisionSpec (tests) where
 
 import Baikai (JsonSchemaFormat (strict), ResponseFormat (..), jsonSchemaFormat)
+import Baikai.Judgment qualified as BJ
 import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Control.Lens ((^.))
 import Data.Aeson (Value (..), eitherDecode, encode, object, toJSON, (.=))
@@ -22,12 +23,14 @@ import Shikumi.Error (ShikumiError (..))
 import Shikumi.Program (runProgram)
 import Shikumi.Program qualified as Program
 import Shikumi.Routing (routeLLM, runRouting)
-import Shikumi.Schema (Field, deriveSchema, field, fromModel, unField)
+import Shikumi.Schema (Field (..), deriveSchema, field, fromModel, unField)
 import Shikumi.Signature (setDemos)
 import Shikumi.Signature qualified as Sig
 import Shikumi.Testing.DecisionFixtures
+import Shikumi.Testing.Fixtures (Question (..), instructedSig)
 import Shikumi.Testing.Response (mkTextResponse)
 import Shikumi.Testing.StubLLM (captureLLMRequests, runStubLLM)
+import Shikumi.Testing.SystemOne
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertFailure, testCase, (@?=))
 
@@ -94,7 +97,36 @@ tests :: TestTree
 tests =
   testGroup
     "Decision"
-    [ testGroup
+    [ testCase "structured evidence runs through routing" $ do
+        let fields = [("urgent", FieldNoul (NoulEvidence 0.83)), ("severity", FieldScore (ScoreEvidence (V.fromList [0.1, 0.3, 0.6]) (Just 0.55))), ("category", FieldChoice (ChoiceEvidence (Map.fromList [("billing", 0.2), ("technical", 0.8)]) (Just 0.65)))]
+        result <- runEff . runErrorNoCallStack @ShikumiError . runRouting (systemOneModel "jev-latest") . runStubLLM (systemOneResponder (const fields)) . routeLLM $ runProgram (Program.Predict assessmentSig Program.emptyParams) (Ticket (field "outage"))
+        case result of
+          Right (Assessment (Field (Noul answer p c)) (Field (Score mean lev _ _)) (Field (Choice cat _ _))) -> do
+            answer @?= True
+            p @?= 0.83
+            assertBool "derived confidence" (abs (c - 0.66) < 1e-10)
+            mean @?= 1.5
+            lev @?= 2
+            cat @?= Technical
+          other -> assertFailure (show other),
+      testCase "free-form outputs refuse before dispatch" $ do
+        seen <- newIORef []
+        result <- runEff . runErrorNoCallStack @ShikumiError . runRouting (systemOneModel "jev-latest") . runStubLLM (const (mkTextResponse "unused")) . captureLLMRequests seen . routeLLM $ runProgram (Program.Predict instructedSig Program.emptyParams) (Question "x")
+        assertBool "typed refusal names field" (case result of Left (ValidationFailure msg) -> "answer" `T.isInfixOf` msg; _ -> False)
+        readIORef seen >>= (@?= []),
+      testCase "Baikai compiler agrees on order, domains and criteria" $ do
+        let schema = stripDecisionMarkers (deriveSchema @Assessment)
+            convert j = Judgment (j ^. #name) (case j ^. #instructions of String t -> Just t; _ -> Nothing) $ case j ^. #kind of
+              BJ.PredicateJudgment Nothing -> JudgeBoolean Nothing Nothing
+              BJ.PredicateJudgment (Just (t, f)) -> JudgeBoolean (nonNull t) (nonNull f)
+              BJ.ChoiceJudgment ls -> JudgeChoice (V.toList ls)
+              BJ.ScoreJudgment ls -> JudgeOrdered (map (maybe Null id) (V.toList ls))
+            nonNull Null = Nothing
+            nonNull x = Just x
+        case BJ.compileJudgments (jsonSchemaFormat "assessment" schema) of
+          Right js -> map convert (V.toList (BJ.judgmentList js)) @?= expectedJudgments
+          Left err -> assertFailure (show err),
+      testGroup
         "judgment schema"
         [ testCase "Assessment schema matches golden" $ deriveSchema @Assessment @?= expectedSchema,
           testCase "judgmentsOf agrees with schema in declaration order" $ do

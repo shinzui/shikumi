@@ -66,12 +66,14 @@ import Shikumi.Cache.Backend.Memory (newMemoryCache, runCacheMemory)
 import Shikumi.Cache.Backend.SQLite (runCacheSQLite, withSQLiteCache)
 import Shikumi.Cache.Key (canonicalJSON, requestToCanonicalValueVersioned, stripMessageTimestamps)
 import Shikumi.Cache.ResponseJSON ()
+import Shikumi.Decision
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
 import Shikumi.LLM.Continuation (contextIdentity, requestOrigin, stampContinuation)
 import Shikumi.LLM.Defaults
 import Shikumi.Routing (routeLLM, runRouting)
+import Shikumi.Testing.SystemOne (systemOneResponse)
 import System.Environment (getEnvironment, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (ExitSuccess), exitFailure, exitSuccess)
 import System.FilePath ((</>))
@@ -140,7 +142,10 @@ main = do
       defaultMain $
         testGroup
           "shikumi-cache"
-          [ defaultsTests,
+          [ testCase "Decision AssistantData cache codec round-trip" $ do
+              let response = systemOneResponse [("flag", FieldNoul (NoulEvidence 0.8))]
+              eitherDecode (encode response) @?= Right response,
+            defaultsTests,
             keyTests,
             memoryTests,
             sqliteTests,

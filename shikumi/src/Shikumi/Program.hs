@@ -113,9 +113,10 @@ import Shikumi.Adapter
     stampTemperature,
   )
 import Shikumi.Decision (judgmentsInSchema, renderDecisionState)
+import Shikumi.Decision.Runtime (evidenceObject, evidenceOf)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), Response, complete)
-import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, fromModel, fromModelChecked)
 import Shikumi.Schema.Types (fieldName)
 import Shikumi.Signature (Signature, getInstruction, inputFields, outputFields, setDemos, setInstruction)
 import Shikumi.Signature qualified as Sig
@@ -381,12 +382,14 @@ parseResponse ::
   Signature i o ->
   Response ->
   Either ShikumiError o
-parseResponse sig' resp =
-  case assistantJSON resp of
-    -- The body is JSON: the native wire shape. Keep the native parser's error.
-    Right _ -> parse (nativeAdapter @i @o) sig' resp
-    -- Not JSON: the fallback / marker wire shape. Exact prior behaviour.
-    Left _ -> parse (fallbackAdapter @i @o) sig' resp
+parseResponse sig' resp
+  | Just ev <- evidenceOf (fst (judgmentsInSchema (deriveSchema @o))) resp =
+      ev >>= evidenceObject (deriveSchema @o) (fst (judgmentsInSchema (deriveSchema @o))) >>= fromModelChecked
+  | otherwise = case assistantJSON resp of
+      -- The body is JSON: the native wire shape. Keep the native parser's error.
+      Right _ -> parse (nativeAdapter @i @o) sig' resp
+      -- Not JSON: the fallback / marker wire shape. Exact prior behaviour.
+      Left _ -> parse (fallbackAdapter @i @o) sig' resp
 
 -- | The per-sample temperatures for a 'MajorityVote' of @k@ samples (at least
 -- one — @k@ is clamped up to 1 here so the executors need not). 'Nothing' leaves

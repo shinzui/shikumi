@@ -47,12 +47,13 @@ module Shikumi.Routing
   )
 where
 
-import Baikai (Context, JsonSchemaFormat (strict), Message (..), Model, Options, ResponseFormat (..), assistant, jsonSchemaFormat)
+import Baikai (Context, JsonSchemaFormat (strict), Message (..), Model, Options, ResponseFormat (..), assistant, jsonSchemaFormat, userData)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (FromJSON, Result (..), Value, fromJSON)
 import Data.Generics.Labels ()
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Vector qualified as V
 import Effectful (Dispatch (Dynamic), DispatchOf, Eff, Effect, (:>))
 import Effectful.Dispatch.Dynamic (interpose, interpret, send)
@@ -67,7 +68,8 @@ import Shikumi.Adapter
     metaTemperatureKey,
     stripDecisionMarkers,
   )
-import Shikumi.Error (ShikumiError)
+import Shikumi.Decision (judgmentsInSchema)
+import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.LLM.Continuation (validateRequestContinuation)
 
@@ -101,12 +103,13 @@ routeLLM :: (Routing :> es, LLM :> es, Error ShikumiError :> es) => Eff es a -> 
 routeLLM = interpose $ \_ -> \case
   Complete _placeholder ctx opts -> do
     m <- currentModel
-    let (ctx', opts') = translateForWire m ctx opts
+    (ctx', opts') <- either throwError pure (translateForWire m ctx opts)
     either throwError pure (validateRequestContinuation m ctx' opts')
     complete m ctx' opts'
   Stream _placeholder ctx opts -> do
     m <- currentModel
-    let (ctx', opts') = translateForWire m ctx opts
+    if capabilityFor m == DecisionOnly then throwError (ValidationFailure "decision outputs do not support streaming") else pure ()
+    (ctx', opts') <- either throwError pure (translateForWire m ctx opts)
     either throwError pure (validateRequestContinuation m ctx' opts')
     stream m ctx' opts'
 
@@ -118,7 +121,7 @@ routeLLM = interpose $ \_ -> \case
 -- Continuation expectations remain available for later boundary checks. Fallback-capability models keep the
 -- marker t'Context' unchanged; non-'Shikumi.Program.Predict' @Complete@ calls (no stamps) are never
 -- rewritten.
-translateForWire :: Model -> Context -> Options -> (Context, Options)
+translateForWire :: Model -> Context -> Options -> Either ShikumiError (Context, Options)
 translateForWire m ctx opts =
   let md = opts ^. #metadata
       mSchema = Map.lookup metaResponseSchemaKey md
@@ -130,7 +133,7 @@ translateForWire m ctx opts =
           Map.delete
           md
           [metaResponseSchemaKey, metaTemperatureKey, metaNativePromptKey, metaNativeDemosKey, metaDecisionStateKey]
-      isNative = case capabilityFor m of NativeSchema -> True; PromptFallback -> False
+      isNative = capabilityFor m /= PromptFallback
       withSchema o
         | isNative,
           Just s <- mSchema =
@@ -143,7 +146,15 @@ translateForWire m ctx opts =
       ctx' = case (isNative, mNativeSys, mNativeDemos) of
         (True, Just sys, Just demos) -> rewriteNativeContext sys demos ctx
         _ -> ctx
-   in (ctx', opts')
+   in if capabilityFor m == DecisionOnly
+        then case (mSchema, Map.lookup metaDecisionStateKey md) of
+          (Just s, Just state)
+            | let (js, free) = judgmentsInSchema s,
+              not (null js),
+              null free ->
+                Right (ctx & #systemPrompt .~ Nothing & #tools .~ V.empty & #messages .~ V.singleton (userData state), opts')
+          _ -> Left (ValidationFailure ((m ^. #modelId) <> " answers only declared judgments; free-form output fields: " <> maybe "missing schema/state" (T.intercalate ", " . snd . judgmentsInSchema) mSchema))
+        else Right (ctx', opts')
 
 -- | Install the native-format system prompt and demo assistant turns into a
 -- t'Context'. The assistant turns of a 'Shikumi.Program.Predict'-rendered context are exactly the

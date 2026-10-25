@@ -86,6 +86,7 @@ import Baikai
     user,
     userImage,
   )
+import Baikai.Model (isJudgmentOnly)
 import Control.Lens (at, (&), (.~), (?~), (^.))
 import Data.Aeson (Object, Value (..), eitherDecodeStrict, toJSON)
 import Data.Aeson qualified as Aeson
@@ -233,7 +234,7 @@ data Adapter i o = Adapter
   }
 
 -- | Whether a model supports provider-native structured output.
-data ModelCapability = NativeSchema | PromptFallback
+data ModelCapability = NativeSchema | PromptFallback | DecisionOnly
   deriving stock (Eq, Show)
 
 -- | A pure capability check over a baikai t'Model', derived from baikai's
@@ -259,6 +260,7 @@ data ModelCapability = NativeSchema | PromptFallback
 -- separate capability (baikai's CLI providers enforce schemas but drop tools);
 -- see "Shikumi.Agent.ReAct".
 capabilityFor :: Model -> ModelCapability
+capabilityFor m | isJudgmentOnly m = DecisionOnly
 capabilityFor m = case declaredStructuredOutput api of
   NoStructuredOutput -> PromptFallback
   NativeJsonSchema
@@ -281,6 +283,7 @@ adapterFor ::
   Model ->
   Adapter i o
 adapterFor m = case capabilityFor m of
+  DecisionOnly -> nativeAdapter
   NativeSchema -> nativeAdapter
   PromptFallback -> fallbackAdapter
 

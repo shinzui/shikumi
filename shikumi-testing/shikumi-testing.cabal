@@ -52,12 +52,14 @@ library
     Shikumi.Testing.Response
     Shikumi.Testing.Responses
     Shikumi.Testing.StubLLM
+    Shikumi.Testing.SystemOne
     Shikumi.Testing.Transport
 
   build-depends:
     aeson,
-    baikai >=0.8.0.0 && <0.9,
-    baikai-openai >=0.7.1.1 && <0.8,
+    baikai >=0.9.0.0 && <0.10,
+    baikai-openai >=0.7.2.0 && <0.8,
+    baikai-typesafe >=0.1.0.0 && <0.1.0.1,
     base >=4.20 && <5,
     bytestring,
     containers,

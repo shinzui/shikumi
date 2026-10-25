@@ -19,6 +19,7 @@ import RestrictedSpec qualified
 import SchemaSpec qualified
 import SessionSpec qualified
 import ShellSpec qualified
+import SystemOneIntegrationSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 import ToolOutputSpec qualified
 import ToolSpec qualified
@@ -29,7 +30,8 @@ main =
   defaultMain $
     testGroup
       "shikumi-tools"
-      [ ResponsesSchemaSpec.tests,
+      [ SystemOneIntegrationSpec.tests,
+        ResponsesSchemaSpec.tests,
         ResponsesIntegrationSpec.tests,
         SessionSpec.tests,
         RLMSpec.tests,

@@ -52,7 +52,7 @@ library
 
   build-depends:
     aeson,
-    baikai >=0.8.0.0 && <0.9,
+    baikai >=0.9.0.0 && <0.10,
     base >=4.20 && <5,
     bytestring,
     containers,

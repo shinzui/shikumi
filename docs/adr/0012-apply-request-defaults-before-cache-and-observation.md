@@ -5,7 +5,7 @@ description: Fill a finite set of invocation-scoped request preferences after ro
 docId: ADR-12
 status: Accepted
 date: 2026-09-08
-timestamp: 2026-09-08T18:09:43Z
+timestamp: 2026-10-25T17:50:52Z
 generated:
   by: process:codex
   at: 2026-09-08T18:09:43Z
@@ -24,6 +24,10 @@ Requested settings cannot establish what a provider actually executed.
 
 `Shikumi.LLM.Defaults` owns only optional thinking level, speed, output-token ceiling
 and a complete evidence request. It fills missing fields on both LLM operations.
+Judgment-only models receive only the evidence default. Thinking, speed and token
+ceiling defaults are withheld because Baikai refuses generation controls on those
+models. Explicit controls survive and receive Baikai's typed terminal refusal.
+
 Explicit call settings win, then the innermost default scope, then outer scopes.
 Empty defaults are identity. The layer validates a configured zero token ceiling
 with the existing terminal `ValidationFailure`, before executing the scoped action.

@@ -61,7 +61,7 @@ test-suite shikumi-cache-postgres-test
     -with-rtsopts=-N
 
   build-depends:
-    baikai >=0.8.0.0 && <0.9,
+    baikai >=0.9.0.0 && <0.10,
     base,
     directory,
     effectful,

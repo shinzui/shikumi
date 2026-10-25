@@ -43,6 +43,7 @@ library
     Shikumi.Combinator
     Shikumi.Compaction
     Shikumi.Decision
+    Shikumi.Decision.Runtime
     Shikumi.Decision.Setting
     Shikumi.Effect.Time
     Shikumi.Error
@@ -66,10 +67,10 @@ library
   other-modules: Shikumi.Adapter.Xml
   build-depends:
     aeson >=2.2 && <2.3,
-    baikai >=0.8.0.0 && <0.9,
-    baikai-claude >=0.7.1.1 && <0.8,
-    baikai-effectful >=0.4.0.3 && <0.5,
-    baikai-openai >=0.7.1.1 && <0.8,
+    baikai >=0.9.0.0 && <0.10,
+    baikai-claude >=0.7.2.0 && <0.8,
+    baikai-effectful >=0.4.0.4 && <0.5,
+    baikai-openai >=0.7.2.0 && <0.8,
     base >=4.20 && <5,
     base64-bytestring >=1.2 && <1.3,
     bytestring >=0.11 && <0.13,
@@ -132,10 +133,10 @@ test-suite shikumi-test
   build-depends:
     QuickCheck,
     aeson,
-    baikai >=0.8.0.0 && <0.9,
-    baikai-claude >=0.7.1.1 && <0.8,
-    baikai-effectful >=0.4.0.3 && <0.5,
-    baikai-openai >=0.7.1.1 && <0.8,
+    baikai >=0.9.0.0 && <0.10,
+    baikai-claude >=0.7.2.0 && <0.8,
+    baikai-effectful >=0.4.0.4 && <0.5,
+    baikai-openai >=0.7.2.0 && <0.8,
     base,
     base64-bytestring,
     bytestring,

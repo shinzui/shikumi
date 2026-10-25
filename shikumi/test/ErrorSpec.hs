@@ -33,7 +33,8 @@ tests =
               httpStatus = Just 400,
               retryAfterSeconds = Nothing,
               refusalCategory = Nothing,
-              exitCode = Nothing
+              exitCode = Nothing,
+              requestProblem = Nothing
             }
           @?= ContextWindowExceeded "context length exceeded",
       testCase "isTransient classification" $ do
