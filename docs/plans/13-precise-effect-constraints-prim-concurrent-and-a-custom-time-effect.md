@@ -4,6 +4,13 @@ slug: precise-effect-constraints-prim-concurrent-and-a-custom-time-effect
 title: "Precise effect constraints: Prim, Concurrent, and a custom Time effect"
 kind: exec-plan
 created_at: 2026-06-09T19:06:06Z
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-26T00:04:35Z
+      mode: "update"
+      note: "Mark complete and align fixture exclusions, historical inventory, and acceptance with the accepted production scope."
 ---
 
 # Precise effect constraints: Prim, Concurrent, and a custom Time effect
@@ -73,9 +80,11 @@ latency in milliseconds.
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
+**Status: Complete (confirmed 2026-10-25).** All production milestones are
+complete. The optional test/example fixture migration is excluded from this
+plan's accepted scope, as recorded in the Decision Log. The build and test
+results below are the implementation evidence from 2026-06-09; the closure
+check inspected the current source without rerunning the build or tests.
 
 - [x] M0: Add the `Time` effect module `shikumi/src/Shikumi/Effect/Time.hs` to the core
       `shikumi` package, exposing `Time`, `runTime`, `getCurrentTime`,
@@ -111,13 +120,6 @@ This section must always reflect the actual current state of the work.
       helpers (closed rows gained `Prim`), the eval specs, and the eight `runTrace` chains
       in `Trace/Demo.hs`, `shikumi-trace/test/Main.hs`, `TraceReplay.hs`, and the CLI
       runtime. `cabal build all` clean (no warnings); all 16 suites green. (2026-06-09)
-- [ ] M2 (deferred, low-value): the **test-only** IORef LLM fixtures (`runCountingLLM`,
-      `runKeyedCountingLLM`, `runStubLMCounting`, `runScriptLLM`, `runMockLLM`,
-      `ProgramFixtures`, `Shikumi/LLM/Mock.hs`, `Trace/Internal/Spike.hs`) still carry
-      `(IOE :> es)`. Their `IOE` is genuinely used (`liftIO` over a `Data.IORef` queue) so
-      `-Wredundant-constraints` does not flag them, and they run under `runEff` which
-      supplies `IOE`. Migrating them to `Prim` is pure churn with no constraint-honesty
-      gain for scaffolding — see Decision Log. Left as-is.
 - [x] M3: Migrated STM/threadDelay helpers to `Concurrent`: `runCacheMemory`
       (`shikumi-cache/.../Backend/Memory.hs`, now `(Concurrent :> es)` via
       `Effectful.Concurrent.STM`'s `atomically`/`readTVarIO`), and the resilience helpers
@@ -242,11 +244,14 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-**Outcome.** Delivered in full. shikumi now carries a custom `Shikumi.Effect.Time`
+**Outcome.** Complete under the accepted production scope; no required work
+remains. Confirmed on 2026-10-25 after checking the current source and retaining
+the recorded decision to exclude test/example fixture migration. shikumi now
+carries a custom `Shikumi.Effect.Time`
 effect (`getCurrentTime` + `getMonotonicTimeNSec`, discharged by `runTime`), modeled
 on `time-effectful`'s `Clock` but owning the monotonic op shikumi's evaluation
-timing needs. Every clock read, `IORef` touch, and STM/`threadDelay` call in
-shikumi's *production* code now carries the narrowest-correct constraint —
+timing needs. The clock reads, `IORef` operations, and STM/`threadDelay` calls at
+the production sites targeted by this plan now carry the narrowest-correct constraint —
 `Time`, `Prim`, or `Concurrent` — instead of the blanket `IOE`. The original
 purpose ("a reader can tell from the signature what a function may do") is met:
 `cachedLLM :: (Cache, LLM, Time)`, `evalOne :: (LLM, Error, Time)`,
@@ -264,7 +269,7 @@ interpreters (`runLLM`/`runLLMWith`/`runLLMResilient`) and `withBudget`; the thr
 persistent cache backends (SQLite/Postgres/Redis); and the `runTime`/`runPrim`/
 `runConcurrent` discharge edges at `main`/tests.
 
-**What remains (intentional).** The test-only and example IORef LLM fixtures
+**Excluded follow-up (optional).** The test-only and example IORef LLM fixtures
 (`runCountingLLM`, `runScriptLLM`, `runMockLLM`, `ProgramFixtures`, `Mock.hs`, the
 `Trace/Internal/Spike` prototype, etc.) still use `IOE` for their `Data.IORef`
 queues. This is deliberate (see Decision Log): their `IOE` is genuinely used (so
@@ -419,11 +424,13 @@ runClock :: (IOE :> es) => Eff (Clock ': es) a -> Eff es a
 runClock = evalStaticRep TimeRep
 ```
 
-**The full inventory of `IOE :>` sites today (39 occurrences).** The following
-table is the ground truth this plan was built from. "Why IOE" is what the
+**Historical inventory of `IOE :>` sites (39 occurrences at planning time).**
+The following inventory records the baseline this plan was built from, rather
+than an exhaustive inventory of the current code. Paths and line numbers refer
+to that baseline. "Why IOE" is what the
 function actually does that requires it; "Target" is the constraint it should
-carry after this plan (or "IOE (keep)" if `IOE` is genuinely correct). Test-only
-fixtures are migrated in M2/M4 alongside the production code they mirror.
+carry after this plan (or "IOE (keep)" if `IOE` is genuinely correct). Test/example
+fixture migration was subsequently excluded in the Decision Log.
 
 Production sites:
 
@@ -471,8 +478,8 @@ Production sites:
 - `shikumi-cache-redis/src/Shikumi/Cache/Backend/Redis.hs:63` — `runCacheRedis`.
   Target: **IOE (keep)** — `hedis` network calls.
 
-Test/fixture and spike sites (migrated to **Prim** in M2/M4 where they only hold
-`IORef`s; spike code mirrors `runTrace`):
+Test/fixture and spike sites (historical candidates for **Prim**, excluded from
+the accepted scope; spike code mirrors `runTrace`):
 
 - `shikumi-jitsurei/src/Shikumi/Jitsurei/Stub.hs:130` (`runScriptLLM`),
   `shikumi-jitsurei/app/TraceReplay.hs:62` (`counting`),
@@ -787,7 +794,8 @@ Edit `shikumi-trace/src/Shikumi/Trace.hs` (`runTrace`):
   `Data.Time` clock imports; add `Prim` and `Time` to the `Effectful` import and
   drop `IOE`/`liftIO` if now unused.
 
-Migrate the test/fixture/spike IORef holders to `Prim` the same way (constraint
+Optional follow-up outside this completed plan: migrate the test/fixture/spike
+IORef holders to `Prim` the same way (constraint
 `(IOE :> es)` → `(Prim :> es)`, `Data.IORef` ops → `Effectful.Prim.IORef` ops,
 drop `liftIO`):
 
@@ -800,7 +808,7 @@ drop `liftIO`):
   `shikumi-jitsurei/app/TraceReplay.hs:62`,
   `shikumi-trace/src/Shikumi/Trace/Internal/Spike.hs:82,92,113`.
 
-At each discharge site for the above, add `runPrim` to the interpreter chain
+At each discharge site for the production migrations, add `runPrim` to the interpreter chain
 (`runPrim :: IOE :> es => Eff (Prim : es) a -> Eff es a`, imported from
 `Effectful.Prim`). The mechanical rule mirrors M1: when the compiler reports
 `No instance for (Prim :> es)` at a `runEff` chain, insert `. runPrim` into that
@@ -947,13 +955,14 @@ nix develop -c grep -rn 'IOE :>' --include='*.hs' \
   shikumi-cache-redis shikumi-cache-postgres
 ```
 
-The build and the full test suite must be green. The final grep must show
-`IOE :>` **only** at the legitimate sites enumerated in Context:
+The build and the full test suite must be green. For the historical inventory
+in Context, the final grep may show `IOE :>` at the legitimate sites:
 `runLLM`/`runLLMWith`/`runLLMResilient`/`withBudget`
 (`shikumi/src/Shikumi/LLM.hs`), `runCacheSQLite`
-(`shikumi-cache/.../SQLite.hs`), `runCachePostgres`, `runCacheRedis`, and the
-top-level test/CLI discharge points that call `runEff` (which legitimately provide
-`IOE` to the stack). No `IOE :>` should remain on `cachedLLM`, `evalOne`,
+(`shikumi-cache/.../SQLite.hs`), `runCachePostgres`, `runCacheRedis`, the `runTime`
+discharge edge, and the excluded IORef-based test/example fixtures. Top-level
+test/CLI discharge points supply `IOE` through `runEff`. Later additions that
+perform genuine IO are outside this historical inventory. No `IOE :>` should remain on `cachedLLM`, `evalOne`,
 `evaluate`/`evaluatePure`/`evaluateWith`, `withUsageTotals`, `runTrace`,
 `runCacheMemory`, `withRateLimit`, `retrying`, `goldenReport`, `optimize`,
 `scoreOn`, or `runOptimizer`.
@@ -1116,3 +1125,8 @@ depends on M1 (timing on `Time`) and M2 (usage on `Prim`) to legitimately drop
 `IOE` from the `evaluate` family. M3 is independent of M1/M2 and may be done in any
 order relative to them, but is listed third to keep the "drop redundant IOE" sweep
 (M4) last.
+
+Revision note (2026-10-25): Marked the plan complete at the user's request,
+removed the excluded fixture migration from the outstanding checklist, and
+aligned M2, the historical inventory, and M4 acceptance with the recorded scope
+decision. Build and test results remain the historical implementation evidence.

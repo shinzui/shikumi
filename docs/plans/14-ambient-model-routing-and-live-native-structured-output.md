@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-06-09T22:35:41Z
 intention: "intention_01ktq80610e6nbe3d7yrct59an"
 master_plan: "docs/masterplans/2-shikumi-substrate-routing-completion.md"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-26T00:32:19Z
+      mode: "update"
+      note: "Close EP-14 with optional live verification excluded; reconcile current routing, native rendering, interpreter order, and historical evidence."
 ---
 
 # Ambient model routing and live native structured output
@@ -16,13 +23,16 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
+This section records the problem at the 2026-06-09 baseline. The production work
+is complete; Progress and Outcomes & Retrospective describe the closure state.
+
 Shikumi is a typed LM-programming framework. You write a `Program i o` — a tree of typed
 "predict" nodes and combinators — and run it with `runProgram program input`, which issues
 calls to a large-language-model (LM) provider and decodes the replies back into your typed
 output. Today there is a hole right in the middle of that hot path: **`runProgram` ignores
 which model you want and always dispatches against a blank, provider-neutral model.**
 
-Concretely, in `shikumi/shikumi/src/Shikumi/Program.hs` the executor hardcodes
+Concretely, in `shikumi/src/Shikumi/Program.hs` the executor hardcodes
 
 ```haskell
 defaultModel :: Model
@@ -41,7 +51,7 @@ Three user-visible consequences follow, and all three are the point of this plan
    Schema (via `ToSchema`). For models that support provider-native structured output
    (OpenAI's `response_format`, Anthropic's `output_config`), shikumi *should* transmit that
    schema so the provider guarantees a conforming reply. But `attachSchema` in
-   `shikumi/shikumi/src/Shikumi/Adapter.hs` is a no-op (`attachSchema _schema opts = opts`),
+   `shikumi/src/Shikumi/Adapter.hs` is a no-op (`attachSchema _schema opts = opts`),
    and because the model is always the blank `_Model`, `capabilityFor _Model` is always
    `PromptFallback` — so the native adapter is never even selected. Structured output is
    requested only by prose in the prompt, never enforced by the provider.
@@ -86,9 +96,11 @@ mechanism is proven first in a prototype milestone (M0) before any production wi
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
+**Status: Complete (confirmed 2026-10-25).** M0–M3 meet the required production
+scope. M4 was explicitly optional and is excluded from closure; it remains a
+possible follow-up, not outstanding work on this plan. Source and documentation
+were checked at closure; the build/test results below are historical
+implementation evidence and were not rerun for this documentation update.
 
 - [x] **M0 (prototype):** Subsumed. The `interpose`-on-`LLM` seam is already proven twice in the
   repo (`cachedLLM`, `tracedLLM`), so rather than ship a throwaway spike module we went straight
@@ -108,20 +120,18 @@ This section must always reflect the actual current state of the work.
   realized by `routeLLM` as `Options.temperature`. Tests show distinct spread temperatures
   `{0.1,0.5,0.9}`, exact fixed `[0.1,0.9]`, the private temperature key stripped, and
   `runProgram`/`runProgramConc` agree on the multiset.
-- [ ] **M4 (optional, gated):** A `SHIKUMI_LIVE`-gated live test routes a real provider and
-  asserts a schema-conforming reply. Deferred — the hermetic stub path (M0–M3) is the exercised
-  one; the existing `LiveSpec` already proves real OpenAI dispatch end to end.
 - [x] Master-plan Progress checkboxes for EP-14 ticked; Decision Log / Surprises updated.
 
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
+These findings describe the original implementation. EP-33 subsequently
+superseded the render/parser limitations, as explained in Outcomes & Retrospective.
 
 - **baikai's `responseFormat`/`metadata` fields already exist.** The `Shikumi.Adapter` header
   comment claimed "EP-2 is not yet merged … `Options` has no `responseFormat` field," but the
-  current baikai checkout (`baikai/src/Baikai/Options.hs`) already carries both `responseFormat ::
+  baikai source (`mori://shinzui/baikai`, project-relative
+  `baikai/src/Baikai/Options.hs`; artifact-level source URI pending) already carries both `responseFormat ::
   Maybe ResponseFormat` and `metadata :: Map Text Value`, and `Baikai.ResponseFormat.JsonSchema`
   exists. So no upstream baikai change was needed for EP-14; the stale comment was corrected.
 - **The render-time adapter cannot be the model-dependent one.** Because `runProgram` renders
@@ -169,7 +179,8 @@ Record every decision made while working on the plan.
   Rationale: `runProgram` renders before it knows the real model (the model is ambient, supplied
   below). It therefore cannot itself decide native-vs-fallback or build the final
   `responseFormat`. The cleanest channel that already exists on every request is
-  `Options.metadata :: Map Text Value` (see `baikai/baikai/src/Baikai/Options.hs`). The render
+  `Options.metadata :: Map Text Value` (see `mori://shinzui/baikai`, project-relative
+  `baikai/src/Baikai/Options.hs`; artifact-level source URI pending). The render
   step stamps two private metadata keys — one holding the derived schema `Value`, one holding the
   requested temperature — and the router consumes and strips them, attaching the real
   `responseFormat`/`temperature` keyed on the real model's `capabilityFor`. This keeps the schema
@@ -205,35 +216,60 @@ Record every decision made while working on the plan.
   (`Adapter`), the temperature writer (`Program`), and the reader (`Routing`).
   Date: 2026-06-09.
 
+- Decision: Close EP-14 with M0–M3 complete and optional M4 excluded.
+  Rationale: The user requested closure after checking the documentation. The
+  captured-request tests cover the required routing, native schema, and
+  temperature behavior. `shikumi/test/LiveSpec.hs` covers a direct text-returning
+  provider call, not routed typed/schema output; it is not evidence that M4 was
+  implemented or run. A routed live-provider check remains an optional follow-up.
+  Date: 2026-10-25.
+
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
-
-EP-14 delivered. `Shikumi.Routing` provides the ambient `Routing` effect, `runRouting`, and the
-`routeLLM` re-interpreter; `runProgram`/`runProgramConc` are now model-agnostic (the placeholder
-`_Model` is overwritten by the router) while keeping integration point #4's pinned signature
+**Outcome: Complete.** No required work remains. `Shikumi.Routing` provides the
+ambient `Routing` effect, `runRouting`, and the `routeLLM` re-interpreter;
+`runProgram`/`runProgramConc` are model-agnostic (the empty placeholder model is
+overwritten by the router) while keeping integration point #4's pinned signature
 exactly. `attachSchema` is a live setter onto the private metadata channel, and `routeLLM` turns
 it into a native `Options.responseFormat` for native-capable models (stripped for fallback ones).
 `MajorityVote`'s `TempSchedule` is now live: each sample's temperature is threaded down and set on
 the wire, identically under both executors. Validated hermetically by `shikumi/test/RoutingSpec.hs`
-(6 cases) and the whole fleet stays green (`cabal test all` exit 0). Gaps: M4 (gated live
-provider check) deferred — the existing `LiveSpec` already proves real OpenAI dispatch, and the
-hermetic path is the exercised one; the native prompt is still the fallback marker prompt (a
-native model relies on `responseFormat` enforcement plus the lenient JSON parse), which a later
-plan can refine to emit a JSON-oriented prompt when desired.
+(6 cases at implementation) and the recorded whole-fleet run (`cabal test all`
+exit 0). Those are historical results, not new closure runs.
+
+At closure, `shikumi/test/RoutingSpec.hs` contains 11 cases covering model id,
+native/fallback schema handling, private metadata removal, native prompts and
+JSON demonstrations, streaming routing, and temperature schedules under both
+executors. [EP-33](33-native-adapter-path-and-strict-mode-schemas.md) has already
+resolved the original native-prompt limitation: the router installs the stamped
+native prompt and JSON demos for native-capable models. JSON replies retain
+native decoding errors rather than silently falling back to marker errors.
+`runProgram` and `runProgramConc` retain their pinned effect rows; `routeLLM`
+now also requires `Error ShikumiError` for request validation.
+
+**Optional follow-up.** M4's real-provider routed schema check was neither
+implemented nor run for this plan. The existing `LiveSpec` exercises direct text
+completion only. The parent [MasterPlan 2](../masterplans/2-shikumi-substrate-routing-completion.md)
+already records EP-14 as Complete.
 
 
 ## Context and Orientation
 
-This section assumes no prior knowledge of the repository. Read it before touching code.
+The executor and API sketches below record the original baseline, not a current
+dependency API reference. Current behavior is in `shikumi/src/Shikumi/Program.hs`,
+`shikumi/src/Shikumi/Adapter.hs`, and `shikumi/src/Shikumi/Routing.hs`.
+[ADR-14](../adr/0014-separate-schema-enforcement-from-tool-calling-capability.md)
+governs current schema capability selection: schema enforcement and provider-native
+tool calling are separate capabilities. EP-33 supplies the native render channel
+and preserves native JSON errors.
 
 ### The shape of the repository
 
-Shikumi is a multi-package Cabal project rooted at `/Users/shinzui/Keikaku/bokuno/shikumi`,
-with a sibling library `baikai` at `/Users/shinzui/Keikaku/bokuno/baikai` (the transport layer
-that actually talks to providers). The packages you will touch live in the `shikumi/` package
+Shikumi is a multi-package Cabal project rooted at `/Users/shinzui/Keikaku/bokuno/shikumi`.
+Its transport layer is `mori://shinzui/baikai`; `cabal.project` resolves the
+published packages rather than building a sibling checkout. Use Mori to locate
+its source and documentation. The affected runtime modules live in the `shikumi/` package
 (the runtime substrate): `shikumi/src/Shikumi/Program.hs` (the executor) and
 `shikumi/src/Shikumi/Adapter.hs` (the request-rendering seam). Tests for that package live in
 `shikumi/test/`.
@@ -249,10 +285,10 @@ are stacked; the ones nearest the bottom run last. The key library trick this pl
 operation, optionally rewrite it, and forward it to the handler beneath. `cachedLLM` and
 `tracedLLM` both use `interpose` on `LLM`.
 
-"Model": baikai's `Model` is a record (file `baikai/baikai/src/Baikai/Model.hs`, lines 96–111)
-carrying `modelId`, `provider`, `api`, pricing, etc. `_Model` (same file, lines 131–146) is the
-blank record. Real models are *values in a generated catalog* — module
-`Baikai.Models.Generated` (`baikai/baikai/src/Baikai/Models/Generated.hs`) exposes top-level
+"Model": `mori://shinzui/baikai/packages/baikai` exposes the `Baikai.Model`
+record carrying `modelId`, `provider`, `api`, pricing, etc. The baseline called
+the empty model `_Model`; current code uses `emptyModel`. Real models are
+*values in a generated catalog* — its `Baikai.Models.Generated` module exposes top-level
 bindings such as
 
 ```haskell
@@ -264,8 +300,8 @@ deepseek_deepseek_chat :: Model
 To "pick a model by name" means: `import Baikai.Models.Generated (openai_gpt_4o_mini)` and use
 that value. That is exactly how the existing `shikumi/test/LiveSpec.hs` selects a real model.
 
-"Options": baikai's `Options` record (file `baikai/baikai/src/Baikai/Options.hs`, lines 34–62)
-holds per-call knobs. Two fields matter here:
+"Options": the `Baikai.Options` record from `mori://shinzui/baikai/packages/baikai`
+holds per-call knobs. Three fields matter here:
 
 ```haskell
 temperature    :: !(Maybe Double)
@@ -273,13 +309,20 @@ responseFormat :: !(Maybe ResponseFormat)
 metadata       :: !(Map Text Value)
 ```
 
-`responseFormat` (file `baikai/baikai/src/Baikai/ResponseFormat.hs`) is
+At the original baseline, `Baikai.ResponseFormat` from
+`mori://shinzui/baikai/packages/baikai` was
 
 ```haskell
 data ResponseFormat
   = JsonSchema { name :: !Text, schema :: !Value, strict :: !Bool }
   | JsonObject
 ```
+
+Current code constructs this through `JsonSchemaFormat`, for example
+`JsonSchema ((jsonSchemaFormat "output" schemaValue) {strict = True})`.
+The flat record-constructor sketches elsewhere in this plan describe the
+original schema payload, not the current constructor API. See
+`mori://shinzui/baikai/docs/models-and-providers` for provider orientation.
 
 `metadata` is a free-form `Map Text Value` already present on every `_Options`; we use it as a
 private channel between the adapter (which knows the types) and the router (which knows the
@@ -288,7 +331,7 @@ metadata keys back as `responseFormat`; the router strips our private keys befor
 reaches the transport, so nothing leaks onto the wire except the `responseFormat`/`temperature`
 the router itself sets.
 
-### The current executor (what you are changing)
+### The executor before EP-14 (historical baseline)
 
 `shikumi/src/Shikumi/Program.hs` defines `runProgram` and `runProgramConc`. Both delegate every
 `Predict` node to a shared helper (lines 278–290):
@@ -306,7 +349,7 @@ Note three hardcodings: `adapterFor defaultModel`, `render` produces `opts` with
 no temperature, and `complete defaultModel`. The `MajorityVote` clauses (lines 244 and 267–268)
 discard the `TempSchedule`.
 
-### The adapter seam (what attaches the schema)
+### The adapter seam before EP-14 (historical baseline)
 
 `shikumi/src/Shikumi/Adapter.hs` exposes `render`/`parse` per `Adapter`, plus:
 
@@ -362,6 +405,10 @@ independently verifiable with a hermetic test that fails before and passes after
 
 ### M0 — Prototype: prove the routing mechanism end-to-end (de-risking)
 
+**Disposition: Subsumed by production tests.** No throwaway spike was created.
+The proposal below is retained as design history; the four assertions were
+implemented in `shikumi/test/RoutingSpec.hs` as recorded in the Decision Log.
+
 **Scope.** Before touching `runProgram`, prove the chosen mechanism (approach (a): an
 `interpose`-on-`LLM` router that reads request metadata and rewrites `model`+`opts`) actually
 gets a derived schema onto `Options.responseFormat` and a per-sample temperature onto
@@ -384,8 +431,9 @@ by an interpreter below a `runProgram`-shaped loop.
 3. Defines a hand-written `spikePredict` that mimics `runPredict`: it stamps the schema and a
    temperature into `Options.metadata` and calls `complete _Model ctx opts` (a *model-agnostic*
    call — the model arg is the placeholder `_Model`, which the router overwrites).
-4. Installs, bottom to top: a capturing stub `LLM` (records `(Model, Options)` per call) →
-   `routeLLMSpike` → `runRoutingSpike nativeModel`. Runs `spikePredict` twice (simulating two
+4. Installs, outermost to innermost: `runRoutingSpike nativeModel` → a capturing
+   stub `LLM` (records `(Model, Options)` per call) → `routeLLMSpike`.
+   Runs `spikePredict` twice (simulating two
    samples with different requested temperatures).
 
 **Acceptance (observable).** The captured requests show: (i) the recorded `Model.modelId`
@@ -427,23 +475,22 @@ currentModel :: (Routing :> es) => Eff es Model
 
 runRouting :: Model -> Eff (Routing : es) a -> Eff es a
 
-routeLLM :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a
+routeLLM :: (Routing :> es, LLM :> es, Error ShikumiError :> es) => Eff es a -> Eff es a
 ```
 
 `runRouting m` is a constant reader: `interpret (\_ CurrentModel -> pure m)`. `routeLLM` is the
-production router (the promoted M0 spike): it `interpose`s on `LLM`, and for each `Complete
+production router (validated directly by `RoutingSpec`): it `interpose`s on `LLM`, and for each `Complete
 _placeholder ctx opts` it reads the ambient model via `currentModel`, translates the private
 metadata into `responseFormat`/`temperature` against that model (native-capable only for the
-schema), strips the private keys, and forwards `complete model ctx opts'`. `Stream` is forwarded
-unchanged via `passthrough`.
+schema), strips the private keys, and forwards `complete model ctx opts'`. Current
+`Stream` handling also rewrites the model and wire options, with typed validation
+failures reported through `Error ShikumiError`.
 
-`runPredict` in `shikumi/src/Shikumi/Program.hs` is rewritten to be *model-agnostic*: it no
-longer references `defaultModel`/`adapterFor`/`capabilityFor`. Instead it renders with a
-metadata-stamping adapter (M2 makes the stamping real; in M1 the stamp is the schema only, and
-the metadata channel is established) and calls `complete _Model ctx opts` — `_Model` is now an
-inert placeholder that the router *always* overwrites with the ambient model. The constant
-`defaultModel = _Model` is removed from the module's logic (kept only, if at all, as the
-placeholder passed to `complete`).
+`runPredict` in `shikumi/src/Shikumi/Program.hs` is model-agnostic. It renders
+through `adapterFor placeholderModel`, stamps the derived schema and native
+render alternative onto metadata, and calls `complete placeholderModel ctx opts`.
+`placeholderModel = emptyModel` is inert: `routeLLM` replaces it with the ambient
+model. Bare stub runs without a router retain the fallback path.
 
 Because `runProgram`'s row stays `(LLM :> es, Error ShikumiError :> es)`, the new `Routing`
 effect appears **only in the interpreter stack the caller assembles**, never in `runProgram`'s
@@ -451,21 +498,24 @@ constraints. A caller now writes (schematically):
 
 ```haskell
 runEff
+  . runConcurrent
   . runErrorNoCallStack @ShikumiError
+  . runRouting openai_gpt_4o_mini -- supplies the ambient model
   . runLLMResilient cfg          -- or runLLMWith reg for tests
   . routeLLM                      -- rewrites outgoing LLM calls using the ambient model
-  . runRouting openai_gpt_4o_mini -- supplies the ambient model
   $ runProgram program input
 ```
 
 **Important ordering note.** `routeLLM` must be installed *above* the bottom `LLM` interpreter
 (so the rewritten call still has an `LLM` handler beneath it to forward to) and `runRouting`
 must be installed so that `Routing` is in scope where `routeLLM` runs. The plan's stack above
-satisfies both: `runRouting` is innermost (closest to `runProgram`), then `routeLLM`, then the
-real `LLM` interpreter. Confirm this exact order in the spike (M0) before promoting.
+satisfies both: `routeLLM` is innermost (closest to `runProgram`), then the real
+`LLM` interpreter, then `runRouting`. `runConcurrent` supplies the concurrency
+effect required by `runLLMResilient`. The capturing-stub tests use the same routing
+order, replacing the real interpreter with a stub.
 
 **Acceptance (observable).** A hermetic test (`shikumi/test/RoutingSpec.hs`) runs a single
-`predict` node through a capturing stub LM with `routeLLM . runRouting nativeModel`, and asserts
+`predict` node through `runRouting nativeModel . runCapturingLLM ref response . routeLLM`, and asserts
 the captured `Model.modelId` equals `nativeModel`'s id (today it would be `""`). Run:
 
 ```bash
@@ -529,7 +579,8 @@ for that sample only. Decide in implementation; the observable outcome is what m
 across the `k` samples (order need not match for the concurrent path, but the *multiset* must).
 
 **Acceptance (observable).** A hermetic test runs `majorityVote 3 (TempSpread 0.5 0.4)
-(predict ...)` through a capturing stub LM with `routeLLM . runRouting nativeModel`, captures all
+(predict ...)` through a capturing stub LM inside `runRouting nativeModel`, with
+`routeLLM` innermost, captures all
 three requests, and asserts the three `Options.temperature` values are the three schedule
 temperatures (as a set), and that they are not all equal. The same test with `TempFixed [0.1,
 0.9]` and `k = 2` shows exactly `[0.1, 0.9]`. On pre-M3 code every captured temperature is
@@ -541,15 +592,19 @@ cd /Users/shinzui/Keikaku/bokuno/shikumi
 nix develop .#ghc9124 --command cabal test shikumi --test-options='-p Routing'
 ```
 
-### M4 — Optional, gated: live provider verification
+### M4 — Optional follow-up outside this completed plan: live provider verification
+
+**Disposition: Excluded from closure.** This proposed test was not implemented.
+The existing `LiveSpec` returns text from a direct `complete` call and does not
+exercise this routed typed-output scenario.
 
 **Scope.** Prove the wired path works against a real provider, gated on an API key so the default
 test run stays hermetic.
 
 **What will exist at the end.** A `SHIKUMI_LIVE`-gated test case (extend `shikumi/test/LiveSpec.hs`
 or add `RoutingLiveSpec`) that, when `SHIKUMI_LIVE=1` and `OPENAI_API_KEY` are set, registers the
-OpenAI provider, runs a `predict` node through `runProgram` with `routeLLM . runRouting
-openai_gpt_4o_mini` over `runLLMResilient`, and asserts a schema-conforming typed output decodes.
+OpenAI provider, runs a `predict` node through `runProgram` with the interpreter
+order shown in M1, and asserts a schema-conforming typed output decodes.
 Without the variable it prints a skip line and stays green, exactly like the existing `LiveSpec`.
 
 **Acceptance.** With credentials, the live case returns a decoded typed value (proving the real
@@ -585,7 +640,7 @@ cd /Users/shinzui/Keikaku/bokuno/shikumi
 nix develop .#ghc9124 --command cabal test shikumi --test-options='-p Routing'
 ```
 
-The optional live check:
+The existing direct-provider smoke test (this does not exercise M4):
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/shikumi
@@ -630,7 +685,8 @@ Intention: intention_01ktq80610e6nbe3d7yrct59an
 The plan is accepted when, with no network and no API key, `nix develop .#ghc9124 --command
 cabal test shikumi --test-options='-p Routing'` passes and demonstrates all of:
 
-1. **Model routing.** A `predict` node run with `routeLLM . runRouting M` produces a captured
+1. **Model routing.** A `predict` node run with `runRouting M` outside the capturing
+   `LLM` interpreter and `routeLLM` innermost produces a captured
    request whose `Model.modelId` equals `M`'s id (not `""`). This proves the ambient model
    replaced the hardcoded `_Model` without changing `runProgram`'s pinned signature — confirm by
    grepping that `runProgram`'s declared type in `shikumi/src/Shikumi/Program.hs` is still
@@ -645,12 +701,13 @@ cabal test shikumi --test-options='-p Routing'` passes and demonstrates all of:
    not all identical, in both `runProgram` and `runProgramConc`.
 
 Each acceptance is phrased as captured-request behaviour and each corresponding test fails on the
-current code (no `responseFormat`, `modelId == ""`, identical temperatures) and passes after the
+pre-EP-14 baseline (no `responseFormat`, `modelId == ""`, identical temperatures) and passes after the
 milestone. The whole fleet (`cabal test all`) must remain green, proving no consumer's pinned row
 broke.
 
-The optional M4 live check, when credentials are supplied, additionally proves a real provider
-honoured the transmitted schema by returning a value that decodes into the typed output.
+M4 is excluded from this plan's required acceptance. If implemented later, its
+live check would additionally verify a real-provider routed call returns a
+schema-conforming typed output. No such live verification is claimed at closure.
 
 
 ## Idempotence and Recovery
@@ -674,7 +731,7 @@ update the master plan, and only then change the signature.
 **Libraries/modules used and why.** `effectful` (`Effectful`, `Effectful.Dispatch.Dynamic`'s
 `interpose`/`interpret`/`passthrough`/`send`) — to add the `Routing` effect and the
 re-interpreting router on the existing `LLM` effect, the same machinery
-`shikumi-cache`/`shikumi-trace` already use. `baikai` (`Baikai.Model`, `Baikai.Options`,
+`shikumi-cache`/`shikumi-trace` already use. `mori://shinzui/baikai/packages/baikai` (`Baikai.Model`, `Baikai.Options`,
 `Baikai.ResponseFormat`, `Baikai.Models.Generated`) — the `Model`/`Options`/`ResponseFormat`
 records and the named-model catalog. `shikumi`'s own `Shikumi.LLM` (`LLM`, `complete`),
 `Shikumi.Adapter` (`capabilityFor`, `adapterFor`, `attachSchema`, `nativeAdapter`,
@@ -692,7 +749,10 @@ Text Value`:
   `Options.temperature = Just <that double>`.
 
 The router always removes both keys before forwarding, so nothing private reaches the transport.
-These names are internal and must be defined once (suggest constants in `Shikumi.Routing`).
+These names are internal and are defined once in `Shikumi.Adapter`, avoiding an
+import cycle between the adapter and router. EP-33 added
+`"shikumi.native.systemPrompt"` and `"shikumi.native.demos"` on the same channel;
+the router installs the native alternative and strips these keys too.
 
 **Signatures that must exist at the end of each milestone.**
 
@@ -702,7 +762,7 @@ These names are internal and must be defined once (suggest constants in `Shikumi
     CurrentModel :: Routing m Model
   currentModel :: (Routing :> es) => Eff es Model
   runRouting   :: Model -> Eff (Routing : es) a -> Eff es a
-  routeLLM     :: (Routing :> es, LLM :> es) => Eff es a -> Eff es a
+  routeLLM     :: (Routing :> es, LLM :> es, Error ShikumiError :> es) => Eff es a -> Eff es a
   ```
   and unchanged in `shikumi/src/Shikumi/Program.hs`:
   ```haskell
@@ -736,3 +796,8 @@ and (3) flag that MasterPlans 3 and 4 (referenced by path:
 `docs/masterplans/4-shikumi-richer-io-and-multimodal.md`) inherit #4 and must update every
 `runProgram`/`runCompiled`/tool-body call site to supply the new constraint. Approach (a) is
 strongly recommended precisely to avoid this blast radius.
+
+Revision note (2026-10-25): Closed the plan with optional M4 excluded, corrected
+the interpreter ordering and current router signature, and distinguished the
+historical baseline from native-render and streaming behavior delivered later.
+Recorded source inspection separately from the historical build/test evidence.
