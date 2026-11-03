@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.2.0 — 2026-11-02
+
+### Changed
+
+- Update internal dependency bounds for the breaking `shikumi 0.5.0.0` release.
+
 ## 0.2.1.1 — 2026-10-05
 
 ### Changed

@@ -2,23 +2,32 @@
 
 ## Unreleased
 
-- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`, `mori://shinzui/baikai/packages/baikai-claude` to `>=0.7.3.0 && <0.8`, `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.5 && <0.5`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.3.0 && <0.8`.
+## 0.5.0.0 — 2026-11-02
+
+### Added
 
 - Add probability-backed `NoulWith`/`Noul`, `Choice` and `Score` outputs on
-  judgment-only and generative models. Closed evidence schemas, typed preflight
-  refusals and strict evidence decoding feed shared local derivation.
-- Store per-field decision settings in `Params`, preserving old JSON and omitting
-  empty settings. Changing thresholds, cuts or weights reuses cached/replayed
-  evidence. The `Params` constructor gains a field; prefer `emptyParams` updates.
-- Route judgment-only models through structured state using the published
-  `mori://shinzui/baikai/packages/baikai` 0.9 cohort. Judgment models receive only
-  the evidence request default; explicit generation controls retain typed refusals.
-- Add `ToPrompt.toPromptJSON` / `toEvidenceJSON` and the corresponding PromptValue
-  methods for structured state and evidence-preserving demonstrations. Custom
-  prompt instances that cannot use generic defaults must implement them explicitly.
-  Existing ordinary text prompts and native demo rendering retain their behavior.
-- Decision streaming is explicitly refused before dispatch. Nested decision
-  containers, recursive sessions and ReAct submissions remain outside this feature.
+  judgment-only and generative models, with closed evidence schemas, strict
+  decoding and shared local answer derivation.
+- Add persistent per-field thresholds, score cuts and choice weights. Setting
+  changes reuse cached or replayed evidence without changing request identity.
+- Add structured prompt and evidence rendering through `ToPrompt.toPromptJSON`,
+  `toEvidenceJSON` and `PromptValue` methods.
+
+### Changed
+
+- **Breaking:** `Params` gains a decision-settings field; use `emptyParams`
+  record updates instead of positional construction. Custom `ToPrompt` instances
+  without generic defaults must implement the new structured rendering methods.
+- **Breaking:** `ModelCapability` gains `DecisionOnly`; update exhaustive matches.
+- Route judgment-only models through typed structured state. Only evidence defaults
+  apply to these models; explicit generation controls retain typed refusals.
+- Refuse decision streaming before dispatch. Nested decision containers, recursive
+  sessions and ReAct decision submissions remain unsupported.
+- Require `mori://shinzui/baikai/packages/baikai` `>=0.10.0.0 && <0.11`,
+  `mori://shinzui/baikai/packages/baikai-claude` and
+  `mori://shinzui/baikai/packages/baikai-openai` `>=0.7.3.0 && <0.8`, and
+  `mori://shinzui/baikai/packages/baikai-effectful` `>=0.4.0.5 && <0.5`.
 
 ## 0.4.1.1 — 2026-10-16
 

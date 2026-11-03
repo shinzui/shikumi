@@ -54,6 +54,9 @@ wrote.
 - Cached responses intentionally clear original model-call evidence — on every
   backend, including the in-memory one — because a cache hit did not cross the
   provider boundary and must not be replayed as new evidence. A request that
-  asks for evidence bypasses the memoizer's reads and writes entirely.
+  asks for transport-call evidence bypasses the memoizer's reads and writes
+  entirely. Decision probability content is part of the response and remains
+  reusable, as described in
+  [CAP-40 persistent decision settings](persistent-decision-settings.md).
 - The SQLite backend is process-persistent, but callers still own database-file
   placement and lifecycle.

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`.
+## 0.3.1.0 — 2026-11-02
+
+### Added
 
 - Add ReAnchor calibration for decision thresholds, score cuts and choice weights.
   Candidate trials use run-local response replay above admission, retain only strict
@@ -11,6 +13,12 @@
   summaries, evidence ranges and fold counters; optional validation is report-only.
 - Expose accepted-candidate selection for strategies with an additional selection
   gate. Unaccepted trials remain diagnostic and cannot become the reported winner.
+
+### Changed
+
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`.
+
+- Update internal dependency bounds for the breaking `shikumi 0.5.0.0` release.
 
 ## 0.3.0.2 — 2026-10-16
 

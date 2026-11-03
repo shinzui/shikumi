@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+## 0.1.4.0 — 2026-11-02
+
+### Changed
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`.
+
+- Update internal dependency bounds for the breaking `shikumi 0.5.0.0` release.
 
 ## 0.1.3.2 — 2026-10-16
 

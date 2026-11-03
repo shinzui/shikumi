@@ -53,6 +53,11 @@ and changes the key material used by
 
 ## Limits
 
+- Since `shikumi 0.5.0.0`, judgment-only models inherit only evidence defaults;
+  thinking, speed and token defaults apply to generative models. Explicit
+  unsupported options retain their typed refusals. See
+  [CAP-39 probability-backed decisions](probability-backed-decisions.md).
+
 - Fill-only by design. There is no override mode; a scope cannot force an option
   onto a call that set it.
 - A zero default ceiling is a `ValidationFailure`, not a silent no-op.

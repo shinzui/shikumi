@@ -1,5 +1,19 @@
 # Bundle Update Log
 
+## 2026-11-02
+* **Update**: Added CAP-39 and CAP-40 for `shikumi 0.5.0.0`: typed
+probability-backed decisions and persistent settings applied after retrieval.
+Added CAP-41 for `shikumi-optimize 0.3.1.0`: ReAnchor calibration with
+response replay, fold acceptance and accepted-candidate reporting. Each new
+record links its requirements; existing handles and `since` values stay fixed.
+* **Update**: Refined CAP-24 limits for judgment-only request defaults and
+CAP-8 limits to distinguish transport-call evidence from reusable decision
+probability content.
+* **No catalog change**: The remaining dependent packages widen bounds or add
+compatibility tests. Structured-data omission from agent summaries refines the
+existing safe summary behavior rather than adding an adoption surface. Provider
+transport changes belong to `mori://shinzui/baikai`.
+
 ## 2026-10-16
 * **No catalog change**: Audited the ten-package Baikai compatibility patch
 release. The new dependency bounds, Haddock corrections, and atomic optimizer

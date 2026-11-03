@@ -82,3 +82,6 @@ this repository but has not been published to Hackage, so its `since` value is
 | [CAP-36](node-local-bootstrap-pools.md) | Node-local bootstrap demonstration pools | 0.3.0.0 | shikumi-optimize |
 | [CAP-37](cli-schema-enforced-output.md) | Schema-enforced structured output on subscription CLIs | 0.4.1.0 | shikumi |
 | [CAP-38](shape-guided-fallback-prompts.md) | Shape-guided fallback prompts | 0.4.1.0 | shikumi |
+| [CAP-39](probability-backed-decisions.md) | Probability-backed typed decisions | 0.5.0.0 | shikumi |
+| [CAP-40](persistent-decision-settings.md) | Persistent decision calibration settings | 0.5.0.0 | shikumi |
+| [CAP-41](reanchor-decision-calibration.md) | ReAnchor decision calibration | 0.3.1.0 | shikumi-optimize |
