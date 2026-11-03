@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`, `mori://shinzui/baikai/packages/baikai-claude` to `>=0.7.3.0 && <0.8`, `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.4.0.5 && <0.5`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.3.0 && <0.8`.
+
 - Add probability-backed `NoulWith`/`Noul`, `Choice` and `Score` outputs on
   judgment-only and generative models. Closed evidence schemas, typed preflight
   refusals and strict evidence decoding feed shared local derivation.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`.
+
 - Add ReAnchor calibration for decision thresholds, score cuts and choice weights.
   Candidate trials use run-local response replay above admission, retain only strict
   improvements that pass held-out folds, and preserve absent settings on rejection.

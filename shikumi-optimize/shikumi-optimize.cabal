@@ -74,7 +74,7 @@ library
 
   build-depends:
     aeson >=2.2 && <2.3,
-    baikai >=0.9.0.0 && <0.10,
+    baikai >=0.10.0.0 && <0.11,
     base >=4.20 && <5,
     containers >=0.6 && <0.9,
     effectful >=2.6 && <2.8,
@@ -122,7 +122,7 @@ test-suite shikumi-optimize-test
 
   build-depends:
     aeson,
-    baikai >=0.9.0.0 && <0.10,
+    baikai >=0.10.0.0 && <0.11,
     base,
     containers,
     effectful,

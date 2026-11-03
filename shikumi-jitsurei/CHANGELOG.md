@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.3.0 && <0.8`.
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.1.1 && <0.8`.
 
 - Move the dependency on `mori://shinzui/baikai/packages/baikai` to `>=0.7.1.0 && <0.8`. Bounds only; no source changed.
