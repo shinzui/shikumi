@@ -26,7 +26,7 @@ evidence:
     proves: Closed schemas, typed state, judgment routing, local derivation and preflight refusals agree with the upstream judgment compiler.
   - kind: test
     resource: shikumi-testing/test/DecisionEvidenceSpec.hs
-    proves: Native JSON and marker evidence yield the same rich decisions with strict validation and refusal before streaming.
+    proves: Native JSON and marker evidence yield the same rich decisions with strict validation, with streamed judgment parity covered by CAP-42.
   - kind: guide
     resource: docs/user/decisions-and-calibration.md
     proves: Documents closed decision contracts, backend selection, a complete offline prediction, and released limits.
@@ -47,7 +47,8 @@ Builds on [CAP-1 typed signatures](typed-signatures-and-schemas.md), [CAP-3 stru
 
 ## Limits
 
-- Decisions support blocking prediction only; streaming refuses before dispatch.
+- Since `shikumi 0.5.1.0`, decisions also support streamed prediction with
+  checked atomic terminal decoding; see [CAP-42](streamed-judgment-parity.md).
 - Judgment-only models refuse free-form output fields and generation controls.
 - Score domains have 2 to 10 levels. Nested decision containers, recursive
   sessions and ReAct decision submissions are outside this provision.

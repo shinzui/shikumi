@@ -285,14 +285,15 @@ at the discharge site `runTime`. Because it is an effect, a test can later run c
 
 ## Streaming
 
-`streamProgram` supports generative prediction and progress reporting. Decision
-outputs currently refuse streaming before provider dispatch; see
-[decisions and calibration](decisions-and-calibration.md#cache-replay-and-current-limits).
+`streamProgram` supports generative prediction, typed judgments and progress
+reporting. Since `shikumi 0.5.1.0`, judgments share complete-call settings and
+decoding; TypeSafe supplies an atomic structured answer.
 
 At the transport level, `stream` / `Stream` exist for callers that need deltas;
 `runLLMResilient` charges streaming cost from the terminal event's assembled message. The cache
-and replay layers **pass `Stream` through unchanged** (only blocking `Complete` calls are
-cached/replayed).
+layer passes `Stream` through unchanged. Structured trace recordings can replay
+atomically through either operation since `shikumi-trace 0.3.2.0`; text streams
+keep usage-only capture.
 
 On top of that, `Shikumi.Stream` exposes streaming **at the program level** — a separate,
 additive entry point that does not touch `runProgram`:
@@ -451,3 +452,43 @@ terminal. Ordinary refusal content is not guaranteed to become a typed
 `ContentFiltered` error. Shikumi preserves the released classification; it does
 not infer refusals from text. The loopback regression pins one HTTP attempt for
 that failure even with retries enabled.
+
+## Acknowledging actual attempt evidence
+
+Since `shikumi 0.5.1.0`, `runLLMResilientWithEvidence` accepts an effectful
+`EvidenceObserver es`; `runLLMWithEvidence` provides the same boundary for bare
+calls with an explicit registry and billing observer. Keep its effects outside
+the interpreter. Returning normally acknowledges each original Baikai record.
+
+```haskell
+runEff . runConcurrent . runErrorNoCallStack @ShikumiError
+  . runRouting model
+  . runLLMResilientWithEvidence (liftIO . persistReceipt) cfg
+  . withEvidenceRuns (EvidenceRequired EvidenceModelObserved) (liftIO newCallId)
+  . routeLLM
+  $ runProgram program input
+```
+
+Here `persistReceipt :: AttemptReceipt -> IO ()` is application-owned storage.
+`withEvidenceRuns` mints a run per LLM operation, above retries; explicit request
+options win. Retry records increment the caller's base attempt and supersede the
+latest provider-built call ID. `logicalCallId` and `attemptOrdinal` correlate with
+billing observations; persist the enclosed Baikai call ID for durable identity.
+
+Settlement is budget charge, billing observer, evidence observer, then failure,
+retry or return. Typed observer errors become `EvidenceObserverFailed` exceptions;
+other exceptions propagate unchanged. Neither a transport retry nor a program
+`Retry` redispatches after acknowledgement fails. Observers must be thread-safe
+for concurrent programs; worker-local State changes do not reach the parent.
+
+An observer alone does not request evidence. Best-effort collection can omit a
+record; required evidence is enforced by Baikai. Strict pre-dispatch refusal can
+produce a receipt even though no HTTP occurred. Budget refusal, a rate-limit
+waiter, cache and replay produce none. Cancellation currently produces no receipt
+on the Baikai collection path; the upstream addition is tracked at
+`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-13`.
+
+`AttemptReceipt` has no JSON instances. Full evidence error messages can include
+provider response text; select and redact fields according to application policy.
+The [Responses example](../../shikumi-jitsurei/app/Responses.hs) demonstrates the
+public runner and per-operation run IDs without paid calls by default.

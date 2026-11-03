@@ -4,17 +4,37 @@ title: Support streamed judgment programs with typed result parity
 description: >-
   Support decision outputs through the public streaming runner and router while
   preserving complete-call derivation settings, structured answers, and acknowledged attempt evidence.
-timestamp: "2026-11-03T03:54:05Z"
+timestamp: "2026-11-03T04:46:53Z"
 generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-03T03:54:05Z"
 requestId: IR-5
 status: proposed
+reviews:
+  - kind: model
+    reviewer: openai/gpt-6.1-sol
+    reviewed_at: "2026-11-03T04:46:53Z"
+    document_timestamp: "2026-11-03T04:46:53Z"
+    scope: technical-accuracy
+    outcome: commented
+    context: >-
+      Verified implementation against the released TypeSafe loopback, attempt-evidence
+      barriers and cache/replay suites; release and downstream acceptance remain pending.
+    provider: openai
+    model: gpt-6.1-sol
+    effort: unspecified
 origin: mori://shinzui/shikigami
 targetPlan: mori://shinzui/shikigami/plans/80-configure-model-providers-and-agent-launches-through-baikai
 ---
 
 # Improvement Request: Support Streamed Judgment Programs with Typed Result Parity
+
+## Status
+
+Implemented and verified by [plan 68](../plans/68-support-streamed-judgment-programs-with-typed-result-parity.md).
+The `shikumi 0.5.1.0` and `shikumi-trace 0.3.2.0` release artifacts are being
+prepared. Keep this request open until the tagged Hackage release is verified.
+The Shikigami downstream acceptance gate remains pending its released fixture.
 
 ## Context
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.1.1 — 2026-11-03
+
+### Changed
+
+- Add decision cache coverage for evidence removal, evidence-request bypass,
+  structured response serialization, and continued stream cache bypass.
+- Require `shikumi ^>=0.5.1.0` for the accompanying structured stream test helpers.
+  Production cache behavior is unchanged.
+
 ## 0.2.1.0 — 2026-11-02
 
 ### Changed

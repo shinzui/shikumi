@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.5.1.0 — 2026-11-03
+
+### Added
+
+- Support typed decision outputs through `streamProgram` and `routeLLM`, with
+  shared request preparation, immutable calibration, and checked atomic terminals.
+- Add `preparePredict`, `responseFromEvents`, and `atomicEventsFromResponse`.
+- Add `Shikumi.LLM.Evidence`, effectful evidence-aware bare and resilient runners,
+  and `withEvidenceRuns` for per-operation run IDs. Acknowledgement occurs after
+  budget and billing settlement and before retry, failure or successful return.
+
+### Fixed
+
+- Increment Baikai attempt provenance across retries and link superseded records.
+- Make typed evidence-observer failures terminal across both retry layers.
+- Fail closed when required evidence cannot accompany a thrown transport error.
+
+### Limits
+
+- Decision streams deliver status only; TypeSafe answers atomically. The LLM
+  effect collects events before invoking program callbacks.
+- Cancelled attempts have no receipt until upstream exposure is released at
+  `mori://shinzui/baikai/okf/improvement-requests/concepts/IR-13`.
+- Full evidence can contain provider response text; AttemptReceipt deliberately
+  has no JSON instances. Existing LLMConfig and runner signatures are unchanged.
+
 ## 0.5.0.0 — 2026-11-02
 
 ### Added

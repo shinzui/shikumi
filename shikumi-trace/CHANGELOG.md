@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.3.2.0 — 2026-11-03
+
+### Added
+
+- Capture valid atomic structured streams through the existing response codec.
+- Replay structured recordings through either Complete or Stream, including
+  changed local decision calibration, without provider dispatch or fresh evidence.
+
+### Changed
+
+- Require `shikumi ^>=0.5.1.0` for pure checked response/event helpers.
+- Keep text streams usage-only; missing, malformed and text-only stream recordings
+  fail closed with ReplayDivergence. Serialized responses still omit call evidence.
+
 ## 0.3.1.0 — 2026-11-02
 
 ### Changed

@@ -312,7 +312,8 @@ text, opaque reasoning, cache key, or structural node parent. They never enter t
 replay index. IDs identify invocations within a process, not globally durable runs.
 
 Blocking and streaming logical spans carry optional billing quality. Streaming
-usage comes from the terminal payload; it does not make streaming replayable.
+usage comes from the terminal payload. Since `shikumi-trace 0.3.2.0`, checked
+structured terminals also provide replay records; text streams keep usage only.
 The response model comes only from actual evidence; the request `Model` echoed
 in `Response.model` is not such evidence. Cache hits clear evidence even in the
 memory backend. Evidence-requesting calls continue to bypass cache reads and writes.
@@ -365,5 +366,26 @@ therefore the cache identity. Changing an existing numeric setting does not.
 Replay applies the current local settings to recorded responses. If a changed
 answer changes the next stage's request, that stage requires a matching recording
 or fails closed; a cache instead treats a new request as a miss. Decision
-streaming is currently unsupported. See [CAP-40](../capabilities/persistent-decision-settings.md)
+streaming shares the complete runner's derivation since `shikumi 0.5.1.0`. See [CAP-40](../capabilities/persistent-decision-settings.md)
 for acceptance evidence and limits.
+
+## Atomic structured stream replay
+
+Since `shikumi-trace 0.3.2.0`, `tracedLLM` captures a valid structured stream's
+terminal response using the ordinary response codec. Either capture mode can
+supply either replay mode: a complete recording can replay through `streamProgram`,
+and a stream recording through `runProgram`. Changed local decision settings
+rederive from the recorded distributions without calling a provider.
+
+Replay requires usable structured content for a Stream request. Text-only,
+missing and malformed recordings raise `ReplayDivergence`. Text streams keep
+usage-only tracing, and live streams continue to bypass cache memoization. The
+response codec preserves raw value, probabilities, confidence and method but
+omits provider call evidence. Recorded span identity is historical; replay
+creates no transport receipt or billing attempt.
+
+For raw answers at the LLM boundary, use `responseFromEvents model events` and
+retain its Response alongside the typed result. It checks one final success
+terminal and matching DataEnd blocks; it never turns probability data into text.
+Decision program callbacks emit LmStart/LmEnd only after checked decoding; TypeSafe
+supplies one atomic HTTP answer. Ordinary text outputs retain field callbacks.

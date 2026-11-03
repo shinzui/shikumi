@@ -66,3 +66,9 @@ and changes the key material used by
   the supported one.
 - Defaults describe request options only. They do not select a model — that
   remains routing's job.
+
+For one evidence run ID per logical LLM operation, use `withEvidenceRuns` with an
+action that mints IDs. Retries retain that ID, and explicit per-call evidence
+requests win. A fixed `defaultEvidence` instead shares its run ID across all
+operations in scope. The acknowledgement API is described by
+[CAP-43](acknowledged-attempt-evidence.md).

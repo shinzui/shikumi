@@ -57,3 +57,7 @@ Builds on [CAP-39 probability-backed decisions](probability-backed-decisions.md)
 - Existing positional `Params` construction needs migration to the new field;
   prefer record updates from `emptyParams`.
 - This capability supplies settings and derivation, not automatic fitting.
+
+Complete and streamed judgments apply the same immutable settings after response
+retrieval since `shikumi 0.5.1.0`; [CAP-42](streamed-judgment-parity.md) proves
+weighted-choice, threshold and cut parity while preserving the raw answer.

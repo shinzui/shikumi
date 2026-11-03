@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.4.2.1 — 2026-11-03
+
+### Changed
+
+- Exercise typed judgment streaming against the released TypeSafe loopback, including
+  calibration parity, atomic events, retry receipts, acknowledgement barriers,
+  cancellation, callback failure and pre-dispatch refusals.
+- Require `shikumi ^>=0.5.1.0` for this integration cohort. Tool APIs are unchanged.
+
 ## 0.4.2.0 — 2026-11-02
 
 ### Changed

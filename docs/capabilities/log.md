@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Update**: Add CAP-42 for streamed judgment parity and CAP-43 for acknowledged attempt evidence in shikumi 0.5.1.0; add CAP-44 for cross-mode structured replay in shikumi-trace 0.3.2.0. Refine existing streaming, replay, settings and billing limits without moving their since versions.
 * **Update**: Added user-guide evidence for CAP-22 and CAP-39–41, including a
 complete offline decision example, local threshold changes over cached responses,
 answer-focused metrics, ReAnchor fitting and persistence, and OKF manifest usage.

@@ -49,7 +49,8 @@ summarize = predict (mkSignature "Summarize the article.")
 `Program i o` carries no effect-row constraint. Its runners return an `Eff es o`
 computation; interpreters choose the provider and install policies such as routing,
 caching, tracing, and budgets. Additional runners support concurrency, node
-observation, and streaming. Decision streaming is currently unsupported.
+observation, and streaming. Since `shikumi 0.5.1.0`, decision streaming shares
+the complete runner's calibrated results and delivers atomic status events.
 
 Prediction-node parameters include instructions, demonstrations, and per-field
 decision settings. Optimizers search those parameters; structure search selects

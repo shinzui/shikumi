@@ -38,7 +38,10 @@ for the same key make index construction fail.
 
 ## Limits
 
-- Replay covers blocking completion calls, not transport streams.
+- The original blocking replay contract remains available. Since `shikumi-trace
+  0.3.2.0`, structured recordings also supply atomic streams in either capture
+  mode; see [CAP-44](atomic-structured-replay.md). Text-only stream replay is
+  rejected with `ReplayDivergence`.
 - It reproduces provider responses, not arbitrary external effects hidden inside
   an embedded program node.
 - Changes to canonical request identity can intentionally invalidate older

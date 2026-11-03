@@ -93,3 +93,6 @@ for CAP-29, or [program documentation](../user/program-documentation.md) for CAP
 | [CAP-39](probability-backed-decisions.md) | Probability-backed typed decisions | 0.5.0.0 | shikumi |
 | [CAP-40](persistent-decision-settings.md) | Persistent decision calibration settings | 0.5.0.0 | shikumi |
 | [CAP-41](reanchor-decision-calibration.md) | ReAnchor decision calibration | 0.3.1.0 | shikumi-optimize |
+| [CAP-42](streamed-judgment-parity.md) | Streamed judgment result parity | 0.5.1.0 | shikumi |
+| [CAP-43](acknowledged-attempt-evidence.md) | Acknowledged provider attempt evidence | 0.5.1.0 | shikumi |
+| [CAP-44](atomic-structured-replay.md) | Atomic structured stream replay | 0.3.2.0 | shikumi-trace |

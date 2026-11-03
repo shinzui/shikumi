@@ -4,7 +4,7 @@ title: Expose acknowledged evidence for every resilient LLM attempt
 description: >-
   Add a released, call-scoped Shikumi seam that supplies fresh Baikai evidence provenance and
   acknowledges every provider attempt before retrying or returning.
-timestamp: 2026-08-22T19:11:51Z
+timestamp: 2026-11-03T04:46:53Z
 generated:
   by: openai/gpt-5
   at: "2026-08-22T19:11:51Z"
@@ -31,9 +31,18 @@ reviews:
 
 ## Status
 
-Proposed. This is the Shikumi-owned prerequisite for
-`mori://shinzui/kioku/masterplans/4-secure-and-accountable-distillation-evidence` and
-`mori://shinzui/kioku/plans/16-add-distillation-replay-metadata`.
+Implementation is delivered by [plan 68](../plans/68-support-streamed-judgment-programs-with-typed-result-parity.md),
+with the `shikumi 0.5.1.0` release prepared. This request remains open only for
+cancelled-attempt evidence. The current Baikai collection path supplies no record
+on cancellation; exposure is requested at
+`mori://shinzui/baikai/okf/improvement-requests/concepts/IR-13`. Shikumi must consume
+that released addition and prove exact abort evidence before completing IR-3.
+
+All other lifecycle cases pass the hermetic `AttemptEvidence` suite and the
+released TypeSafe loopback: effectful acknowledgement before retry/return,
+per-attempt provenance, refusal records, terminal observer failure, and concurrent
+call isolation. The public runners leave LLMConfig unchanged. Hackage publication
+and the Kioku consumer gate are tracked separately in plan 68.
 
 
 ## Context

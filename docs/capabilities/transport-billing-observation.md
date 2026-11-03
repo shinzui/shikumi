@@ -56,3 +56,8 @@ the retry and budget behavior it observes is unchanged by observing it.
   reports no usage, the observation says unknown; it does not estimate.
 - Observation is accounting, not tracing. Node-level structure and lineage come
   from [CAP-11](hierarchical-tracing.md), not from this interface.
+
+Full provider-built attempt records are available separately through
+[CAP-43](acknowledged-attempt-evidence.md), since `shikumi 0.5.1.0`. That observer
+runs after billing and acknowledges before retry or return. Billing observations
+keep their restricted vocabulary and do not acquire raw provider error text.

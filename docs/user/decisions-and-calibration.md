@@ -5,8 +5,9 @@ known labels, or a rating on an ordered scale, together with probability evidenc
 Shikumi separates the model's evidence from the local rule that chooses an answer.
 That lets you evaluate and tune decision policy without changing the task prompt.
 
-This guide covers the released `shikumi 0.5.0.0` and
-`shikumi-optimize 0.3.1.0` APIs. Decision streaming remains pending. See
+This guide covers `shikumi 0.5.1.0` and `shikumi-optimize 0.3.1.0`.
+Decision streaming shares complete-call calibration and returns a checked atomic
+answer; see [streamed judgments](../capabilities/streamed-judgment-parity.md). See
 [the schema reference](signatures-and-schemas.md#probability-backed-decisions)
 for wire formats, decoding, and structured demonstrations.
 
@@ -241,7 +242,8 @@ plain Boolean or enum into evidence mode for the first time does change its sche
 rich decision types always request probability evidence. ReAnchor targets rich
 decision fields and does not automatically promote plain Boolean or enum fields.
 
-Decision streaming, nested decision containers, ReAct final submissions, and
-recursive-session decision outputs are currently unsupported. The
+Nested decision containers, ReAct final submissions, and recursive-session
+decision outputs are currently unsupported. Streams bypass response caching;
+structured trace recordings support atomic replay since `shikumi-trace 0.3.2.0`. The
 [capability catalog](../capabilities/probability-backed-decisions.md) records the
 shipped scope and links its acceptance tests.

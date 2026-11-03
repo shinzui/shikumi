@@ -50,12 +50,17 @@ Also implement [IR-3](../improvement-requests/expose-acknowledged-evidence-for-r
 - [x] M2 (2026-11-03; 31 AttemptEvidence tests pass for both operations, including barriers and concurrency): An effectful attempt observer and truthful per-attempt evidence work for blocking and streaming calls; hermetic tests cover IR-3's required cases other than cancelled-attempt evidence.
 - [x] M3 (2026-11-03; 21 SystemOne tests plus malformed-terminal and mixed generative regression tests pass): Structured terminal validation, acknowledged receipts, retries, cancellation, and observer/callback failures satisfy the lifecycle acceptance matrix for streamed judgments through the released TypeSafe provider.
 - [x] M4 (2026-11-03; 37 trace and 36 cache tests pass, including cross-mode replay and evidence bypass): Structured stream capture/replay and existing cache policy preserve answers without fresh provider evidence; generative regressions pass.
-- [ ] M5: Documentation, ADRs, release versions and source distributions are prepared. Full build, 13 Cabal suites, Haddock, formatting, flake checks and package checks pass. Release commit, tags, Hackage/GitHub publication and artifact verification remain pending the release skill's version sign-off; downstream acceptance remains separate.
+- [ ] M5: Documentation, ADRs, release versions and source distributions are prepared. Full build, 13 Cabal suites, Haddock, formatting, flake checks and package checks pass. The user approved the four release versions on 2026-11-03. Release commit, tags, Hackage/GitHub publication and artifact verification remain pending; downstream acceptance remains separate.
 
 Release handoff (2026-11-03): implementation commit `0c9ddb4` completes M1–M4.
 Prepared versions are `shikumi 0.5.1.0`, `shikumi-cache 0.2.1.1`,
 `shikumi-tools 0.4.2.1`, and `shikumi-trace 0.3.2.0`. Source distributions live
-under `dist-newstyle/sdist/`. Documentation and release changes are staged
+under `dist-newstyle/sdist/`; matching Hackage documentation archives are under
+`dist-newstyle/`. All four archives were inspected: version and minimum core bounds
+match, every packaged local file matches its working-tree bytes, and the new
+Evidence module is exposed and included. The documentation archives contain their
+Haddock interfaces and HTML indexes. Hackage and local tags confirm all four
+proposed versions are unused. Documentation and release changes are staged
 selectively so concurrent user-guide edits are not included. Do not mark IR-5
 completed until the tagged Hackage artifacts are verified. IR-3 remains open
 only for cancelled-attempt evidence. Shikigami and Kioku consumer gates are pending.
@@ -154,7 +159,8 @@ accepted: enter the dev shell at the repository root and change directories
 inside the command when checking packages. Newly generated unused package-local
 database clusters were moved to a temporary recovery directory.
 
-M5 remains open for release sign-off, publication and registry/tag verification.
+The user approved the prepared release versions on 2026-11-03. M5 remains open
+for publication and registry/tag verification.
 No downstream source changes or acceptance claims were made.
 
 ## Context and Orientation

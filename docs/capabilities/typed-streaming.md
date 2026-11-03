@@ -49,5 +49,9 @@ It builds on [CAP-2](composable-program-values.md),
 - Field-level chunks are promised for a prediction node on the raw-text/fallback
   path. Native whole-JSON responses may only become meaningful once complete.
 - Composite and opaque nodes emit status rather than fabricated field chunks.
-- Cache and replay interpreters pass transport-level streaming through; they
-  cache and replay blocking completion calls only.
+- Streams continue to bypass response caching. Since `shikumi 0.5.1.0`,
+  decision streams use checked atomic terminal decoding; see
+  [CAP-42](streamed-judgment-parity.md). Structured trace replay is available
+  since `shikumi-trace 0.3.2.0`; see [CAP-44](atomic-structured-replay.md).
+- The LLM effect collects transport events before program callbacks run;
+  field callbacks are not a live transport iterator.
