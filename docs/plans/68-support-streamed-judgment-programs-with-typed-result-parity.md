@@ -50,7 +50,16 @@ Also implement [IR-3](../improvement-requests/expose-acknowledged-evidence-for-r
 - [x] M2 (2026-11-03; 31 AttemptEvidence tests pass for both operations, including barriers and concurrency): An effectful attempt observer and truthful per-attempt evidence work for blocking and streaming calls; hermetic tests cover IR-3's required cases other than cancelled-attempt evidence.
 - [x] M3 (2026-11-03; 21 SystemOne tests plus malformed-terminal and mixed generative regression tests pass): Structured terminal validation, acknowledged receipts, retries, cancellation, and observer/callback failures satisfy the lifecycle acceptance matrix for streamed judgments through the released TypeSafe provider.
 - [x] M4 (2026-11-03; 37 trace and 36 cache tests pass, including cross-mode replay and evidence bypass): Structured stream capture/replay and existing cache policy preserve answers without fresh provider evidence; generative regressions pass.
-- [ ] M5: Public documentation and ADRs describe the contract; release gates pass and the tagged Hackage artifact is verified, with downstream acceptance tracked separately.
+- [ ] M5: Documentation, ADRs, release versions and source distributions are prepared. Full build, 13 Cabal suites, Haddock, formatting, flake checks and package checks pass. Release commit, tags, Hackage/GitHub publication and artifact verification remain pending the release skill's version sign-off; downstream acceptance remains separate.
+
+Release handoff (2026-11-03): implementation commit `0c9ddb4` completes M1–M4.
+Prepared versions are `shikumi 0.5.1.0`, `shikumi-cache 0.2.1.1`,
+`shikumi-tools 0.4.2.1`, and `shikumi-trace 0.3.2.0`. Source distributions live
+under `dist-newstyle/sdist/`. Documentation and release changes are staged
+selectively so concurrent user-guide edits are not included. Do not mark IR-5
+completed until the tagged Hackage artifacts are verified. IR-3 remains open
+only for cancelled-attempt evidence. Shikigami and Kioku consumer gates are pending.
+
 
 ## Surprises & Discoveries
 
@@ -108,10 +117,45 @@ Also implement [IR-3](../improvement-requests/expose-acknowledged-evidence-for-r
 
 2026-11-03: Under `EvidenceRequired`, a thrown `BaikaiError` is terminal instead of retried, because that attempt can never be accounted for. The call fails with a non-transient `ValidationFailure` naming only the stable `errorClass`, so no provider text is carried.
 
+2026-11-03 (implementation): Actual exported types and signatures confirm an
+additive core release at 0.5.1.0 and structured replay growth at trace 0.3.2.0.
+Cache 0.2.1.1 and tools 0.4.2.1 carry test-only integration changes and require
+core 0.5.1.0 in their release cohort. Existing dependent bounds admit these
+versions without a repository-wide release. CAP-42–44 record the material growth
+without moving older capabilities' since versions.
+
 2026-11-03: The public API change is now additive, so the expected release is `shikumi` 0.5.1.0, to be confirmed by the release step's review of the actual diff. A PVP major bump is approved if that review finds one is needed.
 
 ## Outcomes & Retrospective
 
+
+2026-11-03: M1–M4 are implemented and verified. Real TypeSafe HTTP fixtures prove
+calibrated typed/raw parity, exact atomic event order, acknowledged retry evidence,
+preflight refusals, cancellation cleanup and observer/callback failure. Pure
+structured replay supports both capture modes and both replay modes; cache policy
+continues to bypass streams and evidence requests. ADR-13–15 were revised and
+ADR-16 records the acknowledged evidence boundary.
+
+Final-candidate `cabal build all` and `cabal test all` pass. The 13 test suites
+include 819 tests; Redis reports its existing zero-test skip, and paid/live tests
+remain disabled. Relevant suite counts are core 300 (31 AttemptEvidence), tools
+159 (21 SystemOne), harness 37, trace 37 and cache 36. `scripts/check-haddock.sh`
+passes for all packages after removing a stale quoted parse reference in Stream.
+`nix fmt`, `nix flake check`, the 44-record capability catalog, 16-record ADR bundle,
+and four release-package `cabal check` runs pass. Hackage confirms Baikai core
+0.10.0.0 and TypeSafe 0.1.0.1; upstream annotated tags peel to
+`03140cf60381ac154ebfa86d3bb2208d7df8626c`. No dependency override was introduced.
+
+FRIC-1 in `docs/friction-log/` is accepted: strict improvement-request validation
+still reports missing historical review metadata on three unchanged requests;
+current IR-5 technical verification is recorded without inventing old reviews.
+This is separate from the passing release capability and ADR gates. FRIC-2 is
+accepted: enter the dev shell at the repository root and change directories
+inside the command when checking packages. Newly generated unused package-local
+database clusters were moved to a temporary recovery directory.
+
+M5 remains open for release sign-off, publication and registry/tag verification.
+No downstream source changes or acceptance claims were made.
 
 ## Context and Orientation
 

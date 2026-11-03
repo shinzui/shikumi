@@ -138,7 +138,7 @@ data StreamEvent
 
 -- | Drive one streaming LM call, folding baikai events into 'StreamEvent's
 -- delivered to the callback in order, and return the fully assembled 'Response'
--- (reassembled from the terminal event) so the caller can 'parse' it into a typed
+-- (reassembled from the terminal event) so the caller can decode it into a typed
 -- value exactly as the blocking path would.
 --
 -- Each @TextDelta@ becomes a 'StreamFieldChunk' attributed to @fieldNm@; the final

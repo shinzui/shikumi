@@ -263,6 +263,13 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "friction-log"
+        , path = "docs/friction-log"
+        , profile = Some "docs/friction-log/profile.dhall"
+        , okfVersion = "0.2"
+        , description = Some "Implementation friction with stable FRIC handles"
+        }
+      , Schema.OkfBundle::{
         , name = "improvement-requests"
         , path = "docs/improvement-requests"
         , profileBinding = Some
