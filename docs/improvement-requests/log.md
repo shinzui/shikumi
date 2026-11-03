@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-11-03
+* **Update**: Complete IR-5 after verifying all four tagged Hackage artifacts, published Haddock and GitHub releases at 7b96ecf. IR-3 stays open only for cancelled-attempt evidence; downstream consumer fixtures remain pending.
 * **Update**: IR-5 implementation and transport fixtures pass; tagged Hackage verification remains pending. IR-3 stays open only for cancelled-attempt evidence, delegated upstream to mori://shinzui/baikai/okf/improvement-requests/concepts/IR-13.
 * **Addition**: IR-5 requests public judgment streaming with complete-call settings and typed-result parity, atomic TypeSafe events, and acknowledged attempt evidence.
 

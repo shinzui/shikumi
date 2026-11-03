@@ -4,12 +4,20 @@ title: Support streamed judgment programs with typed result parity
 description: >-
   Support decision outputs through the public streaming runner and router while
   preserving complete-call derivation settings, structured answers, and acknowledged attempt evidence.
-timestamp: "2026-11-03T04:46:53Z"
+timestamp: "2026-11-03T12:51:45Z"
 generated:
   by: "codex-cli/gpt-6.1-sol"
   at: "2026-11-03T03:54:05Z"
 requestId: IR-5
-status: proposed
+status: completed
+completedAt: "2026-11-03T12:51:45Z"
+resolution: >-
+  Implemented by docs/plans/68-support-streamed-judgment-programs-with-typed-result-parity.md
+  and released as shikumi 0.5.1.0, shikumi-cache 0.2.1.1, shikumi-tools 0.4.2.1
+  and shikumi-trace 0.3.2.0. Typed stream parity, acknowledged attempt evidence
+  and structured replay pass hermetic and released TypeSafe loopback fixtures.
+  Tagged Hackage artifacts and GitHub releases are verified; downstream acceptance
+  remains the consuming repository's separate gate.
 reviews:
   - kind: model
     reviewer: openai/gpt-6.1-sol
@@ -31,10 +39,23 @@ targetPlan: mori://shinzui/shikigami/plans/80-configure-model-providers-and-agen
 
 ## Status
 
-Implemented and verified by [plan 68](../plans/68-support-streamed-judgment-programs-with-typed-result-parity.md).
-The `shikumi 0.5.1.0` and `shikumi-trace 0.3.2.0` release artifacts are being
-prepared. Keep this request open until the tagged Hackage release is verified.
-The Shikigami downstream acceptance gate remains pending its released fixture.
+Completed on 2026-11-03 by [plan 68](../plans/68-support-streamed-judgment-programs-with-typed-result-parity.md).
+The tagged [shikumi 0.5.1.0](https://hackage.haskell.org/package/shikumi-0.5.1.0)
+and [shikumi-trace 0.3.2.0](https://hackage.haskell.org/package/shikumi-trace-0.3.2.0)
+releases are published, together with cache 0.2.1.1 and tools 0.4.2.1. Every tag
+points to `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5`; Hackage source archives
+match the inspected release bytes and public Haddock documentation is verified.
+
+The core suite includes 31 acknowledged-attempt tests. The 21 SystemOne tests
+exercise the released TypeSafe provider over loopback HTTP: default and explicit
+calibration parity, exact raw answers and wire bodies, atomic event order,
+acknowledgement barriers, retry provenance, cancellation cleanup and failure
+boundaries. Trace and cache tests retain structured data without fresh receipts.
+All 13 Cabal suites, build, formatting, flake, Haddock and package checks pass,
+with Redis's existing integration skip and paid/live calls disabled.
+
+The Shikigami downstream acceptance gate remains pending its own released-cohort
+fixture. This completed supplier request does not claim consumer acceptance.
 
 ## Context
 

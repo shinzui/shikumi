@@ -50,20 +50,14 @@ Also implement [IR-3](../improvement-requests/expose-acknowledged-evidence-for-r
 - [x] M2 (2026-11-03; 31 AttemptEvidence tests pass for both operations, including barriers and concurrency): An effectful attempt observer and truthful per-attempt evidence work for blocking and streaming calls; hermetic tests cover IR-3's required cases other than cancelled-attempt evidence.
 - [x] M3 (2026-11-03; 21 SystemOne tests plus malformed-terminal and mixed generative regression tests pass): Structured terminal validation, acknowledged receipts, retries, cancellation, and observer/callback failures satisfy the lifecycle acceptance matrix for streamed judgments through the released TypeSafe provider.
 - [x] M4 (2026-11-03; 37 trace and 36 cache tests pass, including cross-mode replay and evidence bypass): Structured stream capture/replay and existing cache policy preserve answers without fresh provider evidence; generative regressions pass.
-- [ ] M5: Documentation, ADRs, release versions and source distributions are prepared. Full build, 13 Cabal suites, Haddock, formatting, flake checks and package checks pass. The user approved the four release versions on 2026-11-03. Release commit, tags, Hackage/GitHub publication and artifact verification remain pending; downstream acceptance remains separate.
+- [x] M5 (2026-11-03): Documentation, ADRs, release gates, four tagged Hackage packages and matching GitHub releases are complete. Published source archives match the verified release bytes, public Haddock pages are verified, and all remote tags point to `7b96ecf06364b37de44b15c4f58b2528b5a3e0f5`. Downstream acceptance is explicitly pending.
 
-Release handoff (2026-11-03): implementation commit `0c9ddb4` completes M1–M4.
-Prepared versions are `shikumi 0.5.1.0`, `shikumi-cache 0.2.1.1`,
-`shikumi-tools 0.4.2.1`, and `shikumi-trace 0.3.2.0`. Source distributions live
-under `dist-newstyle/sdist/`; matching Hackage documentation archives are under
-`dist-newstyle/`. All four archives were inspected: version and minimum core bounds
-match, every packaged local file matches its working-tree bytes, and the new
-Evidence module is exposed and included. The documentation archives contain their
-Haddock interfaces and HTML indexes. Hackage and local tags confirm all four
-proposed versions are unused. Documentation and release changes are staged
-selectively so concurrent user-guide edits are not included. Do not mark IR-5
-completed until the tagged Hackage artifacts are verified. IR-3 remains open
-only for cancelled-attempt evidence. Shikigami and Kioku consumer gates are pending.
+All milestones are complete. The released cohort is `shikumi 0.5.1.0`,
+`shikumi-cache 0.2.1.1`, `shikumi-tools 0.4.2.1`, and `shikumi-trace 0.3.2.0`.
+IR-5 is completed. IR-3 remains open only for cancelled-attempt evidence, which
+requires the upstream Baikai addition. Shikigami and Kioku consumer gates remain
+pending their own released-cohort fixtures; no downstream source changes or
+messages were made.
 
 
 ## Surprises & Discoveries
@@ -159,12 +153,44 @@ accepted: enter the dev shell at the repository root and change directories
 inside the command when checking packages. Newly generated unused package-local
 database clusters were moved to a temporary recovery directory.
 
-The user approved the prepared release versions on 2026-11-03. M5 remains open
-for publication and registry/tag verification.
-No downstream source changes or acceptance claims were made.
+The user approved the prepared versions on 2026-11-03. Release commit
+`7b96ecf06364b37de44b15c4f58b2528b5a3e0f5` was pushed to origin/master. All four
+annotated package tags were pushed and verified through `git ls-remote`; every
+tag peels to that release commit. Source packages and Haddock archives were
+published in dependency order, checking each registry entry and source archive
+before proceeding to dependents. Matching GitHub releases are public and their
+notes were verified against the approved package changelogs.
+
+Published packages are [shikumi 0.5.1.0](https://hackage.haskell.org/package/shikumi-0.5.1.0),
+[shikumi-cache 0.2.1.1](https://hackage.haskell.org/package/shikumi-cache-0.2.1.1),
+[shikumi-tools 0.4.2.1](https://hackage.haskell.org/package/shikumi-tools-0.4.2.1), and
+[shikumi-trace 0.3.2.0](https://hackage.haskell.org/package/shikumi-trace-0.3.2.0).
+Each source archive downloaded from Hackage is byte-identical to the inspected
+local distribution. Their SHA-256 values are:
+
+```text
+shikumi-0.5.1.0        a42d0f036318e52556439feff4ff1be22219ac770b6782fd310da54cfb7b7c3c
+shikumi-cache-0.2.1.1  1f27370801f064aa959e7aa6f70d7799d8f558407cc37d5dcc1238fbe25d0f14
+shikumi-tools-0.4.2.1  330a6e49ebfe92de8986b1c3351b14eb30944af794810ac60bb026b52e3a61e9
+shikumi-trace-0.3.2.0  01282ab6427a012d5be3684ddbce96e6a556cc979363eb83e1435014f8b55094
+```
+
+Public module documentation matches the uploaded HTML after accounting for
+Hackage's injected synopsis CSS. Core's Evidence API, cache, ReAct and trace
+Replay pages all resolve. The offline `cabal run jitsurei-responses` example also
+passes: three acknowledged receipts, three completed transport attempts, one
+tool execution, a validated Paris answer and a preserved opaque continuation. GitHub releases use the corresponding package tags at
+`https://github.com/shinzui/shikumi/releases/tag/<package>-<version>`. IR-5 is
+completed; IR-3's sole remaining item is cancelled-attempt evidence. Shikigami
+and Kioku acceptance are separately pending. No downstream acceptance is inferred
+from publication or local tests.
+
 
 ## Context and Orientation
 
+
+The following orientation describes the baseline at plan creation; the completed
+implementation and release evidence are recorded above.
 
 `shikumi/src/Shikumi/Program.hs` owns `Params`, `runPredict`, `effectiveSignature`, and `parseResponseWithSettings`. `runPredict` validates each decision setting against the output schema, overlays parameters, chooses ordinary versus probability-evidence rendering, stamps structured input state, and derives the result after the response. `shikumi/src/Shikumi/Decision/Setting.hs` defines `NoulSetting`, `ChoiceSetting`, and `ScoreSetting`; these values never enter the provider request or cache key.
 
