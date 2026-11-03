@@ -210,6 +210,7 @@ The bundled CLI is also offline by default:
 
 ```bash
 cabal run shikumi-cli:exe:shikumi -- eval --program sentiment
+cabal run shikumi-cli:exe:shikumi -- record --program sentiment --store-dir .shikumi
 cabal run shikumi-cli:exe:shikumi -- trace sentiment --store-dir .shikumi
 cabal run shikumi-cli:exe:shikumi -- optimize --program sentiment --optimizer bootstrap-fewshot --out sentiment.json
 cabal run shikumi-cli:exe:shikumi -- replay sentiment --store-dir .shikumi
@@ -282,6 +283,7 @@ Start with the [user guide](docs/user/README.md):
 | [Getting started](docs/user/getting-started.md) | Install, run examples, write a first record-in/record-out program |
 | [When to use shikumi](docs/user/when-to-use-shikumi.md) | Choosing shikumi vs. using baikai directly |
 | [Core concepts](docs/user/concepts.md) | `Field`, `Signature`, `Program`, and `ShikumiError` |
+| [Decisions & calibration](docs/user/decisions-and-calibration.md) | Offline decision workflow, thresholds, task metrics, ReAnchor, and persistence |
 | [Signatures & schemas](docs/user/signatures-and-schemas.md) | Schema derivation, adapters, constraints, multimodal input |
 | [Programs & combinators](docs/user/programs-and-combinators.md) | Program nodes, runners, combinators, serialization |
 | [Effects & runtime](docs/user/effects-and-runtime.md) | `LLM`, routing, retries, rate limits, budgets, streaming |
@@ -291,6 +293,7 @@ Start with the [user guide](docs/user/README.md):
 | [Resumable sessions](docs/user/resumable-react-sessions.md) | Checkpoints, continuation, rich tool outputs, and typed final submissions |
 | [Context compaction](docs/user/agent-context-compaction.md) | Working-context management for long agent runs |
 | [Recursive sessions](docs/user/recursive-language-model-sessions.md) | Bounded external-document inspection and subqueries |
+| [Program documentation](docs/user/program-documentation.md) | Generate OKF bundles from program manifests |
 | [CLI](docs/user/cli.md) | Registry wiring and offline subcommands |
 
 The [capability catalog](docs/capabilities/index.md) provides stable `CAP-N`

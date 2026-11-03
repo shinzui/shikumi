@@ -122,11 +122,12 @@ class Validatable a where
 valid," so types opt in by writing an instance. `fromModelChecked` runs it and turns a
 rejection into a located `ValidationFailure`.
 
-> **Important seam.** A bare `predict` node does **not** run your `Validatable` instance
-> at the program level — the adapter's `parse` uses `fromModelChecked`, so type-level
-> validation runs during decode, but program-level enforcement of *your own* predicates is
-> the job of the [`validate`](./programs-and-combinators.md#validate) combinator. Use the
-> combinator when you want a rejection to drive a retry or surface as a program failure.
+Prediction adapters use `fromModelChecked`, so a bare `predict` runs the
+output type's `Validatable` instance after decoding. Field constraints are also
+enforced during decoding. The [`validate`](programs-and-combinators.md#validate)
+combinator adds a program-specific check; `validateRetry` retries a rejected
+result within a bounded number of attempts. Calling `fromModel` directly only
+decodes and does not run a record-level `Validatable` rule.
 
 ---
 
@@ -190,14 +191,15 @@ data Adapter i o = Adapter
   }
 ```
 
-**Four adapters ship.** Two are auto-selected per model by `adapterFor` / `capabilityFor`;
-`xmlAdapter` and `nestedXmlAdapter` are opt-in caller choices.
+**Four adapters ship.** Generative models use the native or fallback adapter;
+`xmlAdapter` and `nestedXmlAdapter` are opt-in choices. The separate `DecisionOnly`
+capability uses structured judgment state and evidence through the router.
 
 ```haskell
-data ModelCapability = NativeSchema | PromptFallback
+data ModelCapability = NativeSchema | PromptFallback | DecisionOnly
 
 capabilityFor :: Model -> ModelCapability    -- pure check on (provider, api) via Baikai's declaration
-adapterFor    :: Model -> Adapter i o        -- auto-selects native vs. fallback
+adapterFor    :: Model -> Adapter i o        -- native/fallback; decisions also require routing
 ```
 
 - **`nativeAdapter` (the reliable path).** For models that support provider-native structured
@@ -405,6 +407,9 @@ See [the runtime guide](effects-and-runtime.md#a-complete-responses-workflow)
 for separate provider registration and the offline command.
 
 ## Probability-backed decisions
+
+For a complete offline workflow, backend setup, task metrics, and persistence,
+start with [decisions and calibration](decisions-and-calibration.md).
 
 Use `Noul` for a yes/no decision, `Choice a` for a closed set of labels, and
 `Score '["Low", "Medium", "High"]` for ordered levels. Import them from

@@ -195,7 +195,7 @@ as a nested span tree.
 
 ### Node-correlated tracing & the feedback channel
 
-`runProgram`'s spans tell you *that* an LM call happened, not *which* program node issued it.
+`tracedLLM`'s spans tell you *that* an LM call happened, not *which* program node issued it.
 `runProgramTraced` (in `Shikumi.Trace.Program`) is an additive entry point — same semantics as
 `runProgram`, but it opens a span per node and tags each LM-call span with a `NodePath`:
 
@@ -211,8 +211,9 @@ recovers each node's input/output field names. Stack it like `tracedLLM`, but us
 capture and add `runCurrentNode`:
 
 ```haskell
-runEff . runPrim . runTime . runTrace . runCurrentNode
-  . runLLMResilient cfg . tracedNodeLLM
+runEff . runPrim . runTime . runConcurrent . runTrace
+  . runErrorNoCallStack @ShikumiError . runCurrentNode . runRouting model
+  . runLLMResilient cfg . tracedNodeLLM . routeLLM
   $ runProgramTraced program input
 ```
 
@@ -343,3 +344,26 @@ calls with only one HTTP request and one transport observation. These tests put
 the observer below the cache; the example requests evidence and does not add a
 cache. Replay and cached answers must never manufacture fresh billing attempts or
 provider evidence. Normal CI uses a dummy key and retains no real opaque payloads.
+
+## Decision evidence and cache identity
+
+Decision probability evidence is response content. Local settings in
+`Params.decisionSettings` apply after retrieval, so changing a threshold, score
+cut, or choice weight can reuse the same blocking response and derive a different
+answer. The [offline decision example](decisions-and-calibration.md#run-and-retune-a-decision-offline)
+runs two thresholds and reports one underlying completion.
+
+This is different from the transport evidence requested by `Options.evidence`.
+That option asks for observation of a new provider crossing, and such requests
+bypass cache reads and writes. A cached decision distribution does not establish
+a fresh transport attempt or fresh billing evidence.
+
+Rich decision types always request probability evidence. Opting a plain Boolean
+or enum into evidence mode for the first time changes the request schema and
+therefore the cache identity. Changing an existing numeric setting does not.
+
+Replay applies the current local settings to recorded responses. If a changed
+answer changes the next stage's request, that stage requires a matching recording
+or fails closed; a cache instead treats a new request as a miss. Decision
+streaming is currently unsupported. See [CAP-40](../capabilities/persistent-decision-settings.md)
+for acceptance evidence and limits.

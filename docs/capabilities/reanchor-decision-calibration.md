@@ -4,7 +4,7 @@ type: Capability
 description: "Fit persistent decision thresholds, cuts and weights through budgeted response replay, retaining only strict improvements accepted by held-out folds."
 generated:
   by: openai/codex
-  at: "2026-11-03T01:52:53Z"
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-41
 provider: mori://shinzui/shikumi
 status: shipped
@@ -23,6 +23,9 @@ evidence:
   - kind: test
     resource: shikumi-optimize/test/ReAnchorSpec.hs
     proves: Threshold, score and choice fitting replays evidence, rejects fold failures, preserves accepted settings under budget stops and supports generative evidence.
+  - kind: guide
+    resource: docs/user/decisions-and-calibration.md
+    proves: Documents answer-focused metrics, fitting controls, fold acceptance, response reuse, and compiled-state restoration.
 ---
 
 # ReAnchor decision calibration

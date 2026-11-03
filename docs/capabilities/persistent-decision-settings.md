@@ -4,7 +4,7 @@ type: Capability
 description: "Persist per-field thresholds, score cuts and choice weights and rederive answers from cached or replayed evidence without changing request identity."
 generated:
   by: openai/codex
-  at: "2026-11-03T01:52:53Z"
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-40
 provider: mori://shinzui/shikumi
 status: shipped
@@ -31,6 +31,9 @@ evidence:
   - kind: test
     resource: shikumi-trace/test/DecisionReplaySpec.hs
     proves: Changed settings derive a new answer from a recorded response.
+  - kind: guide
+    resource: docs/user/decisions-and-calibration.md
+    proves: Demonstrates two thresholds over one cached response and explains node-local settings and persistence.
 ---
 
 # Persistent decision calibration settings

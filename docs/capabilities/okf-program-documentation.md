@@ -3,8 +3,8 @@ title: "OKF program and application documentation generation"
 type: Capability
 description: "Generate deterministic OKF v0.2 bundles that document typed shikumi programs, their fields, structure, parameters, model-call instructions, and containing applications."
 generated:
-  by: codex/gpt-5
-  at: "2026-08-30T20:48:38Z"
+  by: openai/codex
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-22
 provider: mori://shinzui/shikumi
 status: shipped
@@ -28,6 +28,9 @@ evidence:
   - kind: module
     resource: shikumi-okf/profile/shikumi.dhall
     proves: The package ships the exact OKF profile its generated Shikumi App and Shikumi Program concepts satisfy.
+  - kind: guide
+    resource: docs/user/program-documentation.md
+    proves: Documents manifest construction, generation, profile validation, determinism, and opaque program limits.
 ---
 
 # OKF program and application documentation generation

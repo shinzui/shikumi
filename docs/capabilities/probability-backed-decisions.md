@@ -4,7 +4,7 @@ type: Capability
 description: "Declare closed Boolean, choice and ordered-score outputs, retrieve probability evidence and derive typed answers locally on judgment-only or generative models."
 generated:
   by: openai/codex
-  at: "2026-11-03T01:52:53Z"
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-39
 provider: mori://shinzui/shikumi
 status: shipped
@@ -27,6 +27,9 @@ evidence:
   - kind: test
     resource: shikumi-testing/test/DecisionEvidenceSpec.hs
     proves: Native JSON and marker evidence yield the same rich decisions with strict validation and refusal before streaming.
+  - kind: guide
+    resource: docs/user/decisions-and-calibration.md
+    proves: Documents closed decision contracts, backend selection, a complete offline prediction, and released limits.
 ---
 
 # Probability-backed typed decisions

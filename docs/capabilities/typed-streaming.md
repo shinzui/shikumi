@@ -3,8 +3,8 @@ title: "Program-level typed streaming"
 type: Capability
 description: "Observe ordered field chunks and node, tool, and LM status events while a Program executes, then receive the same fully decoded typed result as the blocking path."
 generated:
-  by: codex/gpt-5
-  at: "2026-08-30T20:48:38Z"
+  by: openai/codex
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-5
 provider: mori://shinzui/shikumi
 status: shipped

@@ -3,8 +3,8 @@ title: "Budgeted program optimization"
 type: Capability
 description: "Search a Program's instructions, demonstrations, neighbors, and ensembles with multiple optimizers that score typed datasets and stop with the best-so-far candidate at an LM-call budget."
 generated:
-  by: process:codex
-  at: "2026-09-07T14:05:00Z"
+  by: openai/codex
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-16
 provider: mori://shinzui/shikumi
 status: shipped
@@ -62,7 +62,7 @@ Bootstrap, RandomSearch, and MIPRO recover demonstrations for a predictor, and
 the [user guide](../user/evaluation-and-optimization.md) walks through
 configuration and a city/country pipeline.
 
-Four later capabilities grow this one and are released separately, so a consumer
+Later capabilities grow this one and are released separately, so a consumer
 pinned to an earlier `shikumi-optimize` gets this record's provision and not
 theirs:
 
@@ -74,6 +74,8 @@ theirs:
   attributes critiques to the node and invocation that failed.
 - [CAP-36 node-local bootstrap demonstration pools](node-local-bootstrap-pools.md)
   recovers demonstrations per node in a composite program.
+- [CAP-41 ReAnchor decision calibration](reanchor-decision-calibration.md)
+  fits persistent thresholds, score cuts, and choice weights using response replay.
 
 ## Limits
 

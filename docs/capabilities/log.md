@@ -1,5 +1,15 @@
 # Bundle Update Log
 
+## 2026-11-03
+* **Update**: Added user-guide evidence for CAP-22 and CAP-39–41, including a
+complete offline decision example, local threshold changes over cached responses,
+answer-focused metrics, ReAnchor fitting and persistence, and OKF manifest usage.
+Linked the usage entry points from the catalog and the later decision calibration
+capability from CAP-16; refreshed CAP-2's parameter-state explanation and clarified
+CAP-5's released streaming limits. No new capability IDs, release provenance,
+or runtime scope changes. Decision streaming
+remains pending in this released-API documentation.
+
 ## 2026-11-02
 * **Update**: Added CAP-39 and CAP-40 for `shikumi 0.5.0.0`: typed
 probability-backed decisions and persistent settings applied after retrieval.

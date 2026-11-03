@@ -57,6 +57,7 @@ data LLMConfig = LLMConfig
   , budget      :: Maybe Budget        -- Nothing = unlimited cost
   , rateLimit   :: Maybe RateLimiter   -- Nothing = unbounded concurrency
   , registry    :: ProviderRegistry
+  , observer    :: Maybe LLMObserver -- optional per-attempt billing observation
   }
 
 defaultLLMConfig :: ProviderRegistry -> LLMConfig   -- default retries, no budget, no rate limit
@@ -105,40 +106,68 @@ runEff . runErrorNoCallStack @ShikumiError . runStubLLM stub
 
 ### Real provider, resilient
 
+Use `summarizeP` from the getting-started guide and an `article :: Article`:
+
 ```haskell
+import Baikai qualified as B
+import Baikai.Models.Generated qualified as Models
+import Baikai.Provider.OpenAI.Api (openaiChatProvider)
+
 main = do
-  OpenAIApi.register
-  let cfg = defaultLLMConfig globalProviderRegistry
+  registry <- B.newProviderRegistry
+  B.registerApiProviderWith registry openaiChatProvider
+  let cfg = defaultLLMConfig registry
   result <-
-    runEff . runErrorNoCallStack @ShikumiError . runConcurrent . runLLMResilient cfg
-      $ runProgram summarize article
+    runEff . runErrorNoCallStack @ShikumiError . runConcurrent
+      . runRouting Models.openai_gpt_4o_mini
+      . runLLMResilient cfg
+      . routeLLM
+      $ runProgram summarizeP article
   case result of
-    Right s  -> print s
-    Left err -> print (err :: ShikumiError)
+    Right s -> print (unField (headline s))
+    Left err -> print err
 ```
 
-### With caching and tracing stacked on top
+The explicit registry supplies transport handlers; `runRouting` supplies the
+ambient model, and `routeLLM` realizes that choice before transport. Supply provider
+credentials through its usual environment or transport options. This prints the
+headline using the record selector and `unField` from the getting-started guide.
+
+### With caching and tracing
+
+Create the memory backend and put logical tracing before cache lookup in request
+execution order. This fragment uses `cfg` and the model from the provider example:
 
 ```haskell
+cache <- newMemoryCache
 (result, tree) <-
-  runEff . runErrorNoCallStack @ShikumiError
-    . runConcurrent     -- discharge: rate limiter + concurrent executor
-    . runPrim           -- discharge: runTrace's span-tree mutable cells
-    . runTime           -- discharge: cache timestamps + span times
-    . runTrace          -- (Prim, Time) → returns (a, TraceTree)
-    . cachedLLM         -- interpose: serve cache hits, store misses
-    . tracedLLM         -- interpose: open a span per LM call
+  runEff
+    . runPrim
+    . runTime
+    . runConcurrent
+    . runTrace
+    . runErrorNoCallStack @ShikumiError
+    . runRouting Models.openai_gpt_4o_mini
+    . runCacheMemory cache
     . runLLMResilient cfg
-    $ runProgram summarize article
+    . cachedLLM
+    . tracedLLM
+    . routeLLM
+    $ runProgram summarizeP article
 ```
 
-**Two kinds of layer.** The *discharge* interpreters (`runConcurrent`, `runPrim`, `runTime`)
-satisfy the narrow capabilities the layers below need — `runTrace` now requires `(Prim,
-Time)` and `runLLMResilient` requires `Concurrent`, not `IOE`. The *interpose* layers
-(`cachedLLM`, `tracedLLM`) re-handle the `LLM` effect's `Complete`/`Stream` and delegate
-down, so they must sit **above** `runLLMResilient`: a cache hit short-circuits before
-resilience/transport ever run; a miss falls through. The details are in
-[Caching, tracing & replay](./caching-tracing-replay.md).
+Import cache operations from `Shikumi.Cache` and
+`Shikumi.Cache.Backend.Memory`, tracing from `Shikumi.Trace`, routing from
+`Shikumi.Routing`, `runPrim` from `Effectful.Prim`, and `runTime` from
+`Shikumi.Effect.Time`. The result is `(Either ShikumiError Summary, TraceTree)`;
+putting the error handler inside tracing retains a tree when the program fails.
+
+The discharge interpreters install their effects. The `tracedLLM`, `cachedLLM`,
+and `routeLLM` wrappers interpose on `LLM` while its base interpreter is active.
+Although composition reads right to left, the request travels through routing,
+logical tracing, cache lookup, and then the resilient transport. A cache hit is
+still a logical traced call and does not reach the provider. See
+[caching, tracing, and replay](caching-tracing-replay.md).
 
 ---
 
@@ -255,6 +284,10 @@ at the discharge site `runTime`. Because it is an effect, a test can later run c
 ---
 
 ## Streaming
+
+`streamProgram` supports generative prediction and progress reporting. Decision
+outputs currently refuse streaming before provider dispatch; see
+[decisions and calibration](decisions-and-calibration.md#cache-replay-and-current-limits).
 
 At the transport level, `stream` / `Stream` exist for callers that need deltas;
 `runLLMResilient` charges streaming cost from the terminal event's assembled message. The cache

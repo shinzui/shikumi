@@ -1,68 +1,65 @@
 # Shikumi — User Guide
 
-**Typed, structured, evaluable language-model programs in Haskell.**
+**Typed language-model programs you can compose, evaluate, optimize, and replay.**
 
-This is the user documentation for [Shikumi](../../README.md) (仕組み — *the mechanism*).
-It explains both **how to use** the framework and **how it works under the covers**, so
-that nothing about it stays a black box.
-
-If you have never seen shikumi before, read the guides in order. If you already know what
-you want, jump straight to the relevant reference.
-
----
+Shikumi connects structured predictions, probability-backed decisions, typed
+pipelines, and agents through `Program i o`. This guide explains how to build
+those programs, run them, measure their behavior, and persist improvements.
 
 ## Start here
 
-| # | Guide | What it covers |
-|---|---|---|
-| 1 | [Getting started](./getting-started.md) | Install, write your first record-in/record-out program, run it offline. |
-| 2 | [When to use shikumi (and when to use baikai directly)](./when-to-use-shikumi.md) | The decision that comes *before* any code: many good-model tasks don't need shikumi at all. |
-| 3 | [Core concepts & mental model](./concepts.md) | `Field`, `Signature`, `Program`, `ShikumiError` — and the one idea that ties them together. |
+| Guide | What it covers |
+|---|---|
+| [Getting started](getting-started.md) | Build the repository, run offline examples, and write a typed prediction. |
+| [When to use shikumi](when-to-use-shikumi.md) | Choose between a direct provider call and a typed program, including Jev decisions. |
+| [Core concepts](concepts.md) | `Field`, `Signature`, `Program`, errors, and probability evidence. |
+| [Decisions and calibration](decisions-and-calibration.md) | A complete offline decision example, threshold tuning, ReAnchor, metrics, and persistence. |
 
-## How it works under the covers
+## Programs and execution
 
-| # | Guide | What it covers |
-|---|---|---|
-| 4 | [Signatures & schemas](./signatures-and-schemas.md) | How a record becomes a JSON schema, how a reply becomes a typed value, the three adapters that bridge the wire (native / fallback / XML), declarative field constraints, and multimodal image input fields. |
-| 5 | [Programs & combinators](./programs-and-combinators.md) | The `Program` GADT deep embedding: run it, rewrite it, serialize it. Every combinator explained — plus `twoStep` (free-form→extraction) and the reward-driven self-refinement modules (`bestOfN` / `refine` / `multiChainComparison`). |
-| 6 | [Effects & the runtime](./effects-and-runtime.md) | The `LLM` effect over baikai, resilience (retries/rate-limit/budget), the effect stack, program-level streaming (`streamProgram`), and *why shikumi code never carries `IOE`*. |
-| 7 | [Caching, tracing & replay](./caching-tracing-replay.md) | The `interpose` pattern, content-addressed cache keys, the span tree, and deterministic replay. |
-| 8 | [Evaluation & optimization](./evaluation-and-optimization.md) | `Dataset`/`Metric`/`Report`, the compiler layer, and the nine optimizers (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN) — with serialization. |
-| 9 | [Tools & ReAct agents](./tools-and-agents.md) | Typed tools, the registry, built-in work tools (`read`, `write`, `edit`, `grep`, `glob`, `bash`, `web_fetch`, `web_search`), and agent/code-execution loops that are themselves `Program`s. |
-| 10 | [Agent working-context compaction](./agent-context-compaction.md) | How long ReAct and CodeAct runs compact older steps, preserve recent context, and recover from classified context-window overflow errors. |
-| 12 | [Resumable ReAct sessions](./resumable-react-sessions.md) | Completed-turn checkpoints, rich outputs, validated final submissions, and an offline continuation example. |
-| 11 | [The CLI](./cli.md) | `eval` / `record` / `trace` / `optimize` / `replay`, all runnable offline. |
+| Guide | What it covers |
+|---|---|
+| [Signatures and schemas](signatures-and-schemas.md) | Schema derivation, validation, native/fallback/XML adapters, images, and decision evidence. |
+| [Programs and combinators](programs-and-combinators.md) | Prediction and capture nodes, composition, concurrency, refinement, parameters, and serialization. |
+| [Effects and runtime](effects-and-runtime.md) | Routing, scoped defaults, retries, rate limits, budgets, billing observers, streaming, and Responses workflows. |
+| [Caching, tracing, and replay](caching-tracing-replay.md) | Cache identity and backends, node traces, replay, billing, and reusing decision evidence. |
+| [Evaluation and optimization](evaluation-and-optimization.md) | Datasets, metrics, compilation, node-local demos, GEPA objectives, structure search, and ReAnchor. |
+| [Program documentation](program-documentation.md) | Generate an Open Knowledge Format bundle from a program manifest. |
+| [CLI](cli.md) | Repository workflows for evaluation, recording, tracing, optimization, and replay. |
 
----
+## Tools and agents
 
-## The one-paragraph mental model
+| Guide | What it covers |
+|---|---|
+| [Tools and agents](tools-and-agents.md) | Typed tools, filesystem/shell/web tools, ReAct, Program of Thought, and CodeAct. |
+| [Resumable ReAct sessions](resumable-react-sessions.md) | Completed-turn checkpoints, rich outputs, typed final submissions, and continuation guards. |
+| [Working-context compaction](agent-context-compaction.md) | Compact older steps and recover from classified context-window overflow in long agent runs. |
+| [Recursive language-model sessions](recursive-language-model-sessions.md) | Bounded searches, slices, stored values, and subqueries over documents outside the prompt. |
 
-You declare an LM-powered function whose **input and output are ordinary Haskell record
-types**. From the *types*, shikumi derives the JSON schema sent to the provider, the
-decoder that turns the reply back into a typed value, and the enumerated failure type you
-get when something goes wrong. A program is a typed value — a `Program i o` — that can be
-**run**, **rewritten as data** (so an optimizer can tune it), and **serialized**. Caching,
-tracing, replay, retries, budgets and rate-limiting are all *interpreters you stack* over
-one provider-neutral `LLM` effect, so the program code never changes when you add them.
-You never write a prompt string; you write types.
+## The program model
+
+Record types describe the input and output contract. A signature adds instructions
+and demonstrations; `predict` turns it into a program:
 
 ```haskell
-summarize :: (LLM :> es, Trace :> es, Cache :> es) => Program Article Summary
-summarize = predict @Summarize
+summarize :: Program Article Summary
+summarize = predict (mkSignature "Summarize the article.")
 ```
 
----
+`Program i o` carries no effect-row constraint. Its runners return an `Eff es o`
+computation; interpreters choose the provider and install policies such as routing,
+caching, tracing, and budgets. Additional runners support concurrency, node
+observation, and streaming. Decision streaming is currently unsupported.
 
-## Precise effect constraints
+Prediction-node parameters include instructions, demonstrations, and per-field
+decision settings. Optimizers search those parameters; structure search selects
+among a finite registry of typed implementations. Saved artifacts contain state
+and structural metadata, with executable closures retained in your code template.
 
-Shikumi uses *precise effect constraints*: instead of the broad `IOE` (arbitrary `IO`)
-constraint, each function carries narrow effects that say exactly what it does — `Time` for
-clock reads, `Concurrent` for thread synchronization, `Prim` for in-process mutable cells.
-`IOE` now appears **only** at the genuine edges: the baikai transport interpreters, the
-SQLite/Redis/Postgres cache backends, and your top-level `main`. Everything else — including
-tracing, evaluation, and optimization — names its real capabilities and nothing more, so a
-shikumi type signature reads as an honest capability ledger. See
-[Effects & the runtime](./effects-and-runtime.md#effects-as-a-capability-ledger) for the
-full story.
+Framework functions name narrow effects such as `LLM`, `Time`, `Prim`, and
+`Concurrent`; I/O is discharged at runtime and storage boundaries. See
+[effects as a capability ledger](effects-and-runtime.md#effects-as-a-capability-ledger).
 
-See [Experimental recursive language-model sessions](./recursive-language-model-sessions.md) for bounded external-document inspection and subqueries.
+The APIs are experimental. The [capability catalog](../capabilities/index.md)
+records shipped behavior, package ownership, release provenance, evidence, and
+limits; ongoing plans are separate from shipped capabilities.

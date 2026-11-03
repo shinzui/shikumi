@@ -13,8 +13,8 @@ shikumi a program is a **typed value** — a `Program i o` — that is three thi
 1. **Runnable.** `runProgram` interprets it as an `Eff` computation that issues model calls
    and returns a typed `o` (or throws a typed `ShikumiError`).
 2. **Rewritable as data.** Its optimizable parameters (each node's instruction and few-shot
-   demos) can be *read and replaced without running it* and without runtime reflection — this
-   is what lets an optimizer tune it.
+   demos, plus per-field decision settings) can be *read and replaced without running it*
+   and without runtime reflection — this is what lets an optimizer tune it.
 3. **Serializable.** Its structure and its tuned parameter vector can be saved and reloaded,
    so an optimized program persists across runs.
 
@@ -82,8 +82,8 @@ Every call returns either a typed value or one of a *closed set* of failures (be
 
 ## Records in, records out
 
-You declare the input and output types and derive four classes; that derivation *is* the
-prompt engineering:
+You declare the input and output types, derive schema/decode/prompt instances,
+and supply an output validation instance. The signature supplies task instructions:
 
 ```haskell
 data Article = Article
@@ -113,9 +113,12 @@ data ShikumiError
   | MissingField      Text  -- a required output field was absent
   | SchemaMismatch    Text  -- decoded JSON didn't match the expected schema
   | ValidationFailure Text  -- a typed value failed a Validatable rule
-  | ProviderFailure   Text  -- the transport failed (mapped from baikai)
+  | ProviderFailure   Text  -- legacy unclassified failure
+  | ProviderError     BaikaiError -- preserves classified transport failures
+  | ContextWindowExceeded Text -- model context window overflow
   | Timeout           Text  -- the call exceeded its time budget
-  | BudgetExceeded    Text  -- the running cost ceiling was reached
+  | BudgetExceeded    Text  -- configured cost/call/session allowance exhausted
+  | CodeExecFailed    Text  -- generated code exhausted correction attempts
 ```
 
 Three things make this more than a sum type:
@@ -126,9 +129,29 @@ Three things make this more than a sum type:
 - **A total mapping from baikai.** Transport-level `BaikaiError`s are mapped into this
   vocabulary by `fromBaikaiError`, so the whole framework shares one error type.
 - **A transience policy.** `isTransient` decides which errors are worth retrying:
-  `ProviderFailure` and `Timeout` are transient; decode, schema, validation, and budget
-  errors are deterministic and retrying cannot fix them. The resilience interpreter consults
-  exactly this predicate.
+  typed rate limits and transient provider failures can retry; refusals, authentication,
+  unavailable-provider, process, and unknown failures are terminal. Legacy
+  `ProviderFailure` and `Timeout` retain retry behavior. Decode, schema, validation,
+  context overflow, budget, and code-execution failures are not transport-transient.
+  The program-level `retry` combinator has its own, broader policy.
+
+---
+
+## Decisions separate evidence from policy
+
+A decision output retains probability evidence and a locally derived answer.
+`Noul` is Boolean, `Choice a` selects from declared labels, and `Score levels`
+rates an ordered scale. They work on judgment-only models and on generative
+models asked for structured evidence.
+
+The node's `Params` can override thresholds, score cuts, and choice weights.
+These settings apply after response retrieval, so changing a threshold can reuse
+matching cached or replayed evidence. ReAnchor fits those settings against a task
+metric; instruction search and structure search address different parts of the
+program. The evidence is not automatically calibrated to your application.
+
+See [decisions and calibration](decisions-and-calibration.md) for a complete
+example and the current limits.
 
 ---
 

@@ -2,19 +2,20 @@
 
 This guide takes you from nothing to a running, fully-typed LM program — offline, with no
 API key. By the end you will understand the shape of every shikumi program: **records in,
-records out, typed errors, no prompt strings.**
+records out, typed errors, and explicit task instructions.**
 
 ---
 
 ## Prerequisites
 
-Shikumi builds with **GHC 9.12.4** inside a Nix dev shell and depends on local checkouts of
-[`baikai`](../../README.md) and `baikai-effectful` (wired in `cabal.project`).
+Shikumi builds with **GHC 9.12.4** inside a Nix dev shell. Cabal resolves the
+published Baikai packages (`mori://shinzui/baikai`) and other dependencies; sibling
+checkouts are not required. Initial builds may download dependencies.
 
 ```bash
 nix develop .#ghc9124
 cabal build all
-cabal test  all              # hermetic across every package; no network
+cabal test all               # provider tests use offline fixtures by default
 ```
 
 The packages, at a glance:
@@ -25,20 +26,21 @@ The packages, at a glance:
 | `shikumi-cache` (`-redis`, `-postgres`) | The `Cache` effect and its backends (in-memory, SQLite, Redis, Postgres). |
 | `shikumi-trace` (`-otel`) | Hierarchical tracing, trace files, deterministic replay, OpenTelemetry export. |
 | `shikumi-eval` | `Dataset` / `Metric` / `Report` and the evaluation runner. |
-| `shikumi-compile` | Prompting strategies (zero-shot / few-shot / CoT / RAG) compiled into a program. |
-| `shikumi-optimize` | Nine optimizers that search for better demos and instructions (demo selection, instruction search, MIPROv2, COPRO, GEPA, KNN). |
-| `shikumi-tools` | Typed tools, the built-in work-tool catalog, and ReAct/code-execution agent loops. |
+| `shikumi-compile` | Zero-shot / few-shot / CoT / RAG compilation, persistence, and typed structure registries. |
+| `shikumi-optimize` | Demonstration/instruction search, GEPA objectives, finite structure search, and ReAnchor decision calibration. |
+| `shikumi-tools` | Typed work tools, ReAct and CodeAct loops, resumable sessions, and bounded recursive sessions. |
 | `shikumi-cli` | The `shikumi` executable: `eval` / `record` / `trace` / `optimize` / `replay`. |
-| `shikumi-jitsurei` | 実例 — runnable, offline worked examples of everything above. |
+| `shikumi-jitsurei` | 実例 — runnable, offline worked examples. |
+| `shikumi-okf` | Generate program and application documentation bundles. |
+| `shikumi-testing` | Internal offline test harness (repository only). |
 
 ---
 
 ## See it run before you write anything
 
 Every concept in this guide has a **runnable, offline counterpart** in the
-[`shikumi-jitsurei`](../../shikumi-jitsurei) package. Each runs against a deterministic
-in-process stub LM — no API key, no network — so it is an executable demonstration of the
-real API. List them, then run one:
+[`shikumi-jitsurei`](../../shikumi-jitsurei) package. Most use deterministic in-process stub models; the Responses example uses a
+loopback HTTP fixture. No API key or public provider access is needed. List them, then run one:
 
 ```bash
 cabal run shikumi-jitsurei        # lists every example
@@ -52,6 +54,10 @@ cabal run jitsurei-predict        # records in, records out; typed errors and va
 | `jitsurei-combinators` | `retry` / `validate` / `mapP` / `majorityVote` / `ensemble` |
 | `jitsurei-evaluate` | a typed `Metric` over a `Dataset` → a `Report` |
 | `jitsurei-optimize` | optimize demos, then serialize & reload them |
+| `jitsurei-gepa-objectives` | validated search, named objectives, and lifecycle reports |
+| `jitsurei-structure-search` | compare typed implementations and restore the winner |
+| `jitsurei-request-defaults` | scoped request options and cache identity |
+| `jitsurei-responses` | native output, billing, and a checkpoint round trip over HTTP |
 | `jitsurei-react` | a typed tool and a ReAct agent loop |
 | `jitsurei-trace-replay` | caching, hierarchical tracing, deterministic replay |
 
@@ -65,15 +71,19 @@ The shared offline harness lives in
 
 ### 1. Declare the types
 
-You never write a prompt. You write the input and output *records*, and a one-line
-description per field. The `Field "description" a` wrapper attaches a compile-time
-description; a bare field simply has no description.
+Write the input and output records and a description for each field. The
+signature will supply the task instruction. The `Field "description" a` wrapper
+attaches a compile-time description; a bare field simply has no description.
 
 ```haskell
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 
+import Data.Text (Text)
+import GHC.Generics (Generic)
 import Shikumi.Schema           -- ToSchema, FromModel, Validatable, Field
 import Shikumi.Adapter          -- ToPrompt
 
@@ -85,7 +95,7 @@ data Article = Article
 
 data Sentiment = Positive | Neutral | Negative   -- an enum-like sum
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToSchema, FromModel, ToPrompt)
+  deriving anyclass (ToSchema, FromModel)
 
 data Summary = Summary
   { headline  :: Field "A one-line summary"      Text
@@ -96,7 +106,7 @@ data Summary = Summary
     deriving anyclass (ToSchema, FromModel, ToPrompt)
 ```
 
-Those four derived classes are the whole contract:
+These three derived classes and the output validation instance form the contract:
 
 - **`ToSchema`** — derive the JSON schema sent to the provider.
 - **`FromModel`** — totally decode the reply back into the record (every failure is a typed error).
@@ -113,16 +123,19 @@ instance Validatable Summary where
     where n = length (unField (bullets s))
 ```
 
-A `Validatable` rule is enforced where you ask for it — by wrapping a program with the
-[`validate`](./programs-and-combinators.md#validate) combinator, which surfaces a rejection
-as a typed `ValidationFailure`. (`predict` on its own does *not* run a type's `Validatable`
-instance; the combinator is the program-level seam.)
+Prediction adapters decode with `fromModelChecked`, which runs the output's
+`Validatable` rule. `predict` therefore rejects a summary outside the stated
+bullet count with `ValidationFailure`. Use a default empty instance when no
+record-level rule is needed. The [`validate`](programs-and-combinators.md#validate)
+combinator adds a program-specific check; `validateRetry` can retry rejected
+results within a bounded number of attempts.
 
 ### 3. Build the signature and the program
 
 ```haskell
 import Shikumi.Signature (Signature, mkSignature)
 import Shikumi.Module    (predict)
+import Shikumi.Program   (Program)
 
 summarize :: Signature Article Summary
 summarize = mkSignature "Summarize the article into a headline and key points."
@@ -141,9 +154,7 @@ at the bottom of the stack — against a real provider via baikai, or (here) aga
 offline stub:
 
 ```haskell
-import Shikumi.Program (runProgram)
-import Effectful (runEff)
-import Effectful.Error.Static (runErrorNoCallStack)
+import Shikumi.Error (ShikumiError)
 import Shikumi.Jitsurei.Stub (runStub, markerResponse)
 
 main :: IO ()
@@ -176,7 +187,8 @@ data ShikumiError
   | MissingField         Text  -- a required output field was absent
   | SchemaMismatch       Text  -- decoded JSON didn't match the expected schema
   | ValidationFailure    Text  -- a typed value failed a Validatable rule
-  | ProviderFailure      Text  -- the transport failed (mapped from baikai)
+  | ProviderFailure      Text  -- legacy unclassified failure
+  | ProviderError        BaikaiError -- preserves classified transport failures
   | ContextWindowExceeded Text -- the prompt exceeded the model's context window
   | Timeout              Text  -- the call exceeded its time budget
   | BudgetExceeded       Text  -- the running cost ceiling was reached
@@ -193,4 +205,6 @@ is still legible. See [Core concepts](./concepts.md#errors-are-a-type-not-a-vibe
 - Not sure shikumi is even the right tool? Read
   [When to use shikumi](./when-to-use-shikumi.md) first.
 - Want the mental model before more code? [Core concepts](./concepts.md).
+- Want probability-backed judgments and task-specific tuning?
+  [Decisions and calibration](decisions-and-calibration.md).
 - Want to know *how* the schema and decode work? [Signatures & schemas](./signatures-and-schemas.md).

@@ -16,6 +16,8 @@ A program is a tree of constructors. The set is deliberately minimal; richer mod
 data Program i o where
   Predict      :: (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)
                => Signature i o -> Params -> Program i o
+  PredictCaptured :: (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o)
+                  => CaptureCodec i o -> Signature i o -> Params -> Program i o
   Compose      :: Program a b -> Program b c -> Program a c
   FMap         :: (o -> o') -> Program i o -> Program i o'
   Map          :: Int -> Program a b -> Program [a] [b]
@@ -23,7 +25,7 @@ data Program i o where
   Retry        :: Int -> Program i o -> Program i o
   RetryWhen    :: (ShikumiError -> Bool) -> Int -> Program i o -> Program i o
   Validate     :: (o -> Either Text o) -> Program i o -> Program i o
-  MajorityVote :: Eq o => Int -> TempSchedule -> Program i o -> Program i o
+  MajorityVote :: Int -> TempSchedule -> (NonEmpty o -> o) -> Program i o -> Program i o
   Ensemble     :: [Program i r] -> ([r] -> o) -> Program i o
   Embed        :: (forall es. (LLM :> es, Error ShikumiError :> es) => i -> Eff es o) -> Program i o
 ```
@@ -48,17 +50,25 @@ A few things worth noticing:
 data Params = Params
   { instructionOverride :: Maybe Text   -- Nothing = use the signature's default
   , demos               :: [Demo]       -- ordered few-shot demonstrations
+  , decisionSettings    :: Map Text DecisionSetting -- per-field local derivation
   }
 
 data Demo = Demo { input :: Value, output :: Value }   -- stored as JSON
 
-emptyParams :: Params                    -- no override, no demos
+emptyParams :: Params                    -- no override, no demos, empty settings
 ```
 
 `Params` is the *uniform, serializable* overlay the compiler and optimizer manipulate
 regardless of a node's `i`/`o`. Demos are stored as **type-agnostic JSON** so a single
 traversal can edit nodes of differing types; at run time each demo is decoded back into the
 node's typed `Sig.Demo i o`.
+
+Use record updates from `emptyParams`, or `setDecisionSetting`,
+`decisionSettingFor`, and `clearDecisionSetting`, rather than positional `Params`
+construction. Settings validate against the output domain before dispatch and
+apply after evidence retrieval; they do not enter request identity. Older JSON
+without `decisionSettings` decodes with an empty map. See
+[decisions and calibration](decisions-and-calibration.md).
 
 ---
 
@@ -73,6 +83,31 @@ predict sig = Predict sig emptyParams
 ```
 
 A single `Predict` node with empty parameters. This is the program you reach for most.
+
+### `predictCaptured` — retain typed node evidence
+
+`predictCaptured` adds `ToJSON i`, `ToJSON o`, and `ToSchema i` to the ordinary
+prediction constraints. It stores a `CaptureCodec` containing input/output JSON
+encoders and both schemas in a `PredictCaptured` node. Prediction behavior is the
+same as `predict`; an observation runner can use the codec to retain node-local
+examples and rejection lineage.
+
+```haskell
+captured :: Program Article Summary
+captured = predictCaptured (mkSignature "Summarize the article.")
+```
+
+The records need suitable JSON instances as well as the usual prompt, schema,
+decode, and output validation instances. Capture is opt-in because it retains
+input/output data. It enables demonstration recovery in heterogeneous pipelines;
+ordinary runners do not themselves collect observations. See
+[node-local bootstrap](evaluation-and-optimization.md#bootstrap-heterogeneous-pipelines)
+and [failure-aware feedback](evaluation-and-optimization.md#failure-aware-gepa-feedback).
+
+`PredictCaptured` exposes one `Params` entry and serializes as `ShapePredict`,
+just like `Predict`. Its codec stays in the Haskell template; restore saved state
+onto a capture-capable template to preserve it. Exhaustive `Program` matches must
+handle both prediction constructors.
 
 ### Chain of thought
 
@@ -167,7 +202,7 @@ retryWhen :: (ShikumiError -> Bool) -> Int -> Program i o -> Program i o
 only errors matching `ok`; a non-matching error propagates immediately. (At the *program*
 level this retries on any/selected `ShikumiError`; the resilience interpreter does its own,
 separate transient-only retry at the transport level — see
-[Effects & the runtime](./effects-and-runtime.md#resilience).)
+[Effects & the runtime](./effects-and-runtime.md#resilience-retries-rate-limit-budget).)
 
 ### Validate
 
@@ -178,8 +213,9 @@ validateRetry :: Int -> (o -> Bool) -> Text -> Program i o -> Program i o
 
 `validate ok reason` runs the program, then checks its output; on rejection it surfaces a
 `ValidationFailure reason`. `validateRetry n` wraps that in a `retry n`, so a rejected output
-triggers a re-run. **This is the program-level seam for enforcing a domain rule** — including
-a type's own `Validatable` predicate, if you pass it here.
+triggers a re-run. **This adds a program-level rule.** Prediction decoding already runs the output
+type's `Validatable` instance through `fromModelChecked`; the combinator is useful
+for additional checks and feedback, with `validateRetry` bounding correction attempts.
 
 ```haskell
 checked = validateRetry 3 (\inv -> total inv > 0) "total must be positive" (predict extractSig)
@@ -189,7 +225,7 @@ checked = validateRetry 3 (\inv -> total inv > 0) "total must be positive" (pred
 
 ```haskell
 majorityVote   :: Eq o => Int -> TempSchedule -> Program i o -> Program i o
-majorityVoteBy :: Int -> TempSchedule -> ([o] -> o) -> Program i o -> Program i o
+majorityVoteBy :: Int -> TempSchedule -> (NonEmpty o -> o) -> Program i o -> Program i o
 
 data TempSchedule = TempFixed [Double] | TempSpread Double Double
 ```
@@ -277,7 +313,9 @@ runProgramConc :: (LLM :> es, Error ShikumiError :> es, Concurrent :> es)
                => Program i o -> i -> Eff es o
 ```
 
-Both have **identical observable semantics**. The difference is concurrency:
+Both implement the same program operations. Independent calls can interleave
+differently under the concurrent runner; their traces, admission timing, and
+external observations need not be identical:
 
 - `runProgram` runs everything *sequentially*, regardless of `mapP` widths.
 - `runProgramConc` honours the concurrency widths: `Map` (bounded by its width), `Parallel`,
@@ -306,7 +344,7 @@ mapParamsAt :: Int -> (Params -> Params) -> Program i o -> Program i o   -- edit
 The traversal visits `Params` in **left-to-right depth-first order** (for `Compose f g`, all
 of `f`'s come before `g`'s) and obeys the `lens` `Traversal'` laws. Composite nodes
 (`Compose`, `FMap`, `Embed`) carry no `Params`, so **a program's parameter count equals its
-number of `Predict` nodes**. `mapParamsAt n` is the optimizer's primary edit: "replace node
+number of `Predict` and `PredictCaptured` nodes**. `mapParamsAt n` is the optimizer's primary edit: "replace node
 *n*'s instruction/demos"; the index it addresses is the same index `foldParams` produces.
 
 ---

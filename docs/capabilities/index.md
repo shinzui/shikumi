@@ -10,8 +10,8 @@ okf_version: "0.2"
 
 Shikumi is a Haskell framework for expressing language-model work as typed,
 inspectable programs. A consumer can derive provider contracts from ordinary
-record types, compose and run programs, then add caching, tracing, replay,
-evaluation, compilation, optimization, tools, agents, and documentation without
+record types, compose and run programs, derive probability-backed decisions,
+and add caching, tracing, replay, evaluation, compilation, optimization, tools, agents, and documentation without
 changing the program's input and output types.
 
 Every capability below is shipped today and backed by repository evidence a
@@ -39,6 +39,14 @@ this repository but has not been published to Hackage, so its `since` value is
 - Cache backends that ship in separate packages have separate records; the
   in-memory and SQLite interpreters remain together because they ship with the
   same core cache package and implement the same adoption surface.
+
+## Usage guides
+
+The [user guide](../user/README.md) maps the catalog to adoption workflows.
+Start with [decisions and calibration](../user/decisions-and-calibration.md) for
+CAP-39–41, [evaluation and optimization](../user/evaluation-and-optimization.md)
+for parameter and structure search, [resumable sessions](../user/resumable-react-sessions.md)
+for CAP-29, or [program documentation](../user/program-documentation.md) for CAP-22.
 
 # Capabilities
 

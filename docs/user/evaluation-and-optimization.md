@@ -629,6 +629,11 @@ nix develop .#ghc9124-ci --command cabal test shikumi-trace-otel --test-options=
 
 ## Calibrating decision settings
 
+Start with [decisions and calibration](decisions-and-calibration.md) for a complete
+offline example, answer-focused metrics, backend selection, and persistence.
+Use a metric that compares the derived answer when evidence differences should
+not affect the task score: rich decision equality includes probabilities.
+
 `Shikumi.Optimize.ReAnchor` fits decision thresholds, cuts and weights against your
 metric. It leaves instructions and demonstrations unchanged:
 

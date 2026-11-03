@@ -3,8 +3,8 @@ title: "Composable and rewritable program values"
 type: Capability
 description: "Represent LM workflows as typed Program values that compose, execute sequentially or concurrently, expose parameters, and serialize their closure-free shape."
 generated:
-  by: codex/gpt-5
-  at: "2026-08-30T20:48:38Z"
+  by: openai/codex
+  at: "2026-11-03T04:38:56Z"
 capabilityId: CAP-2
 provider: mori://shinzui/shikumi
 status: shipped
@@ -37,10 +37,13 @@ Consumers build predictors, chain-of-thought and two-step modules, then compose
 them with pipelines, bounded maps, parallel branches, retries, validation,
 majority voting, and ensembles. Incompatible stages do not type-check.
 
-`runProgram` gives deterministic sequential semantics; `runProgramConc` opts
+`runProgram` gives sequential execution; `runProgramConc` opts
 into concurrency for independent branches. A lawful parameter traversal exposes
 each prediction node's instruction and demonstrations for compilers and
-optimizers. `ProgramShape` and parameter vectors serialize the structural state
+optimizers. Since core 0.5.0.0, this overlay also carries
+[per-field decision settings](persistent-decision-settings.md). Captured predictors
+retain their codecs in the code template and expose the same parameter interface.
+`ProgramShape` and parameter vectors serialize the structural state
 while leaving functions and effectful closures in the Haskell template.
 
 This capability builds on the typed contract in
