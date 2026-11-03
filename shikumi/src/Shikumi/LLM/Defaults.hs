@@ -6,11 +6,12 @@ module Shikumi.LLM.Defaults
     emptyRequestDefaults,
     applyRequestDefaults,
     withRequestDefaults,
+    withEvidenceRuns,
   )
 where
 
 import Baikai (Options)
-import Baikai.Evidence (EvidenceRequest)
+import Baikai.Evidence (EvidenceRequest, EvidenceStrictness, evidenceRequest)
 import Baikai.Model (isJudgmentOnly)
 import Baikai.Speed (Speed)
 import Baikai.ThinkingLevel (ThinkingLevel)
@@ -18,6 +19,7 @@ import Control.Applicative ((<|>))
 import Control.Lens ((&), (.~), (^.))
 import Control.Monad (when)
 import Data.Generics.Labels ()
+import Data.Text (Text)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpose)
 import Effectful.Error.Static (Error, throwError)
@@ -67,3 +69,17 @@ withRequestDefaults defaults action = do
         Stream model ctx opts -> stream model ctx (applyRequestDefaults (forModel model) opts)
     )
     action
+
+-- | Mint one evidence run ID per logical LLM operation, above transport retries.
+-- Explicit per-call requests win. Unlike a fixed defaultEvidence, a multi-Predict
+-- program gets distinct run IDs. Compose below routing and above cache/transport.
+withEvidenceRuns :: (LLM :> es) => EvidenceStrictness -> Eff es Text -> Eff es a -> Eff es a
+withEvidenceRuns strictness mint = interpose $ \_ -> \case
+  Complete m c o -> fill o >>= complete m c
+  Stream m c o -> fill o >>= stream m c
+  where
+    fill o = case o ^. #evidence of
+      Just _ -> pure o
+      Nothing -> do
+        rid <- mint
+        pure (o & #evidence .~ Just (evidenceRequest rid & #strictness .~ strictness))

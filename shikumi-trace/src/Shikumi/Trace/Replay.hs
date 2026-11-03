@@ -37,6 +37,7 @@ import Effectful.Exception (Exception, throwIO)
 import GHC.Generics (Generic)
 import Shikumi.Cache.Key (CacheKey (..), cacheKey)
 import Shikumi.LLM (LLM (..))
+import Shikumi.Stream (atomicEventsFromResponse)
 import Shikumi.Trace.ResponseJSON ()
 
 -- | Raised when a replayed program issues an LM call that the recorded trace
@@ -54,7 +55,8 @@ data ReplayDivergence = ReplayDivergence
 
 -- | Interpret the @LLM@ effect by lookup in a replay index instead of calling a
 -- provider. A hit returns the recorded response; a miss raises t'ReplayDivergence'.
--- Streaming completions are not replayable and raise a divergence naming the key.
+-- Structured recordings can also supply atomic streams; text-only recordings
+-- raise a divergence on Stream. Both operations share the same request key.
 --
 -- No @IOE@ is required: the lookup and decode are pure, and t'ReplayDivergence' is
 -- raised with @effectful@'s pure-in-@Eff@ 'throwIO'. The contract the plan sketched
@@ -70,9 +72,11 @@ runLLMReplay idx = interpret $ \_ -> \case
         Error e ->
           throwIO $
             (divergence key m c) & #promptSummary .~ ("recorded response failed to decode: " <> T.pack e)
-  Stream m c o ->
-    throwIO $
-      (divergence (cacheKey m c o) m c) & #promptSummary .~ "replay does not support streaming completions"
+  Stream m c o -> do
+    let key = cacheKey m c o
+    case Map.lookup key idx of
+      Just v | Success r <- fromJSON v, Just events <- atomicEventsFromResponse r -> pure events
+      _ -> throwIO $ (divergence key m c) & #promptSummary .~ "missing or invalid structured stream recording"
 
 -- | Build a t'ReplayDivergence' for a request.
 divergence :: CacheKey -> Model -> Context -> ReplayDivergence

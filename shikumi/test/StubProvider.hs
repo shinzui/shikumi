@@ -22,10 +22,12 @@ module StubProvider
     concurrencyStubRegistry,
     classifiedStubRegistry,
     exceptionStubRegistry,
+    evidenceStubRegistry,
   )
 where
 
 import Baikai hiding (flattenAssistantText)
+import Baikai.Evidence qualified as E
 import Baikai.Prelude
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM
@@ -39,6 +41,7 @@ import Control.Exception (bracket_, throwIO)
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef')
 import Data.Text qualified as T
+import Data.Time.Clock (getCurrentTime)
 import Data.Vector qualified as V
 import Streamly.Data.Stream qualified as Stream
 
@@ -302,3 +305,35 @@ classifiedStubRegistry ref failTimes err thrown cost = do
 
 exceptionStubRegistry :: IO Response -> IO ProviderRegistry
 exceptionStubRegistry action = mkRegistry "" (\_ _ _ -> action)
+
+-- | One actual record per scripted attempt, built from the dispatched request.
+-- Both operations share the same complete implementation and evidence provenance.
+evidenceStubRegistry :: IORef [Options] -> Int -> BaikaiError -> IO ProviderRegistry
+evidenceStubRegistry requests failures err = do
+  let completeFn m _ o = do
+        n <- atomicModifyIORef' requests (\xs -> (xs ++ [o], length xs))
+        now <- getCurrentTime
+        cid <- E.newCallId
+        let failed = n < failures
+            receipt req =
+              E.baseEvidence
+                req
+                cid
+                (E.EndpointIdentity "stub" "custom" E.TransportHttpApi Nothing "fixture" Nothing)
+                (m ^. #modelId)
+                E.noThinkingRequested
+                now
+                now
+                (if failed then E.CallFailed else E.CallSucceeded)
+                "digest"
+                "configuration"
+            response = if failed then errorResponse m now 0 err else stubResponse "ok"
+        pure (response & #evidence .~ (receipt <$> o ^. #evidence))
+  reg <- newProviderRegistry
+  registerApiProviderWith
+    reg
+    ( (apiProviderWith stubApi (liftCompleteToStream completeFn) completeFn)
+        { describeThinking = stubDescribeThinking
+        }
+    )
+  pure reg

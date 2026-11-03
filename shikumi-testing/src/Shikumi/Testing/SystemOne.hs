@@ -1,10 +1,11 @@
 -- | Offline structured decision responses using Baikai's public content carrier.
-module Shikumi.Testing.SystemOne (systemOneModel, systemOneResponse, systemOneResponder, withSystemOneFixture) where
+module Shikumi.Testing.SystemOne (systemOneModel, systemOneResponse, systemOneResponder, withSystemOneFixture, SystemOneReply (..), withSystemOneScript) where
 
 import Baikai
 import Baikai.Models.Generated (typesafe_jev_latest)
 import Baikai.Provider.TypeSafe.Api (typesafeProvider)
-import Control.Exception (throwIO)
+import Control.Concurrent (killThread, myThreadId, threadDelay)
+import Control.Exception (bracket_, finally, throwIO)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (Value (..), eitherDecode, encode, toJSON)
 import Data.Generics.Labels ()
@@ -13,7 +14,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import Network.HTTP.Types (status200)
+import Network.HTTP.Types (mkStatus)
 import Network.Wai (rawPathInfo, requestMethod, responseLBS, strictRequestBody)
 import Network.Wai.Handler.Warp qualified as Warp
 import Shikumi.Decision
@@ -41,16 +42,43 @@ systemOneResponder f ctx = case V.toList (ctx ^. #messages) of
 
 -- | A bounded JSON loopback with an isolated provider registry and captured POSTs.
 withSystemOneFixture :: Value -> (Model -> ProviderRegistry -> IO [Value] -> IO a) -> IO a
-withSystemOneFixture reply action = do
+withSystemOneFixture reply = withSystemOneScript (repeat (SystemOneReply 200 reply (pure ())))
+
+-- | Scripted JSON replies. The barrier runs after request capture, allowing tests
+-- to synchronize cancellation and acknowledgement without timing guesses.
+data SystemOneReply = SystemOneReply
+  { statusCode :: Int,
+    body :: Value,
+    beforeReply :: IO ()
+  }
+
+-- | Bounded scripted loopback; all request workers are joined on every exit.
+withSystemOneScript :: [SystemOneReply] -> (Model -> ProviderRegistry -> IO [Value] -> IO a) -> IO a
+withSystemOneScript replies action = do
   seen <- newIORef []
-  let app req respond = do
+  pending <- newIORef replies
+  active <- newIORef []
+  let enter = myThreadId >>= \tid -> atomicModifyIORef' active (\xs -> (tid : xs, ()))
+      leave = myThreadId >>= \tid -> atomicModifyIORef' active (\xs -> (filter (/= tid) xs, ()))
+      waitEmpty = readIORef active >>= \xs -> if null xs then pure () else threadDelay 1000 >> waitEmpty
+      cleanup = do
+        tids <- readIORef active
+        result <- timeout 2000000 (mapM_ killThread tids >> waitEmpty)
+        maybe (throwIO (userError "System One fixture workers did not stop")) pure result
+      app req respond = bracket_ enter leave $ do
         if requestMethod req == "POST" && rawPathInfo req == "/v1/systemone" then pure () else throwIO (userError "unexpected System One method/path")
-        body <- strictRequestBody req
-        v <- either (throwIO . userError) pure (eitherDecode body)
+        requestBody <- strictRequestBody req
+        v <- either (throwIO . userError) pure (eitherDecode requestBody)
         atomicModifyIORef' seen (\xs -> (v : xs, ()))
-        respond (responseLBS status200 [("Content-Type", "application/json")] (encode reply))
-  Warp.testWithApplication (pure app) $ \port -> do
-    registry <- newProviderRegistry
-    registerApiProviderWith registry typesafeProvider
-    result <- timeout 10000000 (action (systemOneModel "jev-latest" & #baseUrl .~ ("http://127.0.0.1:" <> T.pack (show port))) registry (reverse <$> readIORef seen))
-    maybe (throwIO (userError "System One fixture timeout")) pure result
+        next <- atomicModifyIORef' pending $ \case [] -> ([], Nothing); r : rs -> (rs, Just r)
+        r <- maybe (throwIO (userError "System One fixture exhausted")) pure next
+        beforeReply r
+        respond (responseLBS (mkStatus (statusCode r) "fixture") [("Content-Type", "application/json")] (encode (body r)))
+      settings = Warp.setGracefulShutdownTimeout (Just 1) Warp.defaultSettings
+  ( Warp.testWithApplicationSettings settings (pure app) $ \port -> do
+      registry <- newProviderRegistry
+      registerApiProviderWith registry typesafeProvider
+      result <- timeout 10000000 (action (systemOneModel "jev-latest" & #baseUrl .~ ("http://127.0.0.1:" <> T.pack (show port))) registry (reverse <$> readIORef seen))
+      maybe (throwIO (userError "System One fixture timeout")) pure result
+    )
+    `finally` cleanup

@@ -22,6 +22,11 @@ provenance:
       at: 2026-11-03T04:11:05Z
       mode: "update"
       note: "Pin public API signatures, add per-attempt evidence provenance, separate terminal integrity from answer validity, set 0.6.0.0"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-11-03T04:34:22Z
+      mode: "implement"
+      note: "Implement streamed judgment parity, acknowledged attempt evidence, and structured replay"
 ---
 
 
@@ -41,10 +46,10 @@ Also implement [IR-3](../improvement-requests/expose-acknowledged-evidence-for-r
 ## Progress
 
 
-- [ ] M1: Complete and streamed judgments share request preparation and settings-aware decoding; a real TypeSafe loopback proves default and explicit-settings parity.
-- [ ] M2: An effectful attempt observer and truthful per-attempt evidence work for blocking and streaming calls; hermetic tests cover IR-3's required cases other than cancelled-attempt evidence.
-- [ ] M3: Structured terminal validation, acknowledged receipts, retries, cancellation, and observer/callback failures satisfy the lifecycle acceptance matrix for streamed judgments through the released TypeSafe provider.
-- [ ] M4: Structured stream capture/replay and existing cache policy preserve answers without fresh provider evidence; generative regressions pass.
+- [x] M1 (2026-11-03; real TypeSafe parity, wire and preflight tests pass): Complete and streamed judgments share request preparation and settings-aware decoding; a real TypeSafe loopback proves default and explicit-settings parity.
+- [x] M2 (2026-11-03; 31 AttemptEvidence tests pass for both operations, including barriers and concurrency): An effectful attempt observer and truthful per-attempt evidence work for blocking and streaming calls; hermetic tests cover IR-3's required cases other than cancelled-attempt evidence.
+- [x] M3 (2026-11-03; 21 SystemOne tests plus malformed-terminal and mixed generative regression tests pass): Structured terminal validation, acknowledged receipts, retries, cancellation, and observer/callback failures satisfy the lifecycle acceptance matrix for streamed judgments through the released TypeSafe provider.
+- [x] M4 (2026-11-03; 37 trace and 36 cache tests pass, including cross-mode replay and evidence bypass): Structured stream capture/replay and existing cache policy preserve answers without fresh provider evidence; generative regressions pass.
 - [ ] M5: Public documentation and ADRs describe the contract; release gates pass and the tagged Hackage artifact is verified, with downstream acceptance tracked separately.
 
 ## Surprises & Discoveries

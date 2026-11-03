@@ -51,6 +51,7 @@ library
     Shikumi.LLM.Budget
     Shikumi.LLM.Continuation
     Shikumi.LLM.Defaults
+    Shikumi.LLM.Evidence
     Shikumi.LLM.Observation
     Shikumi.Module
     Shikumi.Multimodal
@@ -99,6 +100,7 @@ test-suite shikumi-test
 
   other-modules:
     AdapterSpec
+    AttemptEvidenceSpec
     CliSchemaSpec
     CombinatorSpec
     ConstraintSpec
@@ -155,4 +157,5 @@ test-suite shikumi-test
     tasty-hunit,
     tasty-quickcheck,
     text,
+    time,
     vector,

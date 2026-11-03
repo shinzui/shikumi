@@ -5,7 +5,7 @@ description: Observe bounded run-local transport attempts independently of logic
 docId: ADR-13
 status: Accepted
 date: 2026-09-08
-timestamp: 2026-09-08T18:32:33Z
+timestamp: 2026-11-03T04:40:49Z
 generated:
   by: process:codex
   at: 2026-09-08T18:32:33Z
@@ -58,6 +58,11 @@ not another numeric spending series. Attempts carry call/ordinal correlation and
 no invented structural program parent. Observed model identity comes only from
 evidence, never from the response's echoed request model. All cache hits clear
 provider evidence, including the memory backend.
+
+Full attempt evidence has a separate acknowledgement seam in
+`Shikumi.LLM.Evidence`; it does not expand billing observations. Settlement order
+is budget charge, billing observation, evidence acknowledgement, then retry,
+classified failure or return. See [ADR-16](0016-acknowledge-provider-evidence-before-retry-or-return.md).
 
 ## Consequences
 

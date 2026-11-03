@@ -111,7 +111,6 @@ routeLLM = interpose $ \_ -> \case
     complete m ctx' opts'
   Stream _placeholder ctx opts -> do
     m <- currentModel
-    if capabilityFor m == DecisionOnly || Map.member metaDecisionEvidenceKey (opts ^. #metadata) then throwError (ValidationFailure "decision outputs do not support streaming") else pure ()
     (ctx', opts') <- either throwError pure (translateForWire m ctx opts)
     either throwError pure (validateRequestContinuation m ctx' opts')
     stream m ctx' opts'

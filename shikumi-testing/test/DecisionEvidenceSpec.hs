@@ -6,27 +6,28 @@ import Baikai
 import Baikai.Models.Generated (openai_gpt_4o_mini)
 import Control.Lens ((^.))
 import Data.Aeson (Value (..), object, toJSON, (.=))
-import Data.Aeson.KeyMap qualified as KM
 import Data.Generics.Labels ()
-import Data.IORef (newIORef, readIORef)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import Effectful (runEff)
+import Effectful (liftIO, runEff)
+import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (runErrorNoCallStack)
 import GHC.Generics (Generic)
 import Shikumi.Adapter
 import Shikumi.Decision
 import Shikumi.Decision.Setting
 import Shikumi.Error
+import Shikumi.LLM (LLM (..))
 import Shikumi.Program
 import Shikumi.Program qualified as P
 import Shikumi.Routing
-import Shikumi.Schema (Field, FromModel, ToSchema, Validatable, deriveSchema, field)
+import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema, field)
 import Shikumi.Signature (Signature, mkSignature, setDemos)
 import Shikumi.Signature qualified as Sig
-import Shikumi.Stream (streamProgram)
+import Shikumi.Stream (StreamEvent (..), streamProgram)
 import Shikumi.Testing.DecisionFixtures
 import Shikumi.Testing.Response
 import Shikumi.Testing.StubLLM
@@ -148,11 +149,32 @@ tests =
             value = object ["probabilities" .= object ["LeftSide" .= (0.8 :: Double), "RightSide" .= (0.2 :: Double)], "confidence" .= (0.9 :: Double)]
         run ps (evidenceJSONResponse [("nativeLabel", value)]) >>= (@?= Right (NativeEnum RightSide))
         evidenceFields @NativeEnum Map.empty @?= [],
-      testCase "decision streaming refuses before dispatch even without routing" $ do
-        calls <- newIORef 0
+      testCase "third-party malformed stream returns no partial judgment or LmEnd" $ do
+        let response = evidenceJSONResponse payloads
+            terminal = EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (response ^. #message)))
+            failure = EventError (doneTerminal Nothing Nothing ErrorReason (AssistantMessage (response ^. #message)))
+        mapM_
+          ( \events -> do
+              statuses <- newIORef []
+              result <-
+                runEff
+                  . runErrorNoCallStack @ShikumiError
+                  . interpret (\_ -> \case Complete {} -> pure response; Stream {} -> pure events)
+                  $ streamProgram (Predict sig emptyParams) (Ticket (field "x")) (\e -> liftIO (modifyIORef' statuses (++ [e])))
+              assertBool "failed" (case result of Left _ -> True; _ -> False)
+              readIORef statuses >>= (\xs -> length xs @?= 1)
+          )
+          [[], [terminal, terminal], [failure]],
+      testCase "generative mixed decision streams match complete output without field chunks" $ do
+        let response = evidenceJSONResponse payloads
+            terminal = EventDone (doneTerminal Nothing Nothing Stop (AssistantMessage (response ^. #message)))
+        expected <- execute openai_gpt_4o_mini evidenceJSONResponse emptyParams
         result <-
-          runEff . runErrorNoCallStack @ShikumiError . runCountingLLM calls (evidenceJSONResponse payloads) $
-            streamProgram (Predict sig emptyParams) (Ticket (field "x")) (const (pure ()))
-        assertBool "typed refusal" (case result of Left (ValidationFailure _) -> True; _ -> False)
-        readIORef calls >>= (@?= 0)
+          runEff
+            . runErrorNoCallStack @ShikumiError
+            . runRouting openai_gpt_4o_mini
+            . interpret (\_ -> \case Complete {} -> pure response; Stream {} -> pure [terminal])
+            . routeLLM
+            $ streamProgram (Predict sig emptyParams) (Ticket (field "x")) (\case StreamFieldChunk _ -> error "unexpected decision chunk"; _ -> pure ())
+        result @?= expected
     ]

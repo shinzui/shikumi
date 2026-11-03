@@ -92,6 +92,7 @@ import Shikumi.Cache.Key qualified as Key
 import Shikumi.Effect.Time (Time, getCurrentTime)
 import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.LLM.Observation (BillingSummary, UsageRecord (..), observedModelOf)
+import Shikumi.Stream (atomicEventsFromResponse, responseFromEvents)
 import Shikumi.Trace.Node (NodePath (..))
 import Shikumi.Trace.ResponseJSON ()
 import Text.Read (readMaybe)
@@ -356,8 +357,8 @@ safeHead (x : _) = Just x
 
 -- | Capture every LM call as a leaf 'LlmCallSpan' under the active span. Interpose
 -- on EP-1's @LLM@ effect: open a span, delegate to the underlying handler, then
--- fill the span's attributes from the returned 'Response' (and the request). Streaming terminals contribute usage and observed identity; only successful
--- blocking responses produce replay records.
+-- fill the span's attributes from the returned 'Response' (and the request). Streaming terminals contribute usage and observed identity; successful blocking responses and atomic structured
+-- streams produce replay records. Text streams retain usage-only capture.
 --
 -- This capture uses 'runTrace'\'s sequential span stack. Compose it with
 -- 'Shikumi.Program.runProgram'; concurrent program execution is intentionally
@@ -370,20 +371,26 @@ tracedLLM = interpose $ \_ -> \case
     pure resp
   Stream m c o -> withSpan LlmCallSpan (llmLabel m) $ do
     evs <- stream m c o
-    case [t | EventDone t <- evs] of
-      t : _ -> case t ^. #message of
-        AssistantMessage p -> annotateSpan $ \a ->
-          a
-            & #model ?~ (m ^. #modelId)
-            & #provider ?~ (m ^. #provider)
-            & #inputTokens ?~ (p ^. #usage . #inputTokens)
-            & #outputTokens ?~ (p ^. #usage . #outputTokens)
-            & #costUsd ?~ realToFrac (p ^. #usage . #cost . #usd :: Rational)
-            & #billingQuality ?~ UsageRecord (p ^. #usage)
-            & #observedModel .~ observedModelOf (t ^. #evidence)
-        _ -> pure ()
-      [] -> pure ()
+    case responseFromEvents m evs of
+      Right resp | Just _ <- atomicEventsFromResponse resp -> annotateSpan (const (llmAttrs m c o resp))
+      _ -> usageOnly m evs
     pure evs
+
+usageOnly :: (Trace :> es) => Model -> [AssistantMessageEvent] -> Eff es ()
+usageOnly m evs =
+  case [t | EventDone t <- evs] of
+    t : _ -> case t ^. #message of
+      AssistantMessage p -> annotateSpan $ \a ->
+        a
+          & #model ?~ (m ^. #modelId)
+          & #provider ?~ (m ^. #provider)
+          & #inputTokens ?~ (p ^. #usage . #inputTokens)
+          & #outputTokens ?~ (p ^. #usage . #outputTokens)
+          & #costUsd ?~ realToFrac (p ^. #usage . #cost . #usd :: Rational)
+          & #billingQuality ?~ UsageRecord (p ^. #usage)
+          & #observedModel .~ observedModelOf (t ^. #evidence)
+      _ -> pure ()
+    [] -> pure ()
 
 -- | The label for an LM-call span: @provider/model-id@.
 llmLabel :: Model -> Text

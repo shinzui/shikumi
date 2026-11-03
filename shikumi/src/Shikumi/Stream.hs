@@ -36,6 +36,8 @@ module Shikumi.Stream
     -- * Entry points
     streamComplete,
     streamProgram,
+    responseFromEvents,
+    atomicEventsFromResponse,
   )
 where
 
@@ -44,38 +46,44 @@ import Baikai
     AssistantMessageEvent (..),
     BlockEndPayload (..),
     Context,
+    DataEndPayload (..),
     DeltaPayload (..),
+    IndexPayload (..),
     Message (..),
     Model,
     Options,
     Response,
+    StartPayload (..),
+    StopReason (ErrorReason),
     TerminalPayload (..),
+    doneTerminal,
     emptyModel,
     emptyResponse,
     emptyTextContent,
+    responseError,
   )
-import Control.Lens ((&), (.~))
-import Control.Monad (when)
+import Control.Lens ((&), (.~), (^.))
 import Data.Generics.Labels ()
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
+import Data.Time.Clock (diffUTCTime)
 import Data.Vector qualified as V
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import GHC.Generics (Generic)
-import Shikumi.Adapter (Adapter (..), ToPrompt, adapterFor, attachNativeRender, attachSchema, evidenceFields, nativeRenderPieces)
+import Shikumi.Adapter (ToPrompt, evidenceFields)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.LLM (LLM, stream)
+import Shikumi.LLM (LLM, stream, streamTerminalError)
 import Shikumi.Program
   ( Params (..),
     Program (Compose, Embed, FMap, MajorityVote, Map, Parallel, Predict, PredictCaptured, Retry, RetryWhen, Validate),
     acceptOrReject,
-    effectiveSignature,
-    parseResponse,
+    parseResponseWithSettings,
+    preparePredict,
     retryWith,
     runProgram,
   )
-import Shikumi.Schema (FromModel, ToSchema, Validatable, deriveSchema)
+import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Schema.Types qualified as ST
 import Shikumi.Signature (Signature, outputFields)
 
@@ -237,20 +245,12 @@ streamProgram prog i cb = case prog of
   Embed _ -> blockingNode prog i cb
   _ -> blockingNode prog i cb
 
--- | Stream a single 'Predict', mirroring 'Shikumi.Program.runPredict' exactly so
--- the streamed and blocking paths share one wire + decode definition. It overlays
--- t'Params' via the exported 'effectiveSignature', renders model-agnostically, stamps
--- the derived schema and the native render alternative onto the metadata channel
--- (so the router can attach a native @responseFormat@ and swap the native prompt for
--- native-capable models), streams the first output field's chunks bracketed by
--- @LmStart@/@LmEnd@, and decodes the reassembled response through the shared
--- 'Shikumi.Program.parseResponse' (dual-format: JSON body → native parser keeping
--- its located error, marker body → fallback parser).
---
--- Chunk-attribution caveat (unchanged): field chunks are honest only for the
--- marker/raw-text wire shape; a routed native (JSON) stream still delivers chunks of
--- the raw JSON text, though the /final typed value/ now decodes correctly via
--- 'parseResponse'.
+-- | Prepare exactly the same request and apply the same local settings as the
+-- blocking runner. Decision outputs validate the complete terminal before decode
+-- and emit only LmStart and LmEnd, including mixed generative decision and text outputs.
+-- TypeSafe delivers one atomic structured response. The LLM operation collects
+-- events before invoking the program callback; it is not a live transport iterator.
+-- Ordinary text outputs retain their field chunks and status timing.
 streamPredict ::
   forall i o es.
   (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o) =>
@@ -261,19 +261,78 @@ streamPredict ::
   (StreamEvent -> Eff es ()) ->
   Eff es o
 streamPredict sig ps i cb = do
-  when (not (null (evidenceFields @o (decisionSettings ps)))) (throwError (ValidationFailure "decision outputs do not support streaming"))
-  sig' <- effectiveSignature sig ps
-  let adapter = adapterFor emptyModel
-      (ctx, opts0) = render adapter sig' i
-      (nativeSys, nativeDemos) = nativeRenderPieces @i @o sig'
-      opts = attachNativeRender nativeSys nativeDemos (attachSchema (deriveSchema @o) opts0)
-      fieldNm = case map ST.fieldName (outputFields sig') of
+  (sig', ctx, opts) <- preparePredict sig ps i
+  let fieldNm = case map ST.fieldName (outputFields sig') of
         (x : _) -> x
         [] -> ""
+      checked = not (null (evidenceFields @o (decisionSettings ps)))
+      decode = either throwError pure . parseResponseWithSettings (decisionSettings ps) sig'
   cb (StreamStatus (Status LmStart "LM call started"))
-  resp <- streamComplete fieldNm emptyModel ctx opts cb
-  cb (StreamStatus (Status LmEnd "LM call finished"))
-  either throwError pure (parseResponse sig' resp)
+  if checked
+    then do
+      evs <- stream emptyModel ctx opts
+      resp <- either throwError pure (responseFromEvents emptyModel evs)
+      result <- decode resp
+      cb (StreamStatus (Status LmEnd "LM call finished"))
+      pure result
+    else do
+      resp <- streamComplete fieldNm emptyModel ctx opts cb
+      cb (StreamStatus (Status LmEnd "LM call finished"))
+      decode resp
+
+-- | Validate terminal integrity and preserve the complete response envelope.
+-- Answer validity is checked separately by the settings-aware program decoder.
+responseFromEvents :: Model -> [AssistantMessageEvent] -> Either ShikumiError Response
+responseFromEvents model evs = case reverse evs of
+  EventDone tp : rest | not (any terminal rest) -> case tp ^. #message of
+    AssistantMessage payload
+      | tp ^. #errorInfo /= Nothing || payload ^. #stopReason == ErrorReason -> Left (streamTerminalError tp)
+      | otherwise -> do
+          let expected = [(i, d) | (i, AssistantData d) <- zip [0 ..] (V.toList (payload ^. #content))]
+              actual = [(i, d) | DataEnd (DataEndPayload i d) <- evs]
+              starts = [t | EventStart (StartPayload (AssistantMessage p) _) <- evs, Just t <- [p ^. #timestamp]]
+              latency = case (starts, payload ^. #timestamp) of
+                (t : _, Just end) -> max 0 (floor (1000 * diffUTCTime end t))
+                _ -> 0
+          if actual /= expected
+            then malformed "structured blocks disagree with terminal"
+            else
+              Right
+                ( emptyResponse
+                    & #model .~ model
+                    & #api .~ (model ^. #api)
+                    & #provider .~ (model ^. #provider)
+                    & #message .~ payload
+                    & #responseId .~ (tp ^. #responseId)
+                    & #evidence .~ (tp ^. #evidence)
+                    & #latencyMs .~ latency
+                )
+    _ -> malformed "terminal is not an assistant message"
+  EventError tp : rest | not (any terminal rest) -> Left (streamTerminalError tp)
+  _ -> malformed "expected one final success terminal"
+  where
+    terminal EventDone {} = True
+    terminal EventError {} = True
+    terminal _ = False
+    malformed = Left . SchemaMismatch
+
+-- | Reconstruct an atomic structured stream, without IO or new provider evidence.
+-- Text-only and failed recordings cannot supply structured stream replay.
+atomicEventsFromResponse :: Response -> Maybe [AssistantMessageEvent]
+atomicEventsFromResponse resp
+  | responseError resp /= Nothing || null structured = Nothing
+  | otherwise =
+      Just $
+        [EventStart (StartPayload (AssistantMessage skeleton) (resp ^. #responseId))]
+          ++ concat [block i b | (i, b) <- zip [0 ..] (V.toList (payload ^. #content))]
+          ++ [EventDone (doneTerminal (resp ^. #evidence) (resp ^. #responseId) (payload ^. #stopReason) (AssistantMessage payload))]
+  where
+    payload = resp ^. #message
+    skeleton = payload & #content .~ V.empty
+    structured = [d | AssistantData d <- V.toList (payload ^. #content)]
+    block i (AssistantData d) = [DataStart (IndexPayload i), DataEnd (DataEndPayload i d)]
+    block i (AssistantText t) = [TextStart (IndexPayload i), TextEnd (BlockEndPayload i (t ^. #text))]
+    block _ _ = []
 
 -- | Bracket an action with @NodeStart@/@NodeEnd@ status messages.
 bracketNode :: (StreamEvent -> Eff es ()) -> Eff es a -> Eff es a

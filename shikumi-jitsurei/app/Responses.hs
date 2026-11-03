@@ -3,15 +3,17 @@
 module Main (main) where
 
 import Baikai qualified as B
+import Baikai.Evidence qualified as E
 import Baikai.Models.Generated (allModels)
 import Baikai.Provider.OpenAI.Responses (openaiResponsesProvider)
 import Control.Lens ((&), (.~), (^.))
 import Control.Monad (unless)
 import Data.Aeson (Value (..), eitherDecode, encode, object, (.=))
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (find)
 import Data.Text qualified as T
 import Data.Text.IO qualified as Text
-import Effectful (runEff)
+import Effectful (liftIO, runEff)
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.Prim (runPrim)
@@ -74,13 +76,14 @@ main =
 
 demonstrate :: Bool -> B.Model -> B.ProviderRegistry -> B.Options -> IO ()
 demonstrate live model registry transport = do
+  acknowledged <- newIORef (0 :: Int)
+  let acknowledge _ = liftIO (atomicModifyIORef' acknowledged (\n -> (n + 1, ())))
   (observer, snapshot) <- O.newBillingCollectorWithLimit 8
   let runtime = (L.defaultLLMConfig registry) {L.observer = Just observer, L.retryPolicy = L.RetryPolicy 1 0 0}
       defaults =
         emptyRequestDefaults
           { defaultMaxTokens = Just 256,
-            defaultThinking = Just B.ThinkingLow,
-            defaultEvidence = Just (B.evidenceRequest "responses-example")
+            defaultThinking = Just B.ThinkingLow
           }
       agent = R.defaultReActConfig {R.protocol = R.ProtocolNative, R.maxIters = 3, R.compaction = CompactionConfig 0 4 False}
   (result, tree) <- runEff
@@ -90,9 +93,10 @@ demonstrate live model registry transport = do
     . Trace.runTrace
     . runErrorNoCallStack @ShikumiError
     . runRouting model
-    . L.runLLMResilient runtime
+    . L.runLLMResilientWithEvidence acknowledge runtime
     . withTransportOptions transport
     . Trace.tracedLLM
+    . withEvidenceRuns E.EvidenceBestEffort (liftIO E.newCallId)
     . withRequestDefaults defaults
     . routeLLM
     $ Trace.withSpan Trace.ProgramSpan "Responses workflow" . withUsageTotals
@@ -112,6 +116,8 @@ demonstrate live model registry transport = do
             R.SessionFinished answer finished -> pure (answer, finished, hasOpaqueContinuation (H.promptMessages saved))
             R.SessionPaused _ -> throwError (ValidationFailure "Agent iteration limit reached without a validated answer.")
   billing <- snapshot
+  receiptCount <- readIORef acknowledged
+  putStrLn ("acknowledged provider receipts: " <> show receiptCount)
   case result of
     Left _ -> do
       -- Raw provider errors may contain request details. The billing view exposes

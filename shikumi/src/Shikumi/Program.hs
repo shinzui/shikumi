@@ -72,6 +72,7 @@ module Shikumi.Program
     sampleTemps,
     withSampleTemp,
     effectiveSignature,
+    preparePredict,
     parseResponse,
 
     -- * Parameter interface (the optimizer/compiler contract)
@@ -89,7 +90,7 @@ module Shikumi.Program
   )
 where
 
-import Baikai (Model, emptyModel)
+import Baikai (Context, Model, Options, emptyModel)
 import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), object, withObject, (.!=), (.:), (.:?), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
@@ -370,6 +371,17 @@ runPredict ::
   i ->
   Eff es o
 runPredict sig ps i = do
+  (sig', ctx, opts) <- preparePredict sig ps i
+  resp <- complete placeholderModel ctx opts
+  either throwError pure (parseResponseWithSettings (decisionSettings ps) sig' resp)
+
+-- | Validate local settings and prepare the same request for both execution modes.
+-- Calibration values stay local; the returned options carry only rendering metadata.
+preparePredict ::
+  forall i o es.
+  (FromModel i, FromModel o, ToSchema o, Validatable o, ToPrompt i, ToPrompt o, Error ShikumiError :> es) =>
+  Signature i o -> Params -> i -> Eff es (Signature i o, Context, Options)
+preparePredict sig ps i = do
   let fields = fst (judgmentsInSchema (deriveSchema @o))
   either throwError pure $
     mapM_
@@ -398,8 +410,7 @@ runPredict sig ps i = do
       opts
         | null (fst (judgmentsInSchema schema)) = renderedOpts
         | otherwise = attachDecisionState (renderDecisionState sig' i) renderedOpts
-  resp <- complete placeholderModel ctx opts
-  either throwError pure (parseResponseWithSettings (decisionSettings ps) sig' resp)
+  pure (sig', ctx, opts)
 
 -- | Decode a response back into the typed output, tolerant of /either/ wire shape:
 -- a native model (whose @responseFormat@ the router enforced) replies with a JSON

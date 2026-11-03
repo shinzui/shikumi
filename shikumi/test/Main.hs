@@ -3,6 +3,7 @@
 module Main (main) where
 
 import AdapterSpec qualified
+import AttemptEvidenceSpec qualified
 import CliSchemaSpec qualified
 import CombinatorSpec qualified
 import ConstraintSpec qualified
@@ -38,7 +39,8 @@ main =
   defaultMain $
     testGroup
       "shikumi"
-      [ ResponsesSpec.tests,
+      [ AttemptEvidenceSpec.tests,
+        ResponsesSpec.tests,
         DecisionDeriveSpec.tests,
         RequestDefaultsSpec.tests,
         ContinuationSpec.tests,

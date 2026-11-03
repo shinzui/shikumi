@@ -5,7 +5,7 @@ description: Keep closed decision domains, probability evidence, local answer de
 docId: ADR-15
 status: Accepted
 date: 2026-10-24
-timestamp: 2026-10-25T18:14:37Z
+timestamp: 2026-11-03T04:40:49Z
 generated:
   by: agent:openai/gpt-6.1-sol
   at: 2026-10-25T04:43:42Z
@@ -54,7 +54,7 @@ the reserved metadata channel and is stripped by routing.
 
 Judgment-only routing uses Baikai's `isJudgmentOnly`, submits exactly one
 `UserData` state without a system prompt or tools, and refuses free-form outputs
-and streaming before dispatch. `AssistantData` probabilities and confidence feed
+before dispatch. `AssistantData` probabilities and confidence feed
 the decoder; its provider-selected `value` is ignored. Structured content survives
 the response cache codec.
 
@@ -74,7 +74,12 @@ Free-form fields can coexist with decisions on generative models.
 State and evidence schemas have separate private stamps. Judgment-only routing
 selects the original answer schema; generative routing selects the evidence schema.
 All stamps are stripped before transport. Numeric setting values never enter them.
-Streaming is refused at the program and routed LLM boundaries.
+Complete and streamed predictions share request preparation and settings-aware
+decoding. Decision outputs, including mixed generative outputs, emit status only.
+A streamed decision requires one final successful assistant terminal and matching
+structured blocks; malformed terminal sequences are non-transient SchemaMismatch.
+Structured stream recordings replay atomically with no fresh provider evidence;
+text streams keep usage-only tracing. See [plan 68](../plans/68-support-streamed-judgment-programs-with-typed-result-parity.md).
 
 The prompt classes live in the leaf module Shikumi.Adapter.Prompt, re-exported
 from Shikumi.Adapter, to avoid an Adapter/Decision import cycle. toPromptJSON

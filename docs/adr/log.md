@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-03
+* **Update**: Revise ADR-13–15 for acknowledged evidence and atomic judgment streams; add ADR-16 for observer failure, retry provenance and cancellation boundaries.
+
 ## 2026-10-25
 * **Update**: Distill ADR-14 judgment routing and ADR-15 generative evidence/schema/demo boundaries; clarify ADR-5 accepted selection frontier.
 * **Update**: Extend ADR-5 for ReAnchor replay placement, held-out selection and accepted reservation reporting.

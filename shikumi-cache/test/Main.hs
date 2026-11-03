@@ -72,11 +72,13 @@ import Shikumi.Decision.Setting
 import Shikumi.Effect.Time (runTime)
 import Shikumi.Error (ShikumiError (..))
 import Shikumi.LLM (LLM (..), complete)
+import Shikumi.LLM qualified as L
 import Shikumi.LLM.Continuation (contextIdentity, requestOrigin, stampContinuation)
 import Shikumi.LLM.Defaults
 import Shikumi.Program qualified as P
 import Shikumi.Routing (routeLLM, runRouting)
 import Shikumi.Schema (field)
+import Shikumi.Stream (atomicEventsFromResponse)
 import Shikumi.Testing.DecisionFixtures
 import Shikumi.Testing.Response (evidenceJSONResponse, evidenceMarkerResponse)
 import Shikumi.Testing.StubLLM (captureLLMRequests)
@@ -149,7 +151,43 @@ main = do
       defaultMain $
         testGroup
           "shikumi-cache"
-          [ testCase "Decision settings reuse evidence with identical cache keys on all backends" $ do
+          [ testCase "decision cache hits clear evidence while evidence requests and streams dispatch" $ do
+              cache <- newMemoryCache
+              calls <- newIORef 0
+              let ev =
+                    E.baseEvidence
+                      (E.evidenceRequest "historical")
+                      "historical-call"
+                      (E.EndpointIdentity "fixture" "custom" E.TransportHttpApi Nothing "fixture" Nothing)
+                      "model"
+                      E.noThinkingRequested
+                      someTime
+                      someTime
+                      E.CallSucceeded
+                      "digest"
+                      "config"
+                  response = systemOneResponse [("flag", FieldNoul (NoulEvidence 0.8))] & #evidence .~ Just ev
+                  interpreter = interpret $ \_ -> \case
+                    Complete {} -> liftIO (modifyIORef' calls (+ 1)) >> pure response
+                    Stream {} -> liftIO (modifyIORef' calls (+ 1)) >> maybe (error "fixture") pure (atomicEventsFromResponse response)
+                  requested = fixOpts & #evidence .~ Just (E.evidenceRequest "new")
+              result <- runEff . runConcurrent . runTime . runErrorNoCallStack @ShikumiError . interpreter . runCacheMemory cache . cachedLLM $ do
+                first <- complete fixModel fixCtx fixOpts
+                hit <- complete fixModel fixCtx fixOpts
+                fresh <- complete fixModel fixCtx requested
+                events <- L.stream fixModel fixCtx fixOpts
+                pure (first, hit, fresh, events)
+              case result of
+                Right (first, hit, fresh, events) -> do
+                  first ^. #evidence @?= Just ev
+                  hit ^. #evidence @?= Nothing
+                  hit ^. #message . #content @?= first ^. #message . #content
+                  fresh ^. #evidence @?= Just ev
+                  assertBool "stream still dispatched" (not (null events))
+                  eitherDecode (encode first) @?= Right (first & #evidence .~ Nothing)
+                Left err -> assertFailure (show err)
+              readIORef calls >>= (@?= 3),
+            testCase "Decision settings reuse evidence with identical cache keys on all backends" $ do
               let fields = [("urgent", FieldNoul (NoulEvidence 0.6)), ("severity", FieldScore (ScoreEvidence (V.fromList [0.1, 0.3, 0.6]) (Just 0.8))), ("category", FieldChoice (ChoiceEvidence (Map.fromList [("billing", 0.2), ("technical", 0.8)]) (Just 0.8)))]
                   payload = \case FieldNoul e -> toJSON e; FieldChoice e -> toJSON e; FieldScore e -> toJSON e
                   values = [(k, payload e) | (k, e) <- fields]

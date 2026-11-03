@@ -12,6 +12,8 @@ import Baikai
   ( AssistantContent (..),
     AssistantMessageEvent (..),
     BlockEndPayload (..),
+    DataContent (..),
+    DataEndPayload (..),
     DeltaPayload (..),
     IndexPayload (..),
     Message (..),
@@ -27,6 +29,7 @@ import Baikai
     emptyTextContent,
   )
 import Control.Lens ((&), (.~), (^.))
+import Data.Aeson (Value (Null))
 import Data.Generics.Labels ()
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
@@ -50,11 +53,13 @@ import Shikumi.Stream
     Status (..),
     StatusPhase (..),
     StreamEvent (..),
+    atomicEventsFromResponse,
+    responseFromEvents,
     streamComplete,
     streamProgram,
   )
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
 -- A single-text-field signature, the honest field-chunk case.
 newtype Question = Question {question :: Text}
@@ -139,7 +144,18 @@ tests :: TestTree
 tests =
   testGroup
     "StreamSpec"
-    [ testCase "M1: streamComplete folds deltas into field chunks and assembles the response" $ do
+    [ testCase "checked response rejects missing, duplicate, misplaced or inconsistent terminals" $ do
+        let d = DataContent Null Nothing Nothing Nothing
+            r = emptyResponse & #message . #content .~ V.singleton (AssistantData d)
+            terminal = EventDone (doneTerminal Nothing (Just "response-id") Stop (AssistantMessage (r ^. #message)))
+            block = DataEnd (DataEndPayload 0 d)
+            malformed = [[], [block], [block, terminal, terminal], [terminal, block], [terminal], [DataEnd (DataEndPayload 1 d), terminal]]
+        mapM_ (\events -> assertBool "terminal integrity" (case responseFromEvents emptyModel events of Left (SchemaMismatch _) -> True; _ -> False)) malformed
+        fmap (\r' -> r' ^. #responseId) (responseFromEvents emptyModel [block, terminal]) @?= Right (Just "response-id")
+        case atomicEventsFromResponse r of
+          Just events -> fmap (\r' -> r' ^. #message . #content) (responseFromEvents emptyModel events) @?= Right (r ^. #message . #content)
+          Nothing -> error "structured replay fixture",
+      testCase "M1: streamComplete folds deltas into field chunks and assembles the response" $ do
         ref <- newIORef [streamEventsFor ["Hel", "lo"] "Hello"]
         rec <- newIORef []
         resp <-
