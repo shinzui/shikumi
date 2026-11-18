@@ -261,6 +261,15 @@ in  Schema.Project::{
       , projectRef "composewell" "streamly"
       , projectRef "UnkindPartition" "tasty"
       ]
+    , docs =
+      [ Schema.DocRef::{
+        , key = "doc-site"
+        , kind = Schema.DocKind.Guide
+        , audience = Schema.DocAudience.User
+        , description = Some "Shikumi documentation site"
+        , location = Schema.DocLocation.Canonical "mori://shinzui/shikumi-docs/docs/site"
+        }
+      ]
     , okfBundles =
       [ Schema.OkfBundle::{
         , name = "friction-log"
