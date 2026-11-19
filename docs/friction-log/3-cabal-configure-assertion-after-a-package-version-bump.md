@@ -6,13 +6,18 @@ generated:
   by: "claude-code/claude-opus-5-5"
   at: "2026-11-19T00:01:22Z"
 frictionId: FRIC-3
-status: logged
+status: "accepted"
 impact: detour
 kind: tooling
 origin: "mori://shinzui/shikumi"
 affects: "mori://shinzui/shikumi"
 plan: "docs/plans/70-add-production-evidence-optimization-and-promotion-reports.md"
 workaround: "Moved every dist-newstyle/packagedb/ghc-9.12.4/*-inplace.conf whose version no longer matches the package's cabal file out of the package db and ran ghc-pkg recache"
+resolution: "The cause is inside Cabal 3.16's package index; the reliable workaround is to move in-place registrations whose version no longer matches the package's cabal file out of dist-newstyle/packagedb and run ghc-pkg recache, which costs a minute once the symptom is recognized."
+amended:
+  - by: "claude-code/claude-opus-5-5"
+    at: "2026-11-19T00:40:47Z"
+    change: "Accepted: a local build-cache defect with a cheap workaround, not a repository surface to change."
 ---
 # Cabal configure assertion after a package version bump
 

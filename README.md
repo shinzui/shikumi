@@ -261,6 +261,7 @@ Choose the layers your application needs:
 | `shikumi-eval` | Typed datasets, metrics, usage accounting, reports, and golden helpers |
 | `shikumi-compile` | Compilation, shape-safe parameter persistence, and typed structure registries |
 | `shikumi-optimize` | Demonstration and instruction search, GEPA, structure search, and ReAnchor calibration |
+| `shikumi-evidence` | Sealed production-evidence datasets, protected-holdout comparisons, and replayable promotion reports |
 | `shikumi-cache` | Cache effect with in-memory and SQLite backends |
 | `shikumi-cache-redis` | Redis cache backend |
 | `shikumi-cache-postgres` | PostgreSQL cache backend |

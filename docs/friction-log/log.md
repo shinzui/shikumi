@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-11-19
+
+* **Update**: FRIC-3 accepted: Accepted: a local build-cache defect with a cheap workaround, not a repository surface to change.
+
 * **Addition**: FRIC-3 records detour tooling friction with mori://shinzui/shikumi: Cabal configure assertion after a package version bump
 
 ## 2026-11-03

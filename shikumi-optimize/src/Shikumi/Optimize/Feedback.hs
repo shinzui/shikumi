@@ -127,7 +127,7 @@ legacyFeedback metric expected ev = pure $ case executionResult ev of
 -- 'includeProgramCritique' is set. Critiques still attach when execution failed,
 -- and positions beyond the identifier list attach nothing. The result passes
 -- through 'validateFeedback' like any other callback, so the bounds and
--- redaction of 'FeedbackConfig' apply unchanged.
+-- redaction of t'FeedbackConfig' apply unchanged.
 storedCritiqueFeedback ::
   (Applicative m) => [Text] -> [StoredCritique] -> Metric o -> o -> EvaluationEvidence o -> m FeedbackResult
 storedCritiqueFeedback ids stored metric expected ev =

@@ -5,7 +5,7 @@ description: Separate shared operation admission and candidate lifecycle from se
 docId: ADR-5
 status: Accepted
 date: 2026-09-07
-timestamp: 2026-10-25T18:14:37Z
+timestamp: 2026-11-19T00:33:09Z
 generated:
   by: process:codex
   at: 2026-09-07T04:01:05Z
@@ -83,6 +83,8 @@ New search algorithms reuse admission, evaluation and reports without importing
 GEPA. Generation width one preserves adaptive single-child scheduling; wider
 search uses a frontier snapshot between generations. Reports remain diagnostic:
 they do not authorize promotion, seal datasets, or evaluate a protected final holdout.
+[ADR-17](0017-seal-production-evidence-and-decide-promotion-by-replayable-reports.md)
+supplies those pieces on top of the session without changing its semantics.
 
 [Plan 53](../plans/53-add-validated-multi-objective-gepa-execution-and-lifecycle-events.md)
 records offline objective, split, counter, concurrency, lifecycle and compatibility

@@ -3,7 +3,7 @@
 This is the payoff of the GADT deep embedding: because a `Program` is *data*, you can score it
 against labeled examples, compile a prompting strategy into it, and let an optimizer **rewrite
 its parameters** — then serialize the tuned result. This guide covers `shikumi-eval`,
-`shikumi-compile`, and `shikumi-optimize`.
+`shikumi-compile`, `shikumi-optimize`, and `shikumi-evidence`.
 
 ---
 
@@ -485,6 +485,109 @@ It prints validation-selected candidate B, its objective frontier, actual operat
 versus the cap, and termination status. The fixture's cost values are declared work
 units. Operation limits do not count provider-internal transport retries separately
 and are neither dollar limits nor sealed production-promotion evidence.
+
+## Production-evidence optimization and promotion reports (`shikumi-evidence`)
+
+GEPA's reports are diagnostics. When a candidate is meant to replace a deployed program,
+someone who was not there must be able to check where the examples came from, which of them
+the optimizer could see, which baseline and candidate were compared, and whether the
+candidate improved without becoming unsafe, slower or more expensive. `shikumi-evidence`
+wraps the optimizer in a driver, `runEvidenceJob`, that produces exactly that proof. It
+decides the comparison only: it never activates a candidate, holds no credential and reads
+no files. The driver's effect row is the optimizer's, with no `IOE`.
+
+### The artifacts
+
+Every artifact is a JSON envelope carrying `contentDigest`: BLAKE3 over the canonical JSON
+of the envelope with that field removed. Readers verify the digest on the bytes as read and
+refuse a document that does not re-encode to itself, so unknown fields are rejected rather
+than ignored.
+
+- The **dataset** (`sealDataset`, `decodeDataset`) holds production records from an
+  adapter: input, optional expected output, a label whose kind is `human`, `model` or
+  `inferred`, source references, and critiques. A `RedactionPolicy` rewrites every text leaf
+  before sealing and fails the build if prohibited content remains.
+- The **program artifact** (`sealBaseline`, `decodeArtifact`, `loadArtifact`) stores the
+  compiled state `encodeCompiled` emits, a structural fingerprint, schema digests and the
+  source revisions (`SourceRef`, a repository id and a full 40-character commit). A
+  candidate also names its parent and the optimization that produced it: optimizer and
+  configuration, budget, predicted and admitted operations, exact usage, run status,
+  dataset digest, routes and recording digest.
+- The **comparison report** (`decodeReport`) binds the baseline, candidate, dataset,
+  policy and evaluator digests, embeds the policy, and records both arms' results,
+  constraint verdicts, the primary comparison, the holdout exposure, comparison operations
+  and the conclusion with machine-readable reasons. Its per-example rows hold only ids,
+  outcome classes and numbers.
+
+Two more envelopes support them: the declared **metric policy** (`decodePolicy`) and the
+**recordings** of each phase's provider outcomes. A lifecycle owner checks a report with
+`verifyReportBinding report baseline candidate dataset policy sources`.
+
+### Splits
+
+Each record lands in exactly one split: **training** examples the optimizer may inspect,
+**validation** examples that may only rank candidates, and the protected **holdout**, used
+once for the final comparison. Records sharing a group key, or with identical inputs, form
+one component and land together. Components are ordered by the digest of the split policy's
+salt and their smallest group key, and fill the holdout and then validation up to their
+per-mille shares. `validateDataset` rejects any group or input that crosses splits, any
+critique outside training, and a holdout below the dataset's declared minimum. No exported
+function returns holdout examples from an opened dataset; the optimizer receives only
+`OptimizerInputs` (validation data, training ids, training critiques and the metric).
+`gepaEvidenceOptimizer` wires these into GEPA, using `storedCritiqueFeedback` so stored
+critiques reach reflection labeled `Human`, `Model` or `Inferred`.
+
+### Recording and replay
+
+The driver installs a record/replay boundary below the caller's `requestPipeline` (routing
+and request defaults), so each request carries its real route. A recording keeps every
+outcome of each request in issue order, including the typed output errors the comparison
+counts as failures, so retries replay faithfully. In `Replay` mode no call reaches a
+provider: a missing or surplus outcome raises `ReplayDivergence`. Streamed calls and calls
+requesting provider evidence raise `UnrecordableCall`. Cost and latency come from recorded
+responses, and `exampleTimeoutMs` applies to an example's summed recorded latency, so a
+replay reproduces the candidate and report digests exactly. Jobs run sequentially.
+
+### The four conclusions
+
+The policy declares metrics over built-in measures (`quality`, `completed`, `timed_out`,
+`cost_usd`, `latency_ms`, `operations`, `tokens`) and pure custom measures, constraints
+read in each metric's direction (absolute limit, ratio to baseline, or margin), and
+evidence thresholds. The decision is fixed and ordered:
+
+1. **Invalid** when an input failed validation, the candidate's structure differs, or the
+   holdout is contaminated, too small or unlabeled. An unchanged candidate is then
+   **Inconclusive** without running the comparison or spending an exposure. Next,
+   **Invalid** when the exposure limit is exhausted without an override, the arms observed
+   different routes, the comparison did not finish, or a required metric has no value.
+2. **Regressed** when any constraint is violated or the primary metric is worse than the
+   baseline by more than the regression margin, even if quality rose.
+3. **Inconclusive** when there are too few labeled samples, too many missing labels, or too
+   small an improvement.
+4. **Improved** only otherwise.
+
+The exposure count is input: pass the holdout's prior exposures in `ExecutionContext`, and
+keep the durable count yourself (`ExposureLedger` is a small pure helper for that).
+
+### The example
+
+`jitsurei-evidence` replays a checked-in miniature of a reviewer agent from
+`shikumi-evidence/fixtures/uc7` with a provider that fails if reached, verifies each
+report's binding, and prints one `Improved` candidate and one `Regressed` candidate whose
+verbose instruction costs four times as much per answer:
+
+```bash
+nix develop -c cabal run -v0 exe:jitsurei-evidence
+```
+
+```text
+good       candidate blake3:efd7c918…  Improved   quality 0.2500 -> 0.7500  cost ratio 1.0000
+costly     candidate blake3:1d79297e…  Regressed  violated: cost-per-success (ratio 4.0000 > 1.1500)
+```
+
+It writes both candidates and reports under `dist-newstyle/jitsurei-evidence`; read them
+with `jq`. The test suite of `shikumi-evidence` regenerates the fixture live against its
+stub providers with `--accept`.
 
 ## Experimental finite structure search
 

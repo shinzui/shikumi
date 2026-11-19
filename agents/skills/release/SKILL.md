@@ -61,7 +61,8 @@ upload must succeed (and be visible on Hackage) before its dependents go up.
 | 8 | `shikumi-cache-redis` | `shikumi-cache-redis/` | shikumi, shikumi-cache |
 | 9 | `shikumi-cache-postgres` | `shikumi-cache-postgres/` | shikumi, shikumi-cache |
 | 10 | `shikumi-optimize` | `shikumi-optimize/` | shikumi, shikumi-compile, shikumi-eval, shikumi-trace |
-| 11 | `shikumi-okf` | `shikumi-okf/` | shikumi, okf-core |
+| 11 | `shikumi-evidence` | `shikumi-evidence/` | shikumi, shikumi-cache, shikumi-compile, shikumi-eval, shikumi-optimize, shikumi-trace |
+| 12 | `shikumi-okf` | `shikumi-okf/` | shikumi, okf-core |
 
 When only a subset changes, publish that subset **in this same relative order**, skipping the
 untouched packages.

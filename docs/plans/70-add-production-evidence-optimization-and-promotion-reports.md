@@ -95,15 +95,35 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   the fixture with one comparison-recording entry deleted fails with `ReplayDivergence`;
   copies with an edited baseline, candidate or dataset fail their digests, and one with an
   edited policy fails binding verification with `PolicyMismatch`.
-- [ ] M6: User guide, capability record, ADR, registry metadata, CI example list and
-  changelogs describe the shipped behavior, and every repository gate passes.
+- [x] M6 (2026-11-18): User guide, capability record, ADR, registry metadata, CI example
+  list and changelogs describe the shipped behavior, and every repository gate passes.
+  Evidence: the user guide section, CAP-45, ADR-17 (with a pointer from ADR-5), the
+  `README.md`, `mori.dhall` and release-skill entries, both changelogs and the IR-2 log
+  note are written; `nix develop -c bash -c 'cabal build all && cabal test all'` exits 0
+  with all 14 suites passing; `just check-haddock shikumi-evidence shikumi-optimize`,
+  `just check-adr` and `nix fmt` are clean.
 - [ ] M7: With the operator's explicit authorization at that time, the affected packages are
   released and IR-2 is marked completed.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The operation counts the plan predicted were exact on the first run: the optimization
+  phase was predicted and admitted at 17 with status `BudgetStopped`, and the comparison
+  at 16. A JSON round-tripped stub response kept `latencyMs`, usage and a terminating cost
+  exactly, so no `shikumi-cache` change was needed.
+- GHC 9.12 rejects an ambiguous record update outright, and the interface sketch shared
+  many field names across records (`createdAt`, `sources`, `policy`, `exampleId`,
+  `splitPolicy`, `contentDigest`). Consumers could not have updated a `DatasetSpec` or an
+  `EvidenceRecord` after importing the package. This led to the `NoFieldSelectors` and
+  nesting decision in the Decision Log. Evidence: the first test build failed with
+  `Ambiguous record update with field 'critiques'` and `'contentDigest'`.
+- Reusing the fixture's `root` critiques with a `retry 2` template produced an `Invalid`
+  report, because that template's only node path is `retry`. The driver's node check was
+  working; the test now uses a dataset without critiques.
+- Bumping `shikumi-optimize` to 0.4.0.0 made Cabal 3.16 abort configuration with an
+  `mkPackageIndex` assertion until stale in-place registrations were removed
+  ([FRIC-3](../friction-log/3-cabal-configure-assertion-after-a-package-version-bump.md)).
 
 
 ## Decision Log
@@ -336,7 +356,39 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Milestones M1 to M6 are complete on 2026-11-18. The new `shikumi-evidence` package seals
+production-evidence datasets, program artifacts, policies, recordings and reports;
+`runEvidenceJob` optimizes on training and validation only, compares baseline and
+candidate once on the protected holdout, and returns a report concluded `Improved`,
+`Regressed`, `Inconclusive` or `Invalid`. All twelve required tests are named groups that
+pass: `dataset-digest`, `split-leakage`, `holdout-isolation`, `artifact`, `driver-gates`,
+`comparison`, `conclusion`, `budget`, `replay`, `binding`, `labels` with the stored-critique
+cases of `shikumi-optimize`'s `FeedbackSpec`, and `uc7`. The suite has 53 tests, and the
+whole repository's 14 suites pass. `jitsurei-evidence` replays the checked-in UC-7 fixture
+with no provider and prints `Improved` for the good candidate and `Regressed` on
+`cost-per-success` (ratio 4) for the costly one. The hand checks of Validation and
+Acceptance hold: the written digests equal the checked-in ones, a deleted recording entry
+fails with `ReplayDivergence`, and edited baseline, candidate, dataset or policy files fail
+digest or binding verification. The driver's type has no `IOE`, and no public module
+exports a function from a sealed dataset to its holdout examples.
+
+Compared with the interface sketch, record field access changed: the package enables
+`NoFieldSelectors`, envelopes nest their builder records with flat JSON, the policy and
+evaluator digest functions are `digestPolicy` and `digestEvaluator`, `OptimizerInputs`
+names its metric `metric`, the redaction id is `redactionId`, and replay reads recordings
+with `readRecordingForReplay`. The functions, their inputs and their guarantees are as
+planned. Durable context is distilled into
+[ADR-17](../adr/0017-seal-production-evidence-and-decide-promotion-by-replayable-reports.md)
+and capability CAP-45 (`docs/capabilities/production-evidence-promotion-reports.md`).
+
+Friction: [FRIC-3](../friction-log/3-cabal-configure-assertion-after-a-package-version-bump.md)
+was accepted, because it is a Cabal build-cache defect with a one-minute workaround rather
+than a repository surface to change.
+
+M7 is not done. Publishing `shikumi-optimize 0.4.0.0` and `shikumi-evidence 0.1.0.0` to
+Hackage and marking IR-2 `completed` require the operator's explicit authorization, which
+has not been given in this session. IR-2 stays open, and its log records that release is
+pending.
 
 
 ## Context and Orientation

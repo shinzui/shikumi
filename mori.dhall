@@ -182,6 +182,22 @@ in  Schema.Project::{
           ]
         }
       , Schema.Package::{
+        , name = "shikumi-evidence"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , path = Some "shikumi-evidence"
+        , description = Some
+            "Production-evidence optimization and replayable promotion reports for shikumi programs"
+        , dependencies =
+          [ Schema.Dependency.ByName "haskell/aeson"
+          , Schema.Dependency.ByName "shinzui/baikai"
+          , Schema.Dependency.ByName "effectful/effectful"
+          , Schema.Dependency.ByName "ekmett/lens"
+          , Schema.Dependency.ByName "k0001/hs-blake3"
+          , testDep "UnkindPartition/tasty"
+          ]
+        }
+      , Schema.Package::{
         , name = "shikumi-tools"
         , type = Schema.PackageType.Library
         , language = Schema.Language.Haskell

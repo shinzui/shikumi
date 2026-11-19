@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Update**: IR-2 implementation has landed in shikumi-evidence 0.1.0.0 and shikumi-optimize 0.4.0.0 (unreleased), with the UC-7 fixture and the jitsurei-evidence example; release is pending, so IR-2 stays open.
+
 ## 2026-11-03
 * **Update**: Complete IR-5 after verifying all four tagged Hackage artifacts, published Haddock and GitHub releases at 7b96ecf. IR-3 stays open only for cancelled-attempt evidence; downstream consumer fixtures remain pending.
 * **Update**: IR-5 implementation and transport fixtures pass; tagged Hackage verification remains pending. IR-3 stays open only for cancelled-attempt evidence, delegated upstream to mori://shinzui/baikai/okf/improvement-requests/concepts/IR-13.

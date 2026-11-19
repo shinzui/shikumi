@@ -229,7 +229,7 @@ data SplitPolicy = SplitPolicy
     salt :: !Text,
     validationPerMille :: !Int,
     holdoutPerMille :: !Int,
-    -- | a holdout smaller than this makes every comparison 'Invalid'
+    -- | a holdout smaller than this makes every comparison @Invalid@
     minHoldoutExamples :: !Int,
     holdoutExposureLimit :: !Int
   }

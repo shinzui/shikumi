@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Decision**: Record ADR-17: digested evidence envelopes, holdout isolation, ordered-outcome record/replay, and the fixed conclusion order for promotion reports. ADR-5 now points to ADR-17 for sealed datasets, the protected holdout and promotion reports.
+
 ## 2026-11-03
 * **Update**: Revise ADR-13–15 for acknowledged evidence and atomic judgment streams; add ADR-16 for observer failure, retry provenance and cancellation boundaries.
 
