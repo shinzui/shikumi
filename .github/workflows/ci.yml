@@ -105,7 +105,7 @@ jobs:
           key: cabal-${{ runner.os }}-${{ hashFiles('flake.lock', 'cabal.project', '**/*.cabal') }}
           restore-keys: |
             cabal-${{ runner.os }}-
-      - name: Run all 16 example executables
+      - name: Run all 17 example executables
         run: |
           nix develop -L .#ghc9124-ci --command bash -c "
             set -euo pipefail
@@ -114,7 +114,8 @@ jobs:
                        jitsurei-react jitsurei-trace-replay jitsurei-multimodal \
                        jitsurei-streaming jitsurei-adapters jitsurei-codeexec \
                        jitsurei-gepa-objectives jitsurei-structure-search \
-                       jitsurei-request-defaults jitsurei-responses; do
+                       jitsurei-request-defaults jitsurei-responses \
+                       jitsurei-evidence; do
               echo \"=== running \$exe\"
               cabal run -v0 \"exe:\$exe\"
             done"

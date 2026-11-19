@@ -15,6 +15,7 @@ import LabelSpec qualified
 import ReplaySpec qualified
 import SplitSpec qualified
 import Test.Tasty (defaultMain, testGroup)
+import Uc7Spec qualified
 
 main :: IO ()
 main =
@@ -31,5 +32,6 @@ main =
         ComparisonSpec.tests,
         BudgetSpec.tests,
         ReplaySpec.tests,
-        DriverGateSpec.tests
+        DriverGateSpec.tests,
+        Uc7Spec.tests
       ]

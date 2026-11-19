@@ -13,6 +13,7 @@ main = do
   putStrLn "  jitsurei-optimize       Optimize demos, then serialize and reload them"
   putStrLn "  jitsurei-structure-search Finite typed structure selection and restoration"
   putStrLn "  jitsurei-gepa-objectives Validation-selected GEPA with quality/cost reports"
+  putStrLn "  jitsurei-evidence       Sealed production evidence, replayed promotion reports"
   putStrLn "  jitsurei-react          A typed tool and a ReAct agent loop"
   putStrLn "  jitsurei-trace-replay   Caching, hierarchical tracing, deterministic replay"
   putStrLn "  jitsurei-multimodal     An image input field the model actually sees"

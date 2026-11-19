@@ -296,6 +296,35 @@ executable jitsurei-gepa-objectives
     shikumi-optimize,
     text,
 
+-- Production-evidence optimization and promotion reports, replayed from the
+-- checked-in UC-7 fixture with no provider and no API key.
+executable jitsurei-evidence
+  import: common-options
+  main-is: Evidence.hs
+  hs-source-dirs: app
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    baikai >=0.10.0.0 && <0.11,
+    base >=4.20 && <5,
+    bytestring,
+    containers,
+    directory,
+    effectful,
+    filepath,
+    generic-lens,
+    lens,
+    shikumi,
+    shikumi-eval,
+    shikumi-evidence,
+    shikumi-jitsurei,
+    shikumi-optimize,
+    text,
+    time,
+
 -- Finite typed structure selection and restoration, fully offline.
 executable jitsurei-structure-search
   import: common-options

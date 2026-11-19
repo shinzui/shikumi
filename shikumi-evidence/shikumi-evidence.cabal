@@ -21,6 +21,10 @@ author: Nadeem Bitar
 maintainer: nadeem@gmail.com
 build-type: Simple
 extra-doc-files: CHANGELOG.md
+extra-source-files:
+  fixtures/uc7/*.json
+  fixtures/uc7/costly/*.json
+  fixtures/uc7/good/*.json
 
 common common-options
   ghc-options:
@@ -103,6 +107,7 @@ test-suite shikumi-evidence-test
     LabelSpec
     ReplaySpec
     SplitSpec
+    Uc7Spec
 
   build-depends:
     aeson,
@@ -110,7 +115,6 @@ test-suite shikumi-evidence-test
     base,
     bytestring,
     containers,
-    directory,
     effectful,
     filepath,
     generic-lens,

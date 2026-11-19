@@ -87,10 +87,14 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   driver-level halves of 4 and 7). Evidence: all 40 tests of `cabal test shikumi-evidence`
   pass, including `holdout-isolation`, `comparison`, `budget` (optimization predicted and
   admitted 17 with status `BudgetStopped`, comparison 16), `replay` and `driver-gates`.
-- [ ] M5: The UC-7 fixture, its golden artifacts and the `jitsurei-evidence` command show an
-  `Improved` candidate and a `Regressed` costly candidate from checked-in replay data.
-  Accepted when required test 12 passes and the command prints the transcript in Concrete
-  Steps.
+- [x] M5 (2026-11-18): The UC-7 fixture, its golden artifacts and the `jitsurei-evidence`
+  command show an `Improved` candidate and a `Regressed` costly candidate from checked-in
+  replay data. Accepted when required test 12 passes and the command prints the transcript
+  in Concrete Steps. Evidence: all 53 tests of `cabal test shikumi-evidence` pass, twice in
+  a row without `--accept`; the example prints the transcript below and exits 0; a copy of
+  the fixture with one comparison-recording entry deleted fails with `ReplayDivergence`;
+  copies with an edited baseline, candidate or dataset fail their digests, and one with an
+  edited policy fails binding verification with `PolicyMismatch`.
 - [ ] M6: User guide, capability record, ADR, registry metadata, CI example list and
   changelogs describe the shipped behavior, and every repository gate passes.
 - [ ] M7: With the operator's explicit authorization at that time, the affected packages are
@@ -313,6 +317,20 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   which is right for a failing rerun, but a node absent from the template means the dataset
   was built for a different program structure. Found when the retry-template replay test
   reused the fixture's `root` critiques on a template whose only node is `retry`.
+  Date: 2026-11-18
+
+- Decision: The fixture's request pipeline routes every call to one named stub model
+  (`fixture-reviewer-1` at provider `fixture`), and the example copies that pipeline.
+  Rationale: Without a pipeline every recorded route is the placeholder model with empty
+  fields, so the route bindings in the golden artifacts would show nothing. A named route
+  makes the same-route gate and the optimization record's routes meaningful in the fixture.
+  Date: 2026-11-18
+
+- Decision: The example verifies the checked-in report's binding against the files it holds
+  before replaying, in addition to verifying the replayed report.
+  Rationale: An edited policy file has no digest field to fail, and the replayed report
+  binds whatever policy it was given. Verifying the checked-in report first is what a
+  lifecycle owner does, and it makes an edited policy fail with `PolicyMismatch`.
   Date: 2026-11-18
 
 
@@ -929,20 +947,21 @@ nix develop -c cabal test shikumi-evidence --test-options=--accept
 git status --short shikumi-evidence/fixtures
 ```
 
-Run the example:
+Run the example. It takes an optional output directory and, after it, an optional fixture
+directory, which is how the tampering checks in Validation and Acceptance run it on a copy:
 
 ```bash
 nix develop -c cabal run -v0 exe:jitsurei-evidence
+nix develop -c cabal run -v0 exe:jitsurei-evidence -- /tmp/out /tmp/uc7-copy
 ```
 
-The transcript should have this shape. Replace the elided digests here with the real ones
-once the fixture exists, so later readers can compare exactly:
+The transcript with the checked-in fixture is:
 
 ```text
-dataset    blake3:…  train=12 validation=4 holdout=8
-baseline   blake3:…
-good       candidate blake3:…  Improved   quality 0.2500 -> 0.7500  cost ratio 1.0000
-costly     candidate blake3:…  Regressed  violated: cost-per-success (ratio 4.0000 > 1.1500)
+dataset    blake3:6e45169098e589ec46272960732a0f4fc6472a4d78cce89558e6bb5ed6f65e83  train=12 validation=4 holdout=8
+baseline   blake3:8e1237ada8ca9baeaca321c1e09bf826f2bef97b6058c9ea6c07466eb6adddd3
+good       candidate blake3:efd7c9185787515e666cda5860cccb9f6f69e0f9cd6c2bbda1298720fd28fc11  Improved   quality 0.2500 -> 0.7500  cost ratio 1.0000
+costly     candidate blake3:1d79297e14692241758c54c4af296736114794f90e8e326c02dcae54ecaaab3d  Regressed  violated: cost-per-success (ratio 4.0000 > 1.1500)
 replay reproduced the checked-in candidate and report digests
 bindings verified for good and costly reports
 wrote dist-newstyle/jitsurei-evidence/good/candidate.json

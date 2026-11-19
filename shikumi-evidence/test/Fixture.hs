@@ -38,6 +38,7 @@ module Fixture
 
     -- * Jobs
     Stack,
+    fixtureRoute,
     uc7Job,
     runJob,
     runJobWith,
@@ -50,8 +51,10 @@ module Fixture
 where
 
 import Baikai (AssistantContent (..), Context, Response, emptyResponse, emptyTextContent)
+import Baikai.Api (Api (Custom))
 import Baikai.Content (TextContent (..), UserContent (..))
 import Baikai.Message (Message (..))
+import Baikai.Model (emptyModel)
 import Control.Exception (ErrorCall (..), throw)
 import Control.Lens ((&), (.~), (^.))
 import Data.Aeson (object, (.=))
@@ -62,9 +65,9 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as V
-import Effectful (Eff, IOE, liftIO, runEff)
+import Effectful (Eff, IOE, liftIO, runEff, (:>))
 import Effectful.Concurrent (Concurrent, runConcurrent)
-import Effectful.Dispatch.Dynamic (EffectHandler, interpret)
+import Effectful.Dispatch.Dynamic (EffectHandler, interpose, interpret)
 import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
 import Effectful.Prim (Prim, runPrim)
 import GHC.Generics (Generic)
@@ -74,7 +77,7 @@ import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Metric, boolScore, predictionPrimary)
 import Shikumi.Evidence
-import Shikumi.LLM (LLM (..))
+import Shikumi.LLM (LLM (..), complete, stream)
 import Shikumi.Module (predict)
 import Shikumi.Optimize.Execution (RunLimits (..))
 import Shikumi.Optimize.Feedback (EvaluationEvidence (..))
@@ -347,9 +350,23 @@ uc7Job jobName execMode =
       customMeasures = falseActionable,
       policy = uc7Policy,
       context = ExecutionContext "fixture-runner" fixedTime jobName Nothing sources noPriorExposure,
-      requestPipeline = id,
+      requestPipeline = fixtureRoute,
       mode = execMode
     }
+
+-- | The fixture's request pipeline: route every call to one named stub model,
+-- as a caller's routing wrapper would.
+fixtureRoute :: (LLM :> es) => Eff es a -> Eff es a
+fixtureRoute = interpose $ \_ -> \case
+  Complete _ c o -> complete fixtureModel c o
+  Stream _ c o -> stream fixtureModel c o
+  where
+    fixtureModel =
+      emptyModel
+        & #modelId .~ "fixture-reviewer-1"
+        & #provider .~ "fixture"
+        & #api .~ Custom "fixture-stub"
+        & #baseUrl .~ "stub://fixture"
 
 -- | Run a job against a responder.
 runJob :: (Context -> Response) -> EvidenceJob Stack Review Finding -> IO (Either ShikumiError EvidenceJobResult)
