@@ -118,7 +118,8 @@ data OptimizerInputs i o = OptimizerInputs
   { validation :: Dataset i o,
     trainingExampleIds :: [Text],
     trainingCritiques :: [StoredCritique],
-    searchMetric :: Metric o
+    -- | the job's search metric
+    metric :: Metric o
   }
 
 -- | An optimizer with the identity and declared configuration copied into the
@@ -168,7 +169,7 @@ gepaEvidenceOptimizer cfg proposer =
       buildOptimizer = \inputs ->
         let programScoped = any (isNothing . critiqueNode) inputs.trainingCritiques
             fc = cfg.feedback {includeProgramCritique = includeProgramCritique cfg.feedback || programScoped}
-            callback = FeedbackCallback (storedCritiqueFeedback inputs.trainingExampleIds inputs.trainingCritiques inputs.searchMetric)
+            callback = FeedbackCallback (storedCritiqueFeedback inputs.trainingExampleIds inputs.trainingCritiques inputs.metric)
             base = defaultGEPAConfig callback
          in gepaWith
               base
@@ -265,7 +266,7 @@ runEvidenceJob job = do
               { validation = sealedValidation sealed,
                 trainingExampleIds = sealedTrainingIds sealed,
                 trainingCritiques = sealedTrainingCritiques sealed,
-                searchMetric = job.searchMetric
+                metric = job.searchMetric
               }
           configured = job.optimizer.buildOptimizer inputs
           runCfg = RunConfig {runLimits = job.limits, eventSink = const (pure ())}

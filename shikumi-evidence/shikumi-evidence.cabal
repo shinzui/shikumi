@@ -93,10 +93,15 @@ test-suite shikumi-evidence-test
   other-modules:
     ArtifactSpec
     BindingSpec
+    BudgetSpec
+    ComparisonSpec
     ConclusionSpec
     DatasetDigestSpec
+    DriverGateSpec
     Fixture
+    HoldoutIsolationSpec
     LabelSpec
+    ReplaySpec
     SplitSpec
 
   build-depends:

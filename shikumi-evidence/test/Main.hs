@@ -5,9 +5,14 @@ module Main (main) where
 
 import ArtifactSpec qualified
 import BindingSpec qualified
+import BudgetSpec qualified
+import ComparisonSpec qualified
 import ConclusionSpec qualified
 import DatasetDigestSpec qualified
+import DriverGateSpec qualified
+import HoldoutIsolationSpec qualified
 import LabelSpec qualified
+import ReplaySpec qualified
 import SplitSpec qualified
 import Test.Tasty (defaultMain, testGroup)
 
@@ -21,5 +26,10 @@ main =
         LabelSpec.tests,
         ArtifactSpec.tests,
         ConclusionSpec.tests,
-        BindingSpec.tests
+        BindingSpec.tests,
+        HoldoutIsolationSpec.tests,
+        ComparisonSpec.tests,
+        BudgetSpec.tests,
+        ReplaySpec.tests,
+        DriverGateSpec.tests
       ]

@@ -23,6 +23,7 @@ module Fixture
     uc7Spec,
     noRedaction,
     uc7Dataset,
+    sealFixture,
     baselineArtifact,
     uc7Policy,
     uc7Limits,
@@ -36,10 +37,15 @@ module Fixture
     userText,
 
     -- * Jobs
+    Stack,
     uc7Job,
     runJob,
     runJobWith,
+    runEffectful,
     expectRight,
+    fixedInstructionOptimizer,
+    identityOptimizer,
+    reshapingOptimizer,
   )
 where
 
@@ -56,23 +62,26 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time (UTCTime (..), fromGregorian)
 import Data.Vector qualified as V
-import Effectful (Eff, IOE)
-import Effectful.Concurrent (Concurrent)
-import Effectful.Error.Static (Error)
-import Effectful.Prim (Prim)
+import Effectful (Eff, IOE, liftIO, runEff)
+import Effectful.Concurrent (Concurrent, runConcurrent)
+import Effectful.Dispatch.Dynamic (EffectHandler, interpret)
+import Effectful.Error.Static (Error, runErrorNoCallStack, throwError)
+import Effectful.Prim (Prim, runPrim)
 import GHC.Generics (Generic)
 import Shikumi.Adapter (ToPrompt)
 import Shikumi.Compile.Types (CompiledProgram (..))
-import Shikumi.Effect.Time (Time)
+import Shikumi.Effect.Time (Time, runTime)
 import Shikumi.Error (ShikumiError)
 import Shikumi.Eval (Metric, boolScore, predictionPrimary)
 import Shikumi.Evidence
-import Shikumi.LLM (LLM)
+import Shikumi.LLM (LLM (..))
 import Shikumi.Module (predict)
 import Shikumi.Optimize.Execution (RunLimits (..))
 import Shikumi.Optimize.Feedback (EvaluationEvidence (..))
 import Shikumi.Optimize.GEPA (reflectiveProposer)
-import Shikumi.Program (Program)
+import Shikumi.Optimize.Search (setNodeInstr)
+import Shikumi.Optimize.Types (ConfiguredOptimizer (..))
+import Shikumi.Program (Program (Retry))
 import Shikumi.Schema (FromModel, ToSchema, Validatable)
 import Shikumi.Signature (mkSignature)
 import Shikumi.Testing (runStubEval, systemContains)
@@ -204,15 +213,19 @@ noRedaction = RedactionPolicy "redaction-none-v1" id (const False)
 -- human critique at the root node, attached after splitting so only training
 -- examples hold critiques.
 uc7Dataset :: EvidenceDataset
-uc7Dataset = either (error . show) id (sealDataset uc7Spec noRedaction critiqued)
+uc7Dataset = sealFixture uc7Records
+
+-- | Seal records under the fixture spec, attaching the root critique to every
+-- training record labeled @adr-suspect@.
+sealFixture :: [EvidenceRecord] -> EvidenceDataset
+sealFixture records = either (error . show) id (sealDataset uc7Spec noRedaction critiqued)
   where
-    splits = assignSplits (splitPolicy' uc7Spec) uc7Records
-    splitPolicy' s = s.splitPolicy
+    splits = assignSplits uc7Spec.splitPolicy records
     critiqued =
       [ if s == Train && r.expected == Just (object ["disposition" .= ("adr-suspect" :: Text)])
           then r {critiques = [Critique (Just "root") "Name the conflict between the record and the guidance." HumanLabel "adjudicator-1" fixedTime]}
           else r
-      | (r, s) <- zip uc7Records splits
+      | (r, s) <- zip records splits
       ]
 
 -- | The baseline artifact for the reviewer.
@@ -317,6 +330,7 @@ userTexts ctx = [T.concat [t | UserText (TextContent t) <- V.toList (u ^. #conte
 -- Jobs
 -- ---------------------------------------------------------------------------
 
+-- | The effect stack the suites run jobs in.
 type Stack = '[LLM, Concurrent, Error ShikumiError, Time, Prim, IOE]
 
 -- | The UC-7 job with the GEPA evidence optimizer and no request pipeline.
@@ -348,3 +362,28 @@ runJobWith = runStubEval
 -- | Fail the test on a typed error.
 expectRight :: (Show e) => Either e a -> IO a
 expectRight = either (\e -> assertFailure (show e) >> error "unreachable") pure
+
+-- | Run an action against an effectful responder that may keep state or raise a
+-- typed provider error.
+runEffectful :: (Context -> IO (Either ShikumiError Response)) -> Eff Stack a -> IO (Either ShikumiError a)
+runEffectful responder =
+  runEff . runPrim . runTime . runErrorNoCallStack . runConcurrent . interpret handler
+  where
+    handler :: EffectHandler LLM '[Concurrent, Error ShikumiError, Time, Prim, IOE]
+    handler _ = \case
+      Complete _ c _ -> liftIO (responder c) >>= either throwError pure
+      Stream {} -> pure []
+
+-- | An optimizer that makes no call and sets the first node's instruction.
+fixedInstructionOptimizer :: Text -> OptimizerSpec i o
+fixedInstructionOptimizer instruction =
+  OptimizerSpec "fixture.fixed-instruction" "1" (object ["instruction" .= instruction]) $ \_ ->
+    ConfiguredOptimizer $ \_ _ _ prog -> pure (CompiledProgram (setNodeInstr 0 instruction prog))
+
+-- | An optimizer that returns its starting program unchanged.
+identityOptimizer :: OptimizerSpec i o
+identityOptimizer = OptimizerSpec "fixture.identity" "1" (object []) $ \_ -> ConfiguredOptimizer $ \_ _ _ prog -> pure (CompiledProgram prog)
+
+-- | An optimizer that returns a differently shaped program.
+reshapingOptimizer :: OptimizerSpec i o
+reshapingOptimizer = OptimizerSpec "fixture.reshape" "1" (object []) $ \_ -> ConfiguredOptimizer $ \_ _ _ prog -> pure (CompiledProgram (Retry 2 prog))

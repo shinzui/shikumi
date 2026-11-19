@@ -81,10 +81,12 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   the existing `shikumi-optimize` suite still passes (the critique half of required test
   11). Evidence: `cabal test shikumi-optimize` reports all 144 tests passed, including the
   three stored-critique cases in `FeedbackSpec`.
-- [ ] M4: `runEvidenceJob` optimizes and then compares on the protected holdout under
-  recorded or replayed provider responses. Accepted when the isolation, same-protocol,
-  budget and replay test groups pass (required tests 3, 5, 8 and 9, and the driver-level
-  halves of 4 and 7).
+- [x] M4 (2026-11-18): `runEvidenceJob` optimizes and then compares on the protected
+  holdout under recorded or replayed provider responses. Accepted when the isolation,
+  same-protocol, budget and replay test groups pass (required tests 3, 5, 8 and 9, and the
+  driver-level halves of 4 and 7). Evidence: all 40 tests of `cabal test shikumi-evidence`
+  pass, including `holdout-isolation`, `comparison`, `budget` (optimization predicted and
+  admitted 17 with status `BudgetStopped`, comparison 16), `replay` and `driver-gates`.
 - [ ] M5: The UC-7 fixture, its golden artifacts and the `jitsurei-evidence` command show an
   `Improved` candidate and a `Regressed` costly candidate from checked-in replay data.
   Accepted when required test 12 passes and the command prints the transcript in Concrete
@@ -293,6 +295,24 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   is `digestEvaluator`, because `policyDigest` and `evaluatorDigest` are field names of
   `ReportBindings`.
   Rationale: A field and a function of the same name cannot both be used unqualified.
+  Date: 2026-11-18
+
+- Decision: In replay mode the driver recomputes each recording's digest from its content
+  instead of trusting the stored field, and `readRecordingForReplay` reads a recording with
+  every check of `decodeRecording` except the stored digest.
+  Rationale: The acceptance check requires that deleting an entry from a copy of a recording
+  makes the example fail with a replay divergence rather than a digest error. A replay
+  establishes a recording's integrity itself: a missing or surplus outcome diverges, and any
+  other edit changes the recording digest that the candidate and report bind, so their
+  digests stop matching the checked-in ones.
+  Date: 2026-11-18
+
+- Decision: A stored critique that names a node the template does not have makes the job
+  `Invalid` before any model call.
+  Rationale: `storedCritiqueFeedback` drops critiques whose node did not execute in one run,
+  which is right for a failing rerun, but a node absent from the template means the dataset
+  was built for a different program structure. Found when the retry-template replay test
+  reused the fixture's `root` critiques on a template whose only node is `retry`.
   Date: 2026-11-18
 
 
