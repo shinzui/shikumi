@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-11-19
+* **Addition**: FRIC-3 records detour tooling friction with mori://shinzui/shikumi: Cabal configure assertion after a package version bump
+
 ## 2026-11-03
 * **Update**: FRIC-2 accepted: Retain the shell behavior and document the release-command workaround
 * **Addition**: FRIC-2 records nuisance environment friction with mori://shinzui/shikumi: Package-directory dev shells bootstrap separate database clusters

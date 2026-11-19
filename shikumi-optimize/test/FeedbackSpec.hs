@@ -221,6 +221,49 @@ tests =
           scores @?= [0]
           map (`feedbackFor` logbook) (programNodePaths prog) @?= [[], []]
           feedbackFor (NodePath []) logbook @?= ["program (LegacyProgram): fix"],
+      testCase "stored critiques reach the proposer labeled Human and Model" $ do
+        let ds = dataset [example (Sentence "first") (Label "positive"), example (Sentence "second") (Label "positive")]
+            stored =
+              [ StoredCritique "ex-a" (Just (NodePath [])) "name the conflict" Human "reviewer@example",
+                StoredCritique "ex-b" (Just (NodePath [])) "cite the guidance" Model "critic-model"
+              ]
+            callback = storedCritiqueFeedback ["ex-a", "ex-b"] stored exactMatch
+            proposer = Embed $ \input ->
+              if "Human: name the conflict" `T.isInfixOf` feedback input && "Model: cite the guidance" `T.isInfixOf` feedback input
+                then pure (ReflectOut "changed")
+                else throwError (ValidationFailure (feedback input))
+        result <- runScript [ok, ok] $ do
+          rows <- captureEvidence defaultFeedbackConfig ds callback sentimentProg
+          changed <- mutateFromEvidence defaultFeedbackConfig proposer "" "" rows 0 sentimentProg
+          pure (map (\(_, fb, _) -> fb) rows, programParams changed)
+        checkRight result $ \(feedbacks, params) -> do
+          map (map provenance . nodeCritiques) feedbacks @?= [[Human], [Model]]
+          map (unScore . overallScore) feedbacks @?= [1, 1]
+          instructionOverride (params !! 0) @?= Just "changed",
+      testCase "examples without stored critiques, unexecuted nodes and positions past the ids attach nothing" $ do
+        let ds = dataset [example (Sentence "first") (Label "positive"), example (Sentence "second") (Label "negative"), example (Sentence "third") (Label "positive")]
+            stored =
+              [ StoredCritique "ex-a" (Just (NodePath [StepComposeR])) "never executed" Human "reviewer",
+                StoredCritique "ex-b" Nothing "program scoped" Inferred "outcome-adapter",
+                StoredCritique "ex-z" (Just (NodePath [])) "unlisted example" Human "reviewer"
+              ]
+            callback = storedCritiqueFeedback ["ex-a", "ex-b"] stored exactMatch
+        result <- runScript [ok, ok, ok] (captureEvidence defaultFeedbackConfig ds callback sentimentProg)
+        checkRight result $ \rows -> do
+          let feedbacks = map second rows
+          map nodeCritiques feedbacks @?= [[], [], []]
+          map programCritique feedbacks @?= [Nothing, Just (Inferred, "program scoped"), Nothing]
+          map (unScore . overallScore) feedbacks @?= [1, 0, 1],
+      testCase "failed executions still carry stored critiques and long critiques are truncated" $ do
+        let ds = dataset [example (Sentence "first") (Label "positive")]
+            stored = [StoredCritique "ex-a" (Just (NodePath [])) (T.replicate 50 "x") Human "reviewer"]
+            cfg = defaultFeedbackConfig {critiqueCharacters = 10}
+        result <- runScript [Right "not JSON"] (captureEvidence cfg ds (storedCritiqueFeedback ["ex-a"] stored exactMatch) sentimentProg)
+        checkRight result $ \rows -> do
+          let fb = second (rows !! 0)
+          unScore (overallScore fb) @?= 0
+          map critique (nodeCritiques fb) @?= [T.replicate 9 "x" <> "…"]
+          map provenance (nodeCritiques fb) @?= [Human],
       testCase "retry evidence keeps rejected and accepted invocation lineage" $ do
         let prog = Retry 2 sentimentProg
             ds = dataset [example (Sentence "input") (Label "positive")]

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Breaking
+
+- Add the `Human` and `Inferred` constructors to `Shikumi.Optimize.Feedback.Provenance`,
+  so stored production critiques keep their label kind all the way into the reflection
+  prompt. Code that matches on `Provenance` exhaustively must handle them.
+
+### Added
+
+- Add `StoredCritique` and `storedCritiqueFeedback`: a GEPA feedback callback over
+  critiques stored with examples and keyed by a stable example id. Node critiques attach
+  only when their node executed, at most one program-scoped critique fills the program
+  slot, and the existing bounds and redaction apply unchanged.
+
 ## 0.3.1.0 — 2026-11-02
 
 ### Added

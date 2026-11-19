@@ -16,6 +16,11 @@ provenance:
       at: 2026-11-18T23:47:34Z
       mode: "update"
       note: "Pre-implementation review: ordered-outcome recordings, recorded typed errors, deterministic timeouts, raw-value digests, corrected orientation and interfaces"
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-11-19T00:01:48Z
+      mode: "implement"
+      note: "Implemented milestones and recorded progress"
 ---
 
 # Add production-evidence optimization and promotion reports
@@ -68,9 +73,11 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   reports and report-binding verification exist as values. Accepted when the artifact,
   conclusion and binding test groups pass (required tests 4, 6, 7 and 10 at the value
   level).
-- [ ] M3: GEPA accepts critiques keyed by a stable example id that keep their human, model
-  or inferred provenance. Accepted when the new stored-critique tests pass and the existing
-  `shikumi-optimize` suite still passes (the critique half of required test 11).
+- [x] M3 (2026-11-18): GEPA accepts critiques keyed by a stable example id that keep their
+  human, model or inferred provenance. Accepted when the new stored-critique tests pass and
+  the existing `shikumi-optimize` suite still passes (the critique half of required test
+  11). Evidence: `cabal test shikumi-optimize` reports all 144 tests passed, including the
+  three stored-critique cases in `FeedbackSpec`.
 - [ ] M4: `runEvidenceJob` optimizes and then compares on the protected holdout under
   recorded or replayed provider responses. Accepted when the isolation, same-protocol,
   budget and replay test groups pass (required tests 3, 5, 8 and 9, and the driver-level

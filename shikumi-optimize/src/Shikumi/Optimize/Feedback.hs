@@ -5,6 +5,8 @@ module Shikumi.Optimize.Feedback
     EvaluationEvidence (..),
     NodeFeedback (..),
     Provenance (..),
+    StoredCritique (..),
+    storedCritiqueFeedback,
     FeedbackResult (..),
     FeedbackConfig (..),
     defaultFeedbackConfig,
@@ -24,7 +26,7 @@ import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Prim (Prim)
 import Shikumi.Error (ShikumiError (..))
-import Shikumi.Eval (Dataset, Example (..), Prediction, Score, datasetExamples, prediction, scoreZero)
+import Shikumi.Eval (Dataset, Example (..), Metric, Prediction, Score, datasetExamples, prediction, scoreZero)
 import Shikumi.Eval.Evaluate (scoreExecution, tryShikumi)
 import Shikumi.Eval.Report (FailurePolicy (..), FailureReason (..), UsageTotals)
 import Shikumi.Eval.Usage (withUsageTotals)
@@ -45,7 +47,24 @@ data EvaluationEvidence o = EvaluationEvidence
   }
   deriving stock (Eq, Show)
 
-data Provenance = Caller | Model | LegacyProgram deriving stock (Eq, Show)
+-- | Who produced a critique. 'Human' and 'Inferred' label stored production
+-- evidence: an adjudication by a person, and a critique derived from an
+-- operational outcome rather than written by anyone. None of the values implies
+-- human approval of a candidate (ADR-4).
+data Provenance = Caller | Model | LegacyProgram | Human | Inferred deriving stock (Eq, Show)
+
+-- | A critique stored with an example in a dataset rather than computed by a
+-- callback. It is keyed by the example's stable identifier, so it survives
+-- reordering, and it keeps the provenance of whoever produced it. A critique with
+-- no node is program-scoped.
+data StoredCritique = StoredCritique
+  { critiqueExampleId :: !Text,
+    critiqueNode :: !(Maybe NodePath),
+    critiqueText :: !Text,
+    critiqueProvenance :: !Provenance,
+    critiqueAuthor :: !Text
+  }
+  deriving stock (Eq, Show)
 
 data NodeFeedback = NodeFeedback
   { feedbackExample :: !Int,
@@ -94,6 +113,41 @@ legacyFeedback metric expected ev = pure $ case executionResult ev of
   Right out ->
     let (s, t) = metric expected (prediction out)
      in FeedbackResult s (if T.null t then Nothing else Just (LegacyProgram, t)) []
+
+-- | A feedback callback over critiques stored with the examples.
+--
+-- The first argument lists the stable example identifiers in the order of the
+-- dataset being captured, so the example at position @n@ has identifier @n@ of
+-- the list. Each example is scored with the metric (zero when execution failed).
+-- Every stored node critique for the example whose node executed in this run is
+-- attached with its provenance; a critique for a node that did not execute is
+-- dropped rather than rejected, because production evidence may name a node a
+-- failing rerun never reached. The example's program-scoped critique, at most
+-- one, fills 'programCritique' and is rendered only when
+-- 'includeProgramCritique' is set. Critiques still attach when execution failed,
+-- and positions beyond the identifier list attach nothing. The result passes
+-- through 'validateFeedback' like any other callback, so the bounds and
+-- redaction of 'FeedbackConfig' apply unchanged.
+storedCritiqueFeedback ::
+  (Applicative m) => [Text] -> [StoredCritique] -> Metric o -> o -> EvaluationEvidence o -> m FeedbackResult
+storedCritiqueFeedback ids stored metric expected ev =
+  pure (FeedbackResult score programScoped nodeScoped)
+  where
+    score = either (const scoreZero) (metric expected . prediction) (executionResult ev)
+    ix = exampleIndex ev
+    mine = case drop ix ids of
+      (ident : _) | ix >= 0 -> [c | c <- stored, critiqueExampleId c == ident]
+      _ -> []
+    executed path = any (\obs -> observationPath obs == path && not (observationOpaque obs)) (observations ev)
+    nodeScoped =
+      [ NodeFeedback ix path Nothing (critiqueText c) (critiqueProvenance c)
+      | c <- mine,
+        Just path <- [critiqueNode c],
+        executed path
+      ]
+    programScoped = case [c | c <- mine, critiqueNode c == Nothing] of
+      (c : _) -> Just (critiqueProvenance c, critiqueText c)
+      [] -> Nothing
 
 validateFeedbackConfig :: FeedbackConfig -> Either ShikumiError ()
 validateFeedbackConfig cfg =
