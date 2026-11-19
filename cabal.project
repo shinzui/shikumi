@@ -18,6 +18,7 @@ packages:
   shikumi-cli
   shikumi-compile
   shikumi-eval
+  shikumi-evidence
   shikumi-jitsurei
   shikumi-okf
   shikumi-optimize

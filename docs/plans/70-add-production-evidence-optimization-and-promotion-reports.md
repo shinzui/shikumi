@@ -65,14 +65,17 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
 
 ## Progress
 
-- [ ] M1: The `shikumi-evidence` package builds, and sealed dataset envelopes can be built
-  from adapter records, validated, digest-checked and opened into typed training and
-  validation splits. Accepted when the dataset-digest, split-leakage and label-kind test
-  groups pass (required tests 1 and 2, and the label half of 11).
-- [ ] M2: Program artifacts, metric policies, the pure conclusion function, comparison
-  reports and report-binding verification exist as values. Accepted when the artifact,
-  conclusion and binding test groups pass (required tests 4, 6, 7 and 10 at the value
-  level).
+- [x] M1 (2026-11-18): The `shikumi-evidence` package builds, and sealed dataset envelopes
+  can be built from adapter records, validated, digest-checked and opened into typed
+  training and validation splits. Accepted when the dataset-digest, split-leakage and
+  label-kind test groups pass (required tests 1 and 2, and the label half of 11). Evidence:
+  `cabal test shikumi-evidence` passes the `dataset-digest` (5), `split-leakage` (4) and
+  `labels` (4) groups.
+- [x] M2 (2026-11-18): Program artifacts, metric policies, the pure conclusion function,
+  comparison reports and report-binding verification exist as values. Accepted when the
+  artifact, conclusion and binding test groups pass (required tests 4, 6, 7 and 10 at the
+  value level). Evidence: the `artifact` (5), `conclusion` (6) and `binding` (4) groups
+  pass; all 28 tests of the suite pass.
 - [x] M3 (2026-11-18): GEPA accepts critiques keyed by a stable example id that keep their
   human, model or inferred provenance. Accepted when the new stored-critique tests pass and
   the existing `shikumi-optimize` suite still passes (the critique half of required test
@@ -269,6 +272,27 @@ the governed self-improvement use case `mori://shinzui/kikan/okf/use-cases/conce
   uses for its own types, so the dataset cannot decode a value differently from the
   program. `ExampleMeasurement` carries `latencySeconds`, a wall-clock reading that would
   make a custom measure differ between a run and its replay.
+  Date: 2026-11-18
+
+- Decision: The package enables `NoFieldSelectors`, and envelopes that share fields with
+  their builder input nest it: an `EvidenceExample` holds its `EvidenceRecord` and split, an
+  `EvidenceDataset` holds its `DatasetSpec`, a `ProgramArtifact` holds its `ArtifactSpec`
+  as `identity`. Their JSON stays flat, and read-only `HasField` instances keep
+  `example.exampleId`, `dataset.splitPolicy` and `artifact.artifactId` working. Each
+  envelope kind has its own reseal function (`resealDataset`, `resealArtifact`,
+  `sealRecording`, `sealReport`). The redaction policy's id field is `redactionId`, and the
+  primary comparison's thresholds are `requiredImprovement` and `allowedRegression`.
+  Rationale: The plan's field names (`sources`, `codec`, `policy`, `dataset`, `createdAt`)
+  collide with consumers' own names and with each other. GHC 9.12 rejects an ambiguous
+  record update outright, so with plain fields a consumer could not write
+  `spec {splitPolicy = ...}` or `record {critiques = ...}` once the package was imported.
+  The field names in the JSON format are unchanged.
+  Date: 2026-11-18
+
+- Decision: The policy digest function is `digestPolicy` and the evaluator digest function
+  is `digestEvaluator`, because `policyDigest` and `evaluatorDigest` are field names of
+  `ReportBindings`.
+  Rationale: A field and a function of the same name cannot both be used unqualified.
   Date: 2026-11-18
 
 
