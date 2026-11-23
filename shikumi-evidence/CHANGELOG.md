@@ -23,3 +23,7 @@
 - Comparison reports concluded `Improved`, `Regressed`, `Inconclusive` or `Invalid` by a
   fixed order, and `verifyReportBinding` for lifecycle owners.
 - Every envelope carries a BLAKE3 content digest verified on the raw JSON value.
+
+### Changed
+
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.
+- Upgrade `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.4.0 && <0.8`.
+
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.10.0.0 && <0.11`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.3.0 && <0.8`.
 
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.8.0.0 && <0.9`, `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.1.1 && <0.8`.

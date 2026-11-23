@@ -15,6 +15,10 @@
   only when their node executed, at most one program-scoped critique fills the program
   slot, and the existing bounds and redaction apply unchanged.
 
+### Changed
+
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.
+
 ## 0.3.1.0 — 2026-11-02
 
 ### Added

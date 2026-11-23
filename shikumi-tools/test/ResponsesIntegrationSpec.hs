@@ -55,8 +55,11 @@ countLookup ref = interpose $ \_ -> \case
   L.Complete m c o -> L.complete m c o
   L.Stream m c o -> L.stream m c o
 
+lookupItem :: Value
+lookupItem = functionItem "item-lookup" "call-lookup" "lookup" (object [])
+
 firstReply :: Reply
-firstReply = sseReply [completed [reasoningItem, functionItem "item-lookup" "call-lookup" "lookup" (object [])]]
+firstReply = sseReply [completed [reasoningItem, lookupItem]]
 
 lastReply :: Reply
 lastReply = sseReply [completed [functionItem "item-final" "call-final" R.finalToolName (object ["answer" .= String "Paris", "confidence" .= (0.9 :: Double)])]]
@@ -100,6 +103,7 @@ tests =
             [_, Object second] -> case KM.lookup "input" second of
               Just (Array items) -> do
                 assertBool "opaque reasoning item is byte-structurally intact" (reasoningItem `elem` V.toList items)
+                assertBool "the original function-call item survives checkpoint replay" (lookupItem `elem` items)
                 let typed kind = [o | Object o <- V.toList items, KM.lookup "type" o == Just (String kind)]
                 map (KM.lookup "call_id") (typed "function_call") @?= [Just (String "call-lookup")]
                 map (KM.lookup "call_id") (typed "function_call_output") @?= [Just (String "call-lookup")]

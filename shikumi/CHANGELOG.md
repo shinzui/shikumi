@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.
+- Upgrade `mori://shinzui/baikai/packages/baikai-claude` to `>=0.7.3.1 && <0.8`.
+- Upgrade `mori://shinzui/baikai/packages/baikai-effectful` to `>=0.5.0.1 && <0.6`.
+- Upgrade `mori://shinzui/baikai/packages/baikai-openai` to `>=0.7.4.0 && <0.8`.
+
 ## 0.5.1.0 — 2026-11-03
 
 ### Added
