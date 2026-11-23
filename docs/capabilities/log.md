@@ -1,5 +1,15 @@
 # Bundle Update Log
 
+## 2026-11-23
+* **Update**: Record CAP-45's first release in `shikumi-evidence` 0.1.0.0 and
+add CAP-46 for stored critiques in `shikumi-optimize` 0.4.0.0. A GEPA caller can
+adopt stored critiques independently of the evidence job. CAP-45 uses CAP-46,
+which grows CAP-35's failure-aware feedback.
+* **No catalog change**: The nine Baikai compatibility patches add no Shikumi
+capability. Responses function-call item preservation comes from
+`mori://shinzui/baikai/packages/baikai-openai` and is now covered by a Shikumi
+checkpoint-resume integration test.
+
 ## 2026-11-19
 * **Update**: Added CAP-45 for production-evidence optimization and promotion reports in the unreleased shikumi-evidence 0.1.0.0 and shikumi-optimize 0.4.0.0: sealed evidence datasets, protected-holdout comparisons, replayable reports and stored critiques with human and inferred provenance. It requires CAP-12, CAP-33 and CAP-35; their since values stay fixed.
 

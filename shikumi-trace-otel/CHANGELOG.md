@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3.1 — 2026-11-23
+
 ### Changed
 
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.

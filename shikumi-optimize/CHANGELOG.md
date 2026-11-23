@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0.0 — 2026-11-23
+
 ### Breaking
 
 - Add the `Human` and `Inferred` constructors to `Shikumi.Optimize.Feedback.Provenance`,

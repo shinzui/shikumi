@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+## 0.4.2.2 — 2026-11-23
+
 ### Changed
 
 - Upgrade `mori://shinzui/baikai/packages/baikai` to `>=0.11.0.0 && <0.12`.
+
+### Fixed
+
+- Preserve the original OpenAI Responses function-call item when a saved ReAct session resumes.
 
 ## 0.4.2.1 — 2026-11-03
 

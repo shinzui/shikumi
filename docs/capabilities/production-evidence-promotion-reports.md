@@ -9,10 +9,9 @@ capabilityId: CAP-45
 provider: mori://shinzui/shikumi
 status: shipped
 stability: experimental
-since: "unreleased"
+since: "0.1.0.0"
 packages:
   - shikumi-evidence
-  - shikumi-optimize
 interface:
   - Shikumi.Evidence
   - Shikumi.Evidence.Dataset
@@ -21,11 +20,10 @@ interface:
   - Shikumi.Evidence.Report
   - Shikumi.Evidence.Recording
   - Shikumi.Evidence.Driver
-  - Shikumi.Optimize.Feedback
 requires:
   - CAP-12
   - CAP-33
-  - CAP-35
+  - CAP-46
 evidence:
   - kind: test
     resource: shikumi-evidence/test/DatasetDigestSpec.hs
@@ -48,9 +46,6 @@ evidence:
   - kind: test
     resource: shikumi-evidence/test/Uc7Spec.hs
     proves: The checked-in UC-7 fixture yields a held-out improvement and rejects a candidate that costs four times as much.
-  - kind: test
-    resource: shikumi-optimize/test/FeedbackSpec.hs
-    proves: Stored human and model critiques reach the reflection prompt with their provenance, and long critiques stay bounded.
   - kind: example
     resource: shikumi-jitsurei/app/Evidence.hs
     proves: A runnable replay of the UC-7 fixture verifies bindings and prints Improved and Regressed without a provider.
@@ -85,8 +80,9 @@ report is about precisely the baseline, candidate, dataset, policy and source
 revisions a verifier holds.
 
 This grows [CAP-33 validated optimizer execution](validated-gepa-execution.md) and
-[CAP-35 failure-aware optimizer feedback](failure-aware-optimizer-feedback.md), and
-reuses [CAP-12 deterministic replay](deterministic-replay.md)'s divergence semantics.
+uses [CAP-46 stored critiques for optimizer feedback](stored-optimizer-critiques.md).
+Recording reuses [CAP-12 deterministic replay](deterministic-replay.md)'s divergence
+semantics.
 
 ## Limits
 

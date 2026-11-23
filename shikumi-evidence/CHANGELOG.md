@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0.0 — 2026-11-23
+
 ### Added
 
 - Initial release of production-evidence optimization and promotion reports.
